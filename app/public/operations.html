@@ -26,6 +26,17 @@
   </style>
   <style>
     @media print {
+      body.print-client-doc { background:#fff !important; }
+      body.print-client-doc > header,
+      body.print-client-doc > main,
+      body.print-client-doc > .skip-link { display:none !important; }
+      body.print-client-doc #client-doc-sheet { position:static !important; background:#fff !important; padding:0 !important; overflow:visible !important; inset:auto !important; }
+      body.print-client-doc #client-doc-sheet > div { max-width:none !important; box-shadow:none !important; border-radius:0 !important; padding:0 !important; margin:0 !important; }
+      body.print-client-doc .preview-actions { display:none !important; }
+    }
+  </style>
+  <style>
+    @media print {
       body.print-quotation { background:#fff !important; }
       body.print-quotation > header,
       body.print-quotation > main > .message,

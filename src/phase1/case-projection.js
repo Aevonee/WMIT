@@ -539,4 +539,4 @@ function projectCases(source, options) {
   return records(entities, 'Inquiry').map((inquiry) => projectCase(entities, { inquiry_id: inquiry.inquiry_id }, options));
 }
 
-module.exports = { CASE_PROJECTION_VERSION, CASE_STAGES, projectCase, projectCases };
+module.exports = { CASE_PROJECTION_VERSION, CASE_STAGES, projectCase, projectCases, financeProjection, getEntities };

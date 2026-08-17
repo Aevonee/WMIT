@@ -85,6 +85,70 @@ function serveStatic(req, res, filePath) {
   fs.createReadStream(filePath).pipe(res);
 }
 
+function invoiceEmailText(data) {
+  const invoice = data.invoice || {};
+  const totals = data.totals || {};
+  const lines = [];
+  lines.push('Dear ' + (invoice.client_name || 'Client') + ',');
+  lines.push('');
+  lines.push('Please find below your statement of account for booking ' + invoice.booking_id + (invoice.destination ? ' (' + invoice.destination + ')' : '') + '.');
+  lines.push('');
+  (data.obligations || []).forEach((obligation) => {
+    lines.push('- ' + String(obligation.purpose || 'INSTALLMENT').replace(/_/g, ' ').toLowerCase()
+      + ': ' + obligation.amount + ' ' + (obligation.currency || '')
+      + (obligation.outstanding && obligation.outstanding !== '0.00' ? ' (outstanding: ' + obligation.outstanding + ')' : ' (paid)')
+      + (obligation.dueAt ? ' — due ' + String(obligation.dueAt).slice(0, 10) : ''));
+  });
+  lines.push('');
+  lines.push('Total: ' + (totals.obligationTotal || '0.00') + ' ' + (totals.currency || ''));
+  lines.push('Verified payments received: ' + (totals.verifiedReceived || '0.00') + ' ' + (totals.currency || ''));
+  lines.push('Outstanding balance: ' + (totals.outstanding || '0.00') + ' ' + (totals.currency || ''));
+  if (data.bankDetails) {
+    lines.push('');
+    lines.push('Bank details:');
+    String(data.bankDetails).split('\n').forEach((line) => { if (line.trim()) lines.push('  ' + line.trim()); });
+  }
+  lines.push('');
+  lines.push('Thank you for choosing World Master International Travel.');
+  return lines.join('\r\n');
+}
+
+function itineraryEmailText(data) {
+  const itinerary = data.itinerary || {};
+  const lines = [];
+  lines.push('Dear ' + ((data.client && data.client.name) || 'Client') + ',');
+  lines.push('');
+  lines.push('Your travel itinerary for ' + (itinerary.destination || 'your trip') + (itinerary.travel_start ? ' (' + itinerary.travel_start + (itinerary.travel_end ? ' to ' + itinerary.travel_end : '') + ')' : '') + ' is ready.');
+  const days = itinerary.itinerary_days || [];
+  if (days.length) {
+    lines.push('');
+    days.forEach((day) => {
+      lines.push('Day ' + day.day + (day.date ? ' (' + day.date + ')' : '') + ' — ' + (day.title || day.city || 'Travel day'));
+      if (day.activities) lines.push('  ' + String(day.activities).replace(/\s+/g, ' ').trim());
+      if (day.meals) lines.push('  Meals: ' + day.meals);
+      if (day.overnight) lines.push('  Overnight: ' + day.overnight);
+    });
+  }
+  if (data.flights && data.flights.length) {
+    lines.push('');
+    lines.push('Flights:');
+    data.flights.forEach((flight) => {
+      lines.push('  ' + [flight.route, flight.airline, flight.flight_number, flight.times, flight.service_date].filter(Boolean).join(' · '));
+    });
+  }
+  if (data.vouchers && data.vouchers.length) {
+    lines.push('');
+    lines.push('Vouchers issued:');
+    data.vouchers.forEach((voucher) => {
+      lines.push('  ' + voucher.voucher_number + (voucher.description ? ' — ' + voucher.description : ''));
+    });
+  }
+  lines.push('');
+  lines.push('We wish you a wonderful trip.');
+  lines.push('— World Master International Travel');
+  return lines.join('\r\n');
+}
+
 function createMvpServer(options) {
   const app = (options && options.app) || seedDemoRuntime(options);
   const phase1 = (options && options.phase1App) || createPhase1Application(options);
@@ -92,6 +156,8 @@ function createMvpServer(options) {
   const enforceSessions = Boolean(options && options.enforceSessions && auth);
   const health = (options && options.health) || null;
   const expo = (options && options.expo) || null;
+  const mailer = (options && options.mailer) || null;
+  const documentAuditLog = (options && options.auditLog) || null;
   // Optional shared-secret guard for mutating endpoints. When unset (the local
   // default), the server keeps its loopback-only behaviour.
   const actorToken = (options && options.actorToken) || process.env.WMIT_MVP_ACTOR_TOKEN || null;
@@ -180,6 +246,40 @@ function createMvpServer(options) {
         if (parsed.pathname === '/api/settings' && req.method === 'GET') {
           if (!phase1 || typeof phase1.settings !== 'function') return json(res, 200, { ok: true, data: { messageTemplates: [], quotationDefaults: {} } });
           return json(res, 200, { ok: true, data: phase1.settings() });
+        }
+        // Client document email: render-only delivery of invoice/itinerary
+        // previews through the mailer (SMTP when configured, otherwise a
+        // reviewable .eml draft). Send requires an explicit client-facing
+        // confirmation in the UI before this endpoint is called.
+        if (parsed.pathname === '/api/documents/email' && req.method === 'POST') {
+          if (!mailer) return json(res, 501, { ok: false, error: { code: 'MAIL_UNAVAILABLE', message: 'This server runs without a mailer.' } });
+          const body = await readBody(req);
+          const kind = String(body.kind || '');
+          const email = String(body.email || '').trim();
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json(res, 400, { ok: false, error: { code: 'EMAIL_INVALID', message: 'A valid recipient email address is required.' } });
+          let rendered = null;
+          let entityId = '';
+          if (kind === 'invoice') {
+            entityId = String(body.booking_id || '');
+            rendered = phase1 && typeof phase1.action === 'function' ? await Promise.resolve(phase1.action({ action: 'getClientInvoicePreview', input: { booking_id: entityId }, actor: req.wmitActor })) : null;
+          } else if (kind === 'itinerary') {
+            entityId = String(body.quotation_id || '');
+            rendered = phase1 && typeof phase1.action === 'function' ? await Promise.resolve(phase1.action({ action: 'getClientItineraryPreview', input: { quotation_id: entityId }, actor: req.wmitActor })) : null;
+          } else {
+            return json(res, 400, { ok: false, error: { code: 'DOCUMENT_KIND_INVALID', message: 'kind must be invoice or itinerary.' } });
+          }
+          if (!rendered || !rendered.ok) return json(res, 400, rendered || { ok: false, error: { code: 'DOCUMENT_UNAVAILABLE', message: 'The document could not be generated.' } });
+          const subject = kind === 'invoice'
+            ? 'World Master International Travel — Statement of Account (' + (rendered.data.invoice && rendered.data.invoice.booking_id || entityId) + ')'
+            : 'World Master International Travel — Travel Itinerary (' + (rendered.data.itinerary && rendered.data.itinerary.destination || entityId) + ')';
+          const text = kind === 'invoice' ? invoiceEmailText(rendered.data) : itineraryEmailText(rendered.data);
+          const delivery = await mailer.send({ to: email, subject, text });
+          if (documentAuditLog) {
+            try {
+              documentAuditLog.record({ actor: req.wmitActor || 'LOCAL_STAFF', action: 'EMAIL_DOCUMENT', entity_type: 'Document', entity_id: kind.toUpperCase() + ':' + entityId, result: delivery && delivery.sent ? 'SUCCESS' : 'DRAFT', details: { to: email, kind, mode: delivery && delivery.mode } });
+            } catch (_) { /* audit is best effort; delivery already succeeded */ }
+          }
+          return json(res, 200, { ok: true, data: { delivery }, meta: { action: 'EMAIL_DOCUMENT' } });
         }
         // --- Account self-service and administration -------------------------
         if (parsed.pathname === '/api/auth/password' && req.method === 'POST') {

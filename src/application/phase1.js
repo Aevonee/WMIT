@@ -209,6 +209,8 @@ function createPhase1Application(options) {
     if (name === 'getCaseProjection') return getCaseProjection(body);
     if (name === 'getCaseProjections') return getCaseProjections(body);
     if (name === 'getClientQuotationPreview') return runtime.getClientQuotationPreview(body && body.quotation_id || body, { actor: actor || 'LOCAL_STAFF', correlationId: (body && body.correlation_id) || null });
+    if (name === 'getClientInvoicePreview') return runtime.getClientInvoicePreview(body && body.booking_id || body, { actor: actor || 'LOCAL_STAFF', correlationId: (body && body.correlation_id) || null });
+    if (name === 'getClientItineraryPreview') return runtime.getClientItineraryPreview(body && body.quotation_id || body, { actor: actor || 'LOCAL_STAFF', correlationId: (body && body.correlation_id) || null });
     if (name === 'updateClient') return runtime.updateClient(body && body.client_id, body && (body.changes || body), { actor: actor || 'LOCAL_STAFF', correlationId: (body && body.correlation_id) || null });
     if (name === 'updateSubAgent') return runtime.updateSubAgent(body && body.sub_agent_id, body && (body.changes || body), { actor: actor || 'LOCAL_STAFF', correlationId: (body && body.correlation_id) || null });
     if (name === 'updateInquiry') return runtime.updateInquiry(body && body.inquiry_id, { requirements: body && (body.requirements || body.current_requirements) }, { actor: actor || 'LOCAL_STAFF', correlationId: (body && body.correlation_id) || null });

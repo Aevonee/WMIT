@@ -119,6 +119,8 @@ function createHostedServer(options) {
     auth,
     enforceSessions: config.enforceSessions,
     expo,
+    mailer,
+    auditLog,
     health: () => ({
       env: config.env,
       scheduler: { running: scheduler.running, jobs: scheduler.jobNames() },

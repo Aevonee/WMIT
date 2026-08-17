@@ -180,7 +180,7 @@ function resetMessageTemplates() {
 
 function settingsMarkup() {
   const defaults = quotationDefaults();
-  return '<div class="card"><h3>Quotation and payment defaults</h3><p class="muted">These are starting values for new quotations and payment schedules. Staff can edit them before saving.</p><div class="field"><label>Default payment terms / T&Cs</label><textarea id="settings-payment-terms" rows="3">' + esc(defaults.paymentTerms || '') + '</textarea></div><div class="field"><label>Payment currency policy</label><textarea id="settings-payment-currency-policy" rows="2">' + esc(defaults.paymentCurrencyPolicy || '') + '</textarea></div><div class="grid3"><div class="field"><label>Default quotation validity (days)</label><input id="settings-validity-days" type="number" min="1" step="1" value="' + esc(defaults.validityDays || 7) + '"></div><div class="field"><label>Down payment due after reservation (days)</label><input id="settings-downpayment-days" type="number" min="0" step="1" value="' + esc(defaults.downPaymentDaysAfterReservation === undefined ? 3 : defaults.downPaymentDaysAfterReservation) + '"></div><div class="field"><label>Final balance due before departure (business days)</label><input id="settings-final-balance-days" type="number" min="0" step="1" value="' + esc(defaults.finalBalanceBusinessDaysBeforeDeparture === undefined ? 30 : defaults.finalBalanceBusinessDaysBeforeDeparture) + '"></div></div><div class="field"><label>Default currency</label><input id="settings-currency" maxlength="3" value="' + esc(defaults.currency || 'PHP') + '"></div><button onclick="saveSettings()">Save settings</button></div>' + (isLocalWorkspace() ? '<div class="card warn"><h3>Temporary test tool</h3><p class="muted">Fill test fields fills only empty required fields in the current workspace. It does not save, approve, verify, allocate, confirm, or pay anything.</p><button class="warning" onclick="fillSyntheticFormFields()">Fill test fields</button></div>' : '');
+  return '<div class="card"><h3>Quotation and payment defaults</h3><p class="muted">These are starting values for new quotations and payment schedules. Staff can edit them before saving.</p><div class="field"><label>Default payment terms / T&Cs</label><textarea id="settings-payment-terms" rows="3">' + esc(defaults.paymentTerms || '') + '</textarea></div><div class="field"><label>Payment currency policy</label><textarea id="settings-payment-currency-policy" rows="2">' + esc(defaults.paymentCurrencyPolicy || '') + '</textarea></div><div class="field"><label>Bank details for client documents (one account per line)</label><textarea id="settings-bank-details" rows="5">' + esc(defaults.bankDetails || '') + '</textarea></div><div class="grid3"><div class="field"><label>Default quotation validity (days)</label><input id="settings-validity-days" type="number" min="1" step="1" value="' + esc(defaults.validityDays || 7) + '"></div><div class="field"><label>Down payment due after reservation (days)</label><input id="settings-downpayment-days" type="number" min="0" step="1" value="' + esc(defaults.downPaymentDaysAfterReservation === undefined ? 3 : defaults.downPaymentDaysAfterReservation) + '"></div><div class="field"><label>Final balance due before departure (business days)</label><input id="settings-final-balance-days" type="number" min="0" step="1" value="' + esc(defaults.finalBalanceBusinessDaysBeforeDeparture === undefined ? 30 : defaults.finalBalanceBusinessDaysBeforeDeparture) + '"></div></div><div class="field"><label>Default currency</label><input id="settings-currency" maxlength="3" value="' + esc(defaults.currency || 'PHP') + '"></div><button onclick="saveSettings()">Save settings</button></div>' + (isLocalWorkspace() ? '<div class="card warn"><h3>Temporary test tool</h3><p class="muted">Fill test fields fills only empty required fields in the current workspace. It does not save, approve, verify, allocate, confirm, or pay anything.</p><button class="warning" onclick="fillSyntheticFormFields()">Fill test fields</button></div>' : '');
 }
 
 function renderSettings() {
@@ -544,6 +544,8 @@ function actionLabel(action) {
     updateClient: 'Client updated',
     createSupplier: 'Supplier created',
     createSupplierContact: 'Supplier contact saved',
+    getClientInvoicePreview: 'Client invoice preview',
+    getClientItineraryPreview: 'Client itinerary preview',
     createInquiry: 'Inquiry created',
     updateInquiry: 'Inquiry requirements updated',
     uploadTariff: 'Synthetic tariff uploaded',
@@ -1981,7 +1983,7 @@ function renderQuotationEditorAddendum(quote, records, items, draft) {
     addClientFlightDetailsSection(quotationPreview);
     formatClientFlightDetails(quotationPreview);
   }
-  else container.insertAdjacentHTML('beforeend', '<div id="quotation-preview" class="client-preview-placeholder"><p class="muted">Generate a client-safe preview before sending or printing the quotation.</p><button class="secondary" onclick="previewQuotation()">Preview client quotation</button></div>');
+  else container.insertAdjacentHTML('beforeend', '<div id="quotation-preview" class="client-preview-placeholder"><p class="muted">Generate a client-safe preview before sending or printing the quotation.</p><button class="secondary" onclick="previewQuotation()">Preview client quotation</button> <button class="secondary" onclick="previewClientItinerary()">Preview itinerary</button></div>');
   if (draft && !items.length) {
     const currencyField = Array.from(container.querySelectorAll('.field')).find((field) => { const label = field.querySelector('label'); return label && label.textContent.trim() === 'Currency'; });
     if (currencyField) {
@@ -2132,6 +2134,130 @@ async function previewQuotation() {
 
 async function printQuotation() { if (!quotationPreview) { await previewQuotation(); if (!quotationPreview) return; } document.body.classList.add('print-quotation'); window.setTimeout(() => { window.print(); window.setTimeout(() => document.body.classList.remove('print-quotation'), 300); }, 50); }
 
+let clientDocumentSheet = null;
+
+async function previewClientInvoice() {
+  const records = caseRecords();
+  if (!records.booking) return failLocal('Create a booking first — the statement of account comes from its payment records.');
+  try {
+    const response = await wmitGuard401(await fetch('/api/phase1/action', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, wmitAuthHeaders()), body: JSON.stringify({ action: 'getClientInvoicePreview', input: { booking_id: records.booking.booking_id }, actor: 'LOCAL_STAFF' }) }));
+    const result = await response.json();
+    if (!result.ok) return failLocal(result.error && result.error.message || 'The statement of account could not be generated.');
+    openClientDocumentSheet('invoice', result.data);
+  } catch (error) { failLocal(error.message); }
+}
+
+async function previewClientItinerary() {
+  const records = caseRecords();
+  if (!records.quotation) return failLocal('Create a quotation first — the itinerary comes from its recorded days.');
+  try {
+    const response = await wmitGuard401(await fetch('/api/phase1/action', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, wmitAuthHeaders()), body: JSON.stringify({ action: 'getClientItineraryPreview', input: { quotation_id: records.quotation.quotation_id }, actor: 'LOCAL_STAFF' }) }));
+    const result = await response.json();
+    if (!result.ok) return failLocal(result.error && result.error.message || 'The itinerary could not be generated.');
+    openClientDocumentSheet('itinerary', result.data);
+  } catch (error) { failLocal(error.message); }
+}
+
+function closeClientDocumentSheet() {
+  const sheet = document.getElementById('client-doc-sheet');
+  if (sheet) sheet.remove();
+  clientDocumentSheet = null;
+}
+
+function openClientDocumentSheet(kind, data) {
+  closeClientDocumentSheet();
+  clientDocumentSheet = { kind: kind, data: data };
+  const sheet = document.createElement('div');
+  sheet.id = 'client-doc-sheet';
+  sheet.style.cssText = 'position:fixed;inset:0;background:rgba(23,35,52,.45);z-index:160;overflow:auto;padding:24px 14px;';
+  sheet.addEventListener('click', function (event) { if (event.target === sheet) closeClientDocumentSheet(); });
+  const paper = document.createElement('div');
+  paper.style.cssText = 'background:#fff;color:#172334;max-width:760px;margin:0 auto;border-radius:11px;box-shadow:0 18px 50px rgba(23,35,52,.35);padding:34px 38px;font-family:inherit;';
+  paper.innerHTML = kind === 'invoice' ? clientInvoiceMarkup(data) : clientItineraryMarkup(data);
+  sheet.appendChild(paper);
+  document.body.appendChild(sheet);
+}
+
+function printClientDocument() {
+  document.body.classList.add('print-client-doc');
+  window.setTimeout(function () {
+    window.print();
+    window.setTimeout(function () { document.body.classList.remove('print-client-doc'); }, 300);
+  }, 50);
+}
+
+async function emailClientDocument() {
+  if (!clientDocumentSheet) return;
+  const kind = clientDocumentSheet.kind;
+  const data = clientDocumentSheet.data;
+  const clientEmail = (data.client && data.client.email) || (caseRecords().client && caseRecords().client.primary_email) || '';
+  const email = String(window.prompt('Email the ' + (kind === 'invoice' ? 'statement of account' : 'itinerary') + ' to:', clientEmail) || '').trim();
+  if (!email) return;
+  if (!window.confirm('Send the ' + (kind === 'invoice' ? 'statement of account' : 'itinerary') + ' to ' + email + '? This emails a client-facing document.')) return;
+  try {
+    const payload = kind === 'invoice'
+      ? { kind: 'invoice', booking_id: data.invoice && data.invoice.booking_id, email: email }
+      : { kind: 'itinerary', quotation_id: data.itinerary && data.itinerary.quotation_id, email: email };
+    const response = await wmitGuard401(await fetch('/api/documents/email', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, wmitAuthHeaders()), body: JSON.stringify(payload) }));
+    const result = await response.json();
+    if (!result.ok) return showMessage('✕ Email document — NOT EXECUTED', result.error && result.error.message || 'The document could not be emailed.', 'error');
+    const mode = result.data.delivery && result.data.delivery.mode;
+    if (mode === 'smtp') showMessage('✓ Document emailed', 'Sent to ' + email + ' via SMTP.', 'ok');
+    else showMessage('✓ Draft saved', 'SMTP is not configured — a reviewable .eml draft was written to the outbox.', 'warn');
+  } catch (error) {
+    showMessage('✕ Email document — NOT EXECUTED', error.message, 'error');
+  }
+}
+
+function clientDocActionsMarkup() {
+  return '<div class="preview-actions" style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:14px"><button class="secondary compact" onclick="closeClientDocumentSheet()">Close</button><button class="secondary compact" onclick="emailClientDocument()">Email</button><button class="secondary compact" onclick="printClientDocument()">Print</button></div>';
+}
+
+function clientDocHeader(labelText) {
+  return '<header class="quote-header"><img class="quote-brand-image" src="/assets/header.png" alt="World Master International Travel"><div class="quote-label" style="text-align:right;font-weight:800;letter-spacing:.06em">' + esc(labelText) + '</div></header>';
+}
+
+function clientInvoiceMarkup(data) {
+  const invoice = data.invoice || {};
+  const totals = data.totals || {};
+  const currency = totals.currency || '';
+  const rows = (data.obligations || []).map(function (obligation) {
+    return '<tr><td>' + esc(String(obligation.purpose || 'INSTALLMENT').replace(/_/g, ' ').toLowerCase()) + '</td><td>' + esc(obligation.amount) + ' ' + esc(obligation.currency || currency) + '</td><td>' + esc(obligation.allocated) + '</td><td><strong>' + esc(obligation.outstanding) + '</strong></td><td>' + esc(obligation.dueAt ? String(obligation.dueAt).slice(0, 10) : '—') + '</td><td>' + esc(obligation.state === 'SATISFIED' ? 'Paid' : obligation.state === 'PARTIALLY_SATISFIED' ? 'Partially paid' : 'Due') + '</td></tr>';
+  }).join('');
+  const bankLines = String(data.bankDetails || '').split('\n').filter(Boolean).map(function (line) { return '<div>' + esc(line.trim()) + '</div>'; }).join('');
+  return clientDocActionsMarkup() + clientDocHeader('STATEMENT OF ACCOUNT') +
+    '<div class="quote-meta"><div><strong>Prepared for</strong><br>' + esc(invoice.client_name || 'Client') + '</div><div><strong>Booking</strong><br>' + esc(invoice.booking_id || '—') + (invoice.quotation_id ? '<br>Quote ' + esc(invoice.quotation_id) : '') + '</div><div><strong>Trip</strong><br>' + esc(invoice.destination || '—') + (invoice.travel_start ? '<br>' + esc(invoice.travel_start) + (invoice.travel_end ? ' to ' + esc(invoice.travel_end) : '') : '') + (invoice.pax_count ? '<br>' + esc(invoice.pax_count) + ' passenger(s)' : '') + '</div><div><strong>Issued</strong><br>' + esc(String(invoice.issued_at || '').slice(0, 10) || '—') + '</div></div>' +
+    '<section class="preview-section"><h3>Payment schedule</h3><div class="table-wrap"><table><thead><tr><th>Purpose</th><th>Amount</th><th>Paid</th><th>Outstanding</th><th>Due</th><th>State</th></tr></thead><tbody>' + (rows || '<tr><td colspan="6">No payment obligations recorded.</td></tr>') + '</tbody></table></div>' +
+    '<div class="preview-total"><div>Total <span>' + esc(totals.obligationTotal || '0.00') + ' ' + esc(currency) + '</span></div><div>Verified payments received <span>' + esc(totals.verifiedReceived || '0.00') + ' ' + esc(currency) + '</span></div><div class="grand-total">Outstanding balance <span>' + esc(totals.outstanding || '0.00') + ' ' + esc(currency) + '</span></div></div></section>' +
+    (data.paymentTerms ? '<section class="quote-terms"><h3>Payment terms</h3><p>' + esc(data.paymentTerms) + '</p></section>' : '') +
+    (bankLines ? '<section class="quote-terms"><h3>Bank details</h3>' + bankLines + '</section>' : '') +
+    '<footer class="quote-footer"><p>Thank you for choosing World Master International Travel.</p></footer>';
+}
+
+function clientItineraryMarkup(data) {
+  const itinerary = data.itinerary || {};
+  const days = itinerary.itinerary_days || [];
+  const dayMarkup = days.map(function (day) {
+    return '<div class="preview-day"><strong>Day ' + esc(day.day) + (day.date ? ' · ' + esc(day.date) : '') + ' — ' + esc(day.title || day.city || 'Travel day') + '</strong>' +
+      (day.city ? '<div>' + esc(day.city) + '</div>' : '') +
+      (day.activities ? '<p>' + esc(day.activities) + '</p>' : '') +
+      (day.meals ? '<div><strong>Meals:</strong> ' + esc(day.meals) + '</div>' : '') +
+      (day.overnight ? '<div><strong>Overnight:</strong> ' + esc(day.overnight) + '</div>' : '') + '</div>';
+  }).join('');
+  const flightRows = (data.flights || []).map(function (flight) {
+    return '<tr><td>' + esc(flight.route || '—') + '</td><td>' + esc(flight.airline || '') + (flight.flight_number ? ' ' + esc(flight.flight_number) : '') + '</td><td>' + esc(flight.times || '') + '</td><td>' + esc(flight.service_date || '') + '</td></tr>';
+  }).join('');
+  const voucherRows = (data.vouchers || []).map(function (voucher) {
+    return '<div class="event"><strong>' + esc(voucher.voucher_number) + '</strong>' + (voucher.description ? ' — ' + esc(voucher.description) : '') + '</div>';
+  }).join('');
+  return clientDocActionsMarkup() + clientDocHeader('TRAVEL ITINERARY') +
+    '<div class="quote-meta"><div><strong>Prepared for</strong><br>' + esc((data.client && data.client.name) || 'Client') + '</div><div><strong>Destination</strong><br>' + esc(itinerary.destination || '—') + '</div><div><strong>Travel dates</strong><br>' + esc(itinerary.travel_start || '—') + (itinerary.travel_end ? ' to ' + esc(itinerary.travel_end) : '') + (itinerary.pax_count ? '<br>' + esc(itinerary.pax_count) + ' passenger(s)' : '') + '</div>' + (data.booking && data.booking.booking_id ? '<div><strong>Booking</strong><br>' + esc(data.booking.booking_id) + '</div>' : '') + '</div>' +
+    (dayMarkup ? '<section class="preview-section"><h3>Itinerary</h3>' + dayMarkup + '</section>' : '<section class="preview-section"><h3>Itinerary</h3><p class="muted">No itinerary days recorded yet — add them in the quotation editor.</p></section>') +
+    (flightRows ? '<section class="preview-section"><h3>Flight details</h3><div class="table-wrap"><table><thead><tr><th>Route</th><th>Airline / flight</th><th>Times</th><th>Date</th></tr></thead><tbody>' + flightRows + '</tbody></table></div></section>' : '') +
+    (voucherRows ? '<section class="preview-section"><h3>Vouchers</h3>' + voucherRows + '</section>' : '') +
+    '<footer class="quote-footer"><p>We wish you a wonderful trip.</p><p>World Master International Travel</p></footer>';
+}
+
 async function createDraftQuotation() {
   const records = caseRecords();
   if (!records.inquiry || !records.option || !records.option.selected) return failLocal('Select one option from this Inquiry first.');
@@ -2146,7 +2272,7 @@ async function createDraftQuotation() {
 async function saveSettings() {
   const currency = ($('settings-currency') && $('settings-currency').value || '').trim().toUpperCase();
   if (!currency || !/^[A-Z]{3}$/.test(currency)) return failLocal('Default currency must be a three-letter code.');
-  await api('updateSettings', { quotation_defaults: { paymentTerms: $('settings-payment-terms').value.trim(), paymentCurrencyPolicy: $('settings-payment-currency-policy').value.trim(), validityDays: $('settings-validity-days').value, downPaymentDaysAfterReservation: $('settings-downpayment-days').value, finalBalanceBusinessDaysBeforeDeparture: $('settings-final-balance-days').value, currency } }, 'LOCAL_MANAGER');
+  await api('updateSettings', { quotation_defaults: { paymentTerms: $('settings-payment-terms').value.trim(), paymentCurrencyPolicy: $('settings-payment-currency-policy').value.trim(), bankDetails: $('settings-bank-details') ? $('settings-bank-details').value.trim() : undefined, validityDays: $('settings-validity-days').value, downPaymentDaysAfterReservation: $('settings-downpayment-days').value, finalBalanceBusinessDaysBeforeDeparture: $('settings-final-balance-days').value, currency } }, 'LOCAL_MANAGER');
 }
 
 async function saveQuotationPricing() {
@@ -2652,7 +2778,7 @@ function renderPayment() {
   const obligationOptions = obligations.filter((obligation) => obligation.obligationId).map((obligation) => '<option value="' + esc(obligation.obligationId) + '">' + esc(obligation.purpose + ' · ' + obligation.outstanding + ' ' + obligation.currency) + '</option>').join('');
   const cleanObligationOptions = obligationOptions.replace(/[^\x20-\x7E]+/g, ' - ');
   const allocationTargetMarkup = '<div class="allocation-target"><h4>Allocate verified payment</h4><p class="muted">Choose the Client Obligation this payment should satisfy.</p><select id="allocation-obligation"><option value="">Select obligation</option>' + cleanObligationOptions + '</select>' + (cleanObligationOptions ? '' : '<p class="muted">No obligation exists yet for this Booking.</p><button class="secondary" onclick="createObligationFromClientInstruction()">Create from instruction</button>') + '</div>';
-  const financeContext = '<div class="selection-bar"><strong>' + esc(records.client && records.client.display_name || records.booking.client_id) + '</strong><span>' + esc(bookingDestination(records.booking)) + '</span><span>' + esc(bookingTravelLabel(records.booking)) + '</span><span>Booking ' + esc(records.booking.booking_id) + '</span></div>';
+  const financeContext = '<div class="selection-bar"><strong>' + esc(records.client && records.client.display_name || records.booking.client_id) + '</strong><span>' + esc(bookingDestination(records.booking)) + '</span><span>' + esc(bookingTravelLabel(records.booking)) + '</span><span>Booking ' + esc(records.booking.booking_id) + '</span><span class="spacer"></span><button class="secondary compact" onclick="previewClientInvoice()">Client invoice</button></div>';
   const financeNextAction = '';
   const projectionMarkup = '<div class="card"><h3>Financial summary</h3>' + field('Finance state', projection && projection.finance && projection.finance.state) + field('Readiness', projection && projection.readiness && projection.readiness.state) + (projection && projection.blockers && projection.blockers.length ? '<p class="muted">' + esc(projection.blockers.map((blocker) => blocker.message).join(' · ')) + '</p>' : '<p class="muted">No current financial blockers.</p>') + '<h4>Client payment obligations</h4><table><thead><tr><th>Purpose</th><th>Amount</th><th>Allocated</th><th>Outstanding</th><th>State</th></tr></thead><tbody>' + obligationRows + '</tbody></table></div>';
   const paymentForm = '<div class="card"><h3>Record Client Payment</h3><p class="muted">Add payment evidence. Verification and allocation are separate.</p><div class="grid3"><div class="field"><label>Amount</label><input id="payment-amount" type="number" min="0" step="0.01"></div><div class="field"><label>Currency</label><input id="payment-currency" value="PHP"></div><div class="field"><label>Payment sent timestamp</label><input id="payment-sent-at" type="datetime-local"></div></div><div class="grid3"><div class="field"><label>Proof/reference</label><input id="payment-proof" placeholder="Receipt, transfer reference, or proof ID"></div><div class="field"><label>Payment proof file</label><input id="payment-proof-file" type="file"></div><div class="field"><label>Payment method</label><input id="payment-method" placeholder="Bank transfer, cash, card, etc."></div></div><button onclick="recordPayment()">Add payment</button></div>';

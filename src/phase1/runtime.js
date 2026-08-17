@@ -6,6 +6,15 @@ const { InMemoryAuditLog } = require('../logging/audit-log');
 const { WmitError, errorResult } = require('../core/errors');
 const { toMinorUnits, fromMinorUnits } = require('../core/money');
 const quotationEditor = require('../application/quotation-editor');
+const caseProjection = require('./case-projection');
+
+const DEFAULT_BANK_DETAILS = [
+  'Peso Account: 0126-9800-0261 — World Master International Travel (Swift: BNORPHMM · Branch: Fairview Terraces)',
+  'Peso Account: 0661-9000-1008 — World Master International Travel',
+  'Peso Account: 0045-1000-2291 — World Master International Travel',
+  'Dollar Account: 1126-9000-1264 — World Master International Travel',
+  'Dollar Account: 0660-1000-9272 — Leilani Agana (Swift: AUBKPHMM)'
+].join('\n');
 
 const ENTITY_DEFS = {
   Person: ['PERSON', false], Client: ['CLIENT', false], Inquiry: ['INQUIRY', true],
@@ -127,7 +136,7 @@ class Phase1Runtime {
       timezone: 'Asia/Manila', defaultCurrency: 'PHP', standardMarkup: 30,
       cardPaypalFee: 5, tariffDefaultUnits: { accommodation: 'PER_PERSON', transfer: 'PER_PERSON_PER_WAY' },
       tariffRateUnits: DEFAULT_TARIFF_RATE_UNITS.slice(),
-      quotationDefaults: { paymentTerms: '50% deposit upon confirmation; balance due 30 business days before departure.', validityDays: 7, currency: 'PHP', paymentCurrencyPolicy: 'Payment due in quotation currency.', downPaymentDaysAfterReservation: 3, finalBalanceBusinessDaysBeforeDeparture: 30 },
+      quotationDefaults: { paymentTerms: '50% deposit upon confirmation; balance due 30 business days before departure.', validityDays: 7, currency: 'PHP', paymentCurrencyPolicy: 'Payment due in quotation currency.', downPaymentDaysAfterReservation: 3, finalBalanceBusinessDaysBeforeDeparture: 30, bankDetails: DEFAULT_BANK_DETAILS },
       messageTemplates: [],
       trustedActors: {}, expo: { id: 'EXPO-MVP', name: 'WMIT Expo', startAt: null, endAt: null, discountPercent: 0 }
     }, opts.config || {});
@@ -1229,6 +1238,79 @@ class Phase1Runtime {
       return ok(preview);
     } catch (error) { return fail(error); }
   }
+  getClientInvoicePreview(bookingId) {
+    try {
+      const id = bookingId && typeof bookingId === 'object' ? bookingId.booking_id : bookingId;
+      if (!id) throw new WmitError('BOOKING_REQUIRED', 'A booking ID is required to generate the client invoice.');
+      const booking = this.must('Booking', id);
+      const quotation = booking.quotation_id ? this.must('Quotation', booking.quotation_id) : null;
+      const client = booking.client_id ? this.must('Client', booking.client_id) : null;
+      const finance = caseProjection.financeProjection(caseProjection.getEntities(this), booking, new Set([booking.booking_id]));
+      return ok({
+        invoice: {
+          booking_id: booking.booking_id,
+          quotation_id: booking.quotation_id || null,
+          client_name: (client && (client.display_name || client.legal_name)) || booking.client_id,
+          destination: quotation ? quotation.destination : null,
+          travel_start: quotation ? quotation.travel_start : booking.travel_start || null,
+          travel_end: quotation ? quotation.travel_end : booking.travel_end || null,
+          pax_count: quotation ? quotation.pax_count : null,
+          currency: finance.currency || (quotation && quotation.currency) || this.config.defaultCurrency,
+          issued_at: this.now()
+        },
+        client: client ? { name: client.display_name || client.legal_name, email: client.primary_email || null } : null,
+        obligations: finance.obligations || [],
+        totals: {
+          obligationTotal: finance.obligationTotal || '0.00',
+          verifiedReceived: finance.verifiedReceived || '0.00',
+          outstanding: finance.outstanding || '0.00',
+          currency: finance.currency || (quotation && quotation.currency) || this.config.defaultCurrency
+        },
+        paymentTerms: (this.config.quotationDefaults && this.config.quotationDefaults.paymentTerms) || '',
+        bankDetails: (this.config.quotationDefaults && this.config.quotationDefaults.bankDetails) || DEFAULT_BANK_DETAILS
+      });
+    } catch (error) { return fail(error); }
+  }
+  getClientItineraryPreview(quotationId) {
+    try {
+      const id = quotationId && typeof quotationId === 'object' ? quotationId.quotation_id : quotationId;
+      if (!id) throw new WmitError('QUOTATION_REQUIRED', 'A quotation ID is required to generate the client itinerary.');
+      const quotation = this.must('Quotation', id);
+      const items = this.quotationItems(id);
+      const client = quotation.client_id ? this.must('Client', quotation.client_id) : null;
+      const contact = quotation.contact_id && this.repos.Person && this.repos.Person.exists(quotation.contact_id) ? this.must('Person', quotation.contact_id) : null;
+      const preview = quotationEditor.buildClientPreview(quotation, items, client, contact);
+      const flights = (preview.quotation && preview.quotation.flight_details || []).map((flight) => ({
+        airline: flight.airline || null,
+        flight_number: flight.flight_number || null,
+        route: flight.departure_airport && flight.arrival_airport ? flight.departure_airport + ' – ' + flight.arrival_airport : flight.departure_airport || flight.arrival_airport || null,
+        times: flight.departure_time && flight.arrival_time ? flight.departure_time + ' – ' + flight.arrival_time : flight.departure_time || flight.arrival_time || null,
+        service_date: flight.date || flight.service_date || null
+      }));
+      const booking = this.list('Booking', (record) => record.quotation_id === quotation.quotation_id)[0] || null;
+      let vouchers = [];
+      if (booking) {
+        const bookingItems = this.list('BookingItem', (record) => record.booking_id === booking.booking_id);
+        const itemIds = new Set(bookingItems.map((record) => record.booking_item_id));
+        const itemById = new Map(bookingItems.map((record) => [record.booking_item_id, record]));
+        vouchers = this.list('Voucher', (voucher) => itemIds.has(voucher.booking_item_id) && String(voucher.status || 'ISSUED') === 'ISSUED').map((voucher) => {
+          const item = itemById.get(voucher.booking_item_id);
+          return {
+            voucher_number: voucher.voucher_number,
+            service_type: item ? item.service_type || null : null,
+            description: item ? item.description || null : null
+          };
+        });
+      }
+      return ok({
+        itinerary: preview.quotation,
+        flights,
+        vouchers,
+        booking: booking ? { booking_id: booking.booking_id } : null,
+        client: preview.client || null
+      });
+    } catch (error) { return fail(error); }
+  }
   createBooking(input, context) {
     try {
       const quote = this.must('Quotation', input.quotation_id);
@@ -1561,7 +1643,7 @@ class Phase1Runtime {
       const values = input && (input.quotation_defaults || input.quotationDefaults) || input || {};
       const current = this.config.quotationDefaults || {};
       const next = Object.assign({}, current);
-      ['paymentTerms', 'paymentCurrencyPolicy', 'currency'].forEach((field) => { if (values[field] !== undefined) next[field] = String(values[field]).trim(); });
+      ['paymentTerms', 'paymentCurrencyPolicy', 'currency', 'bankDetails'].forEach((field) => { if (values[field] !== undefined) next[field] = String(values[field]).trim(); });
       ['validityDays', 'downPaymentDaysAfterReservation', 'finalBalanceBusinessDaysBeforeDeparture'].forEach((field) => {
         if (values[field] !== undefined) {
           const number = Number(values[field]);
