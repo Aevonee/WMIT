@@ -33,6 +33,7 @@
     .kiosk-submit { width: 100%; font-size: 22px; padding: 20px; margin-top: 24px; min-height: 68px; border-radius: 8px; background: var(--manifest-green); color: #fff; }
     .kiosk-submit:hover { background: var(--manifest-green-hover); }
     .kiosk-note { text-align: center; color: var(--sea-fog); font-size: 13px; margin-top: 16px; }
+    .kiosk-queue { margin-top: 16px; padding: 12px 14px; border-radius: 8px; background: var(--msg-warn-bg); border: 1px solid var(--msg-warn-rule); color: var(--msg-warn-text); font-size: 14px; text-align: center; }
     .kiosk-message { display: none; margin-top: 16px; padding: 14px 16px; border-radius: 8px; font-size: 16px; }
     .kiosk-message.error { display: block; background: var(--msg-err-bg); border: 1px solid var(--msg-err-rule); color: var(--msg-err-text); }
     .kiosk-done { display: none; text-align: center; padding: 40px 10px; }
@@ -155,6 +156,7 @@
       <button type="button" class="kiosk-submit" id="k-again">Next traveller</button>
     </div>
 
+    <div id="k-queue" class="kiosk-queue" role="status" aria-live="polite" hidden></div>
     <p class="kiosk-note">Worldmaster International Travel · Expo 2026 · Questions? Ask any of our staff at the booth.</p>
   </main>
 
@@ -218,6 +220,94 @@
         return selected ? selected.value : '';
       }
 
+      // Offline queue: if the venue connection drops, submissions are saved
+      // on this device and sent automatically once it returns. The server's
+      // idempotency key makes every retry safe; only permanently-invalid
+      // entries are ever dropped (with a console audit line).
+      var QUEUE_KEY = 'wmit.expo.offlineQueue.v1';
+      var QUEUE_CAP = 200;
+      var flushing = false;
+      var queueBadge = document.getElementById('k-queue');
+
+      function readQueue() {
+        try {
+          var parsed = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]');
+          return Array.isArray(parsed) ? parsed : [];
+        } catch (error) {
+          return null; // storage unavailable or corrupt: direct-send-only
+        }
+      }
+      function writeQueue(items) {
+        try {
+          localStorage.setItem(QUEUE_KEY, JSON.stringify(items));
+          return true;
+        } catch (error) {
+          return false; // private mode / quota: never crash the kiosk
+        }
+      }
+      function updateBadge() {
+        var count = readQueue();
+        count = count ? count.length : 0;
+        if (count > 0) {
+          queueBadge.textContent = count + ' saved on this device — sending when online';
+          queueBadge.hidden = false;
+        } else {
+          queueBadge.hidden = true;
+        }
+      }
+      function enqueue(payload) {
+        var items = readQueue();
+        if (!items) return false;
+        items.push({ savedAt: new Date().toISOString(), payload: payload });
+        if (items.length > QUEUE_CAP) items.splice(0, items.length - QUEUE_CAP); // overflow: keep the newest
+        return writeQueue(items);
+      }
+      function flushQueue() {
+        if (flushing) return;
+        var items = readQueue();
+        if (!items || items.length === 0) return updateBadge();
+        flushing = true;
+
+        function finish() {
+          flushing = false;
+          updateBadge();
+        }
+        function sendNext() {
+          if (items.length === 0) return finish(); // queue drained: badge off, guard down
+          var entry = items.shift(); // removed in memory only — storage keeps it until the response resolves
+          fetch('/api/public/expo/lead', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry.payload) })
+            .then(function (response) {
+              return response.text().then(function (text) {
+                var body = null;
+                try { body = text ? JSON.parse(text) : null; } catch (error) { body = null; }
+                return { status: response.status, ok: response.ok, body: body };
+              });
+            })
+            .then(function (result) {
+              var code = result.body && result.body.error && result.body.error.code;
+              if ((result.body && result.body.ok === true) || (result.ok && !code)) {
+                writeQueue(items); // delivered — an idempotent replay lands here too
+                return sendNext();
+              }
+              if (result.status >= 500 || code === 'RATE_LIMITED') {
+                items.unshift(entry); // retry later: back to the front, stop this round
+                writeQueue(items);
+                return finish();
+              }
+              writeQueue(items); // terminal rejection: can never succeed on retry
+              console.warn('wmit-offline-dropped', code || 'HTTP ' + result.status, entry.payload.idempotency_key);
+              return sendNext();
+            })
+            .catch(function () {
+              items.unshift(entry); // network error: stays queued, retried next trigger
+              writeQueue(items);
+              finish();
+            });
+        }
+
+        sendNext();
+      }
+
       form.addEventListener('submit', function (event) {
         event.preventDefault();
         clearMessage();
@@ -258,11 +348,22 @@
             document.getElementById('k-done-line').textContent = 'Your ' + payload.destination + ' trip request is with our travel consultants.';
             form.style.display = 'none';
             done.style.display = 'block';
+            flushQueue(); // connection is up: drain anything saved earlier
           })
           .catch(function () {
+            var queued = enqueue(payload);
+            if (!queued) {
+              // no queue available: today's exact behavior — never claim a save that did not happen
+              submit.disabled = false;
+              currentKey = null;
+              return show('No connection — please try again or ask our staff for help.');
+            }
             submit.disabled = false;
-            currentKey = null;
-            show('No connection — please try again or ask our staff for help.');
+            document.getElementById('k-done-heading').textContent = 'Salamat, ' + payload.name.split(/\s+/)[0] + '!';
+            document.getElementById('k-done-line').textContent = 'Saved on this device — it will send automatically when the connection returns.';
+            form.style.display = 'none';
+            done.style.display = 'block';
+            updateBadge();
           });
       });
 
@@ -273,6 +374,13 @@
         form.style.display = 'block';
         document.getElementById('k-name').focus();
       });
+
+      // Queue bookkeeping: announce anything already saved on this device
+      // (e.g. the tab was closed mid-outage) and drain it when online.
+      updateBadge();
+      if (navigator.onLine) flushQueue();
+      window.addEventListener('online', flushQueue);
+      setInterval(flushQueue, 30000);
     })();
   </script>
 </body>
