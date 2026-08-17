@@ -68,6 +68,13 @@ All list endpoints accept `?expo_tag=`; the console's event selector
 2. **At the booth:** tablets open the event's form link (Copy form link in
    the console bar, or `/expo.html` for the current event). A stable
    idempotency key per submission means double-taps never duplicate a lead.
+   If the connection drops, the kiosk keeps working: submissions are saved
+   on the device and a badge shows how many are waiting ("N saved on this
+   device"); they send automatically — deduplicated by idempotency key, so
+   retries are free — once the connection returns. Only permanently-invalid
+   entries are ever dropped (logged to the kiosk console). Booth staff need
+   do nothing beyond keeping the tab open; queued leads appear server-side
+   only after reconnect.
 3. **Scanned badges:** paste one per line in the import box —
    `name,mobile,destination,travel_month,email` CSV or names only with
    defaults. Name-only rows import with `NEEDS MOBILE`; attach the number

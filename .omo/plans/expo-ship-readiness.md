@@ -51,7 +51,7 @@ Single worker session, sequential waves (each todo commits before the next start
 
 ## Todos
 
-- [ ] 1. Git baseline: hygiene + init + initial commit
+- [x] 1. Git baseline: hygiene + init + initial commit
   **References:** `D:\Codex\WMIT\.gitignore` (exists, 54 lines); root artifacts `wmit-*.png` (12 files, evidence screenshots); `.playwright-mcp/` (untracked logs/screenshots); `.omo/drafts/` (plan runtime); `.omo/plans/` (this plan — COMMIT it).
   **Steps:**
   1. Move all `D:\Codex\WMIT\wmit-*.png` into `D:\Codex\WMIT\.playwright-mcp\` (they are browser-QA evidence, not product assets).
@@ -70,7 +70,7 @@ Single worker session, sequential waves (each todo commits before the next start
   **QA happy:** after commit, `git status` empty. **QA failure:** add a stray `test.txt`, confirm it appears in `git status` (proves tracking works), delete it.
   **Commit:** this todo IS the initial commit.
 
-- [ ] 2. Offline lead capture in `app/public/expo.html` + browser QA
+- [x] 2. Offline lead capture in `app/public/expo.html` + browser QA
   **References:** `app/public/expo.html` submit handler (the IIFE at lines 158–274); submit flow at 218–266; `currentKey` generation at 243–246 (`payload.idempotency_key = 'KIOSK:' + currentKey`); the network `.catch` at 262–266 (this is what the offline path replaces); error display `show()` at 205–208; done screen `#kiosk-done` at 145–153; `.kiosk-note` at 155; "Next traveller" reset at 269–275 (already nulls `currentKey` — keep as-is). Server contract: `src/expo/expo-service.js` `captureLead` 243–310 (idempotent replay 276–279; RATE_LIMITED 282–284; validation throws before rate accounting; mobile pattern `^0\d{10}$` via normalizeMobile). Design tokens via `/tokens.css`. WCAG AA floor per PRODUCT.md.
   **Implementation spec (zero judgment):**
   1. Queue primitives inside the existing IIFE:
@@ -93,7 +93,7 @@ Single worker session, sequential waves (each todo commits before the next start
   **QA failure paths (evidence `.playwright-mcp/offline-failure.png`):** (a) idempotency replay — while offline, submit once, then duplicate the entry in localStorage directly (`var q = JSON.parse(localStorage.getItem(KEY)); q.push(q[0]); localStorage.setItem(KEY, JSON.stringify(q));`) → reconnect → flush POSTs twice with the same idempotency key → server state shows exactly ONE lead for that mobile and the queue is empty (exercises `IDEMPOTENT_REPLAY`, expo-service.js:276–279; two mere `online` events cannot do this — the guard serializes and the drained queue sends nothing). (b) terminal-drop: enqueue a payload with invalid email (e.g. `not-an-email`, passes client presence check, fails server pattern) offline, reconnect → entry dropped (console.warn recorded), badge clears, no server lead. (c) RATE_LIMITED: enqueue 3 payloads via 3 fill→submit→Next-traveller cycles, stub ALL `/api/public/expo/lead` responses via Playwright route-fulfill with `{ok:false,error:{code:'RATE_LIMITED',message:'Please wait a minute before submitting again.'}}` → trigger flush → all 3 remain queued, badge persists. (d) `npm test` 244/244 green.
   **Commit:** `git add app/public/expo.html && git commit -m "expo kiosk: offline lead capture with auto-flush queue"`.
 
-- [ ] 3. `docs/expo-readiness.md` runbook (Phases B–D + Cloudflare Tunnel home hosting)
+- [x] 3. `docs/expo-readiness.md` runbook (Phases B–D + Cloudflare Tunnel home hosting)
   **References:** `docs/deployment-netcup.md` (VPS setup §1–5, staging §7, update §8, security checklist §9 — cite, do not duplicate); `docs/events.md` staff workflow; `WMIT_BASE_URL` note (events.md §Environment); AGENTS.md phase-3 status (Sept 4–6 deadline).
   **Content spec (sections in order, decision-complete):**
   1. **Phase B — staging rehearsal (VPS, port 3001):** deploy per deployment-netcup.md §7; create the real `EXPO-SEP26`-style event with Sept 4–6 dates in the console; walk the full flow once: kiosk lead → follow-up queue → package prices → quote link `/q/<token>` → accept → mark booked; train staff on the console tabs; acceptance = one lead visible end-to-end + staff sign-ins work.
