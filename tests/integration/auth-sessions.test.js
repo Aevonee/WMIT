@@ -103,6 +103,82 @@ test('account management enforces the last-admin and self-protection rules', () 
   db.close();
 });
 
+test('password change and admin account management work over HTTP with audit trails', async () => {
+  const fixture = buildHostedFixture({});
+  fixture.auth.bootstrapAdmin({ password: 'admin-password-123' });
+
+  await withListening(fixture.server, async (base) => {
+    const post = (path, body, headers) => fetch(base + path, { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, headers || {}), body: JSON.stringify(body) });
+    const login = async (username, password) => (await post('/api/auth/login', { username, password })).json();
+    const bearer = (session) => ({ Authorization: 'Bearer ' + session.data.session_token });
+
+    // Password change requires a session.
+    const anonymous = await post('/api/auth/password', { current_password: 'x', new_password: 'y' });
+    assert.equal(anonymous.status, 401);
+
+    const admin = await login('admin', 'admin-password-123');
+    const adminHeaders = bearer(admin);
+
+    // Staff account creation is admin-only and validated.
+    const staffHeadersResponse = await post('/api/admin/accounts/create', { username: 'maria', display_name: 'Maria Santos', role: 'STAFF', password: 'maria-password-1' }, adminHeaders);
+    assert.equal(staffHeadersResponse.status, 200);
+    const duplicate = await (await post('/api/admin/accounts/create', { username: 'maria', role: 'STAFF', password: 'maria-password-1' }, adminHeaders)).json();
+    assert.equal(duplicate.ok, false);
+    assert.equal(duplicate.error.code, 'ACCOUNT_DUPLICATE');
+    const shortPassword = await (await post('/api/admin/accounts/create', { username: 'shorty', role: 'STAFF', password: 'short' }, adminHeaders)).json();
+    assert.equal(shortPassword.error.code, 'ACCOUNT_PASSWORD_INVALID');
+
+    const maria = await login('maria', 'maria-password-1');
+    const mariaHeaders = bearer(maria);
+    const forbidden = await fetch(base + '/api/admin/accounts', { headers: mariaHeaders });
+    assert.equal(forbidden.status, 403);
+    assert.equal((await forbidden.json()).error.code, 'ADMIN_REQUIRED');
+
+    const listed = await (await fetch(base + '/api/admin/accounts', { headers: adminHeaders })).json();
+    assert.deepEqual(listed.data.map((account) => account.username).sort(), ['admin', 'maria']);
+
+    // Wrong current password is rejected without changing anything.
+    const wrongCurrent = await (await post('/api/auth/password', { current_password: 'not-my-password', new_password: 'maria-password-2' }, mariaHeaders)).json();
+    assert.equal(wrongCurrent.ok, false);
+    assert.equal(wrongCurrent.error.code, 'ACCOUNT_PASSWORD_INCORRECT');
+
+    // Changing revokes the account's OTHER sessions but keeps the caller's.
+    const mariaSecondDevice = await login('maria', 'maria-password-1');
+    const changed = await (await post('/api/auth/password', { current_password: 'maria-password-1', new_password: 'maria-password-2' }, mariaHeaders)).json();
+    assert.equal(changed.ok, true);
+    const oldPasswordLogin = await post('/api/auth/login', { username: 'maria', password: 'maria-password-1' });
+    assert.equal(oldPasswordLogin.status, 401);
+    const revokedDevice = await fetch(base + '/api/auth/me', { headers: bearer(mariaSecondDevice) });
+    assert.equal(revokedDevice.status, 401);
+    const currentDevice = await fetch(base + '/api/auth/me', { headers: mariaHeaders });
+    assert.equal(currentDevice.status, 200);
+
+    // Admin resets a forgotten password; the staff signs in with it.
+    const reset = await (await post('/api/admin/accounts/reset-password', { username: 'maria', new_password: 'maria-password-3' }, adminHeaders)).json();
+    assert.equal(reset.ok, true);
+    const mariaAgain = await login('maria', 'maria-password-3');
+
+    // Disable blocks sign-in; an admin cannot disable their own account.
+    // (The last-active-admin rule is enforced at the store layer, covered above.)
+    const disabled = await (await post('/api/admin/accounts/status', { username: 'maria', status: 'DISABLED' }, adminHeaders)).json();
+    assert.equal(disabled.ok, true);
+    assert.equal((await post('/api/auth/login', { username: 'maria', password: 'maria-password-3' })).status, 401);
+    const selfDisable = await (await post('/api/admin/accounts/status', { username: 'admin', status: 'DISABLED' }, adminHeaders)).json();
+    assert.equal(selfDisable.error.code, 'ACCOUNT_SELF_DISABLE');
+
+    // Every account action above wrote an audit row (the first-boot admin
+    // creation is the one sanctioned non-user actor).
+    const auditRows = fixture.db.prepare("SELECT actor, action FROM auth_audit WHERE action IN ('CHANGE_OWN_PASSWORD','CREATE_ACCOUNT','RESET_ACCOUNT_PASSWORD','SET_ACCOUNT_STATUS') ORDER BY timestamp").all();
+    const actions = auditRows.map((row) => row.action);
+    assert.ok(actions.includes('CREATE_ACCOUNT'));
+    assert.ok(actions.includes('CHANGE_OWN_PASSWORD'));
+    assert.ok(actions.includes('RESET_ACCOUNT_PASSWORD'));
+    assert.ok(actions.includes('SET_ACCOUNT_STATUS'));
+    assert.ok(auditRows.every((row) => row.actor.startsWith('USER:') || row.actor === 'SYSTEM_BOOTSTRAP'));
+  });
+  fixture.db.close();
+});
+
 test('the hosted server requires sessions, binds actors to users, and blocks intern writes', async () => {
   const fixture = buildHostedFixture({});
   const adminBoot = fixture.auth.bootstrapAdmin({ password: 'admin-password-123' });

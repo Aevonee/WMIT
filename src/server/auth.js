@@ -46,6 +46,7 @@ class AuthStore {
     this.insertSession = db.prepare('INSERT INTO auth_sessions (token, username, role, created_at, expires_at) VALUES (?, ?, ?, ?, ?)');
     this.selectSession = db.prepare('SELECT * FROM auth_sessions WHERE token = ?');
     this.deleteSession = db.prepare('DELETE FROM auth_sessions WHERE token = ?');
+    this.deleteOtherSessions = db.prepare('DELETE FROM auth_sessions WHERE username = ? AND token != ?');
   }
 
   now() { return this.clock().toISOString(); }
@@ -143,12 +144,15 @@ class AuthStore {
     return { username: account.username };
   }
 
-  changeOwnPassword(username, currentPassword, newPassword) {
+  changeOwnPassword(username, currentPassword, newPassword, currentToken) {
     const account = this.requireAccount(username);
     if (!passwordMatches(currentPassword || '', account)) throw new WmitError('ACCOUNT_PASSWORD_INCORRECT', 'Current password is incorrect.');
     if (String(newPassword || '').length < 10) throw new WmitError('ACCOUNT_PASSWORD_INVALID', 'New password must be at least 10 characters.');
     const salt = crypto.randomUUID();
     this.updateAccount.run(account.display_name, account.role, account.status, salt, PASSWORD_ITERATIONS, hashPassword(newPassword, salt), this.now(), account.username);
+    // Revoke every OTHER session of this account; the caller's own session
+    // (currentToken) survives so they stay signed in on this device.
+    this.deleteOtherSessions.run(account.username, String(currentToken || ''));
     this.audit('USER:' + username, 'CHANGE_OWN_PASSWORD', username, {});
     return { username };
   }
