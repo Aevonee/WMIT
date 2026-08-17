@@ -45,18 +45,18 @@ LEAD_FOLLOWUP_1 (day-1 thank-you), LEAD_FOLLOWUP_NUDGE (day-3/7), NO_REPLY_CLOSI
 
 ## Todos
 
-- [ ] 1. Wave 1 — Message templates: engine + Settings editor + actions
+- [x] 1. Wave 1 — Message templates: engine + Settings editor + actions
   Read first: `app/public/expo-console.js` (chat-actions/link builders), `src/phase1/runtime.js` (settings mechanism), `docs/events.md` (message tone references).
   Steps: (a) template store via existing settings/configuration (admin-editable, seeded with the 12 starter templates); (b) renderer for placeholder substitution per context (lead / quote / booking / payment); (c) UI: template picker + Copy / Open WhatsApp / Open Viber buttons in Events follow-up queue, lead detail, quote tab, booking finance tab; (d) tests: placeholder rendering, missing-field fallback, settings persistence, admin-only edit.
   Acceptance: staff can pick "Deposit reminder" on a booking and send via WhatsApp with every placeholder filled from real record data; no template can render with a visible unfilled `{{…}}` — missing fields render as sensible text, never the raw token.
   Commit: `staff tools: message templates with copy/WhatsApp/Viber actions`.
 
-- [ ] 2. Wave 1 — Actionable dashboard
+- [x] 2. Wave 1 — Actionable dashboard
   Steps: (a) derive queues from existing state: quotations pending approval, client obligations due/overdue (from payment schedule), overdue follow-ups (tasks), leads with NEEDS MOBILE; (b) render as grouped lists where every row links to its case/tab with the record preselected (reuse workspace-id selection); (c) keep counts honest — queue = actionable records only.
   Acceptance: dashboard answers "what needs me now" with zero dead ends; every row resolves in one click to the record; browser QA creates one of each queue item and follows every row.
   Commit: `workspace: actionable dashboard queues`.
 
-- [ ] 3. Wave 1 — Global search
+- [x] 3. Wave 1 — Global search
   Steps: (a) header search box (both operations and expo-console headers), debounced, ≥2 chars; (b) searches clients, expo leads, quotations, bookings, suppliers by display name, mobile, email, and record ID prefix; (c) keyboard: arrow/enter navigation, Esc closes; (d) results deep-link with record preselected.
   Acceptance: typing a mobile number or last name finds the person and lands on their record in ≤2 interactions; QA covers mobile + email + ID lookups.
   Commit: `workspace: global search across clients, leads, bookings, suppliers`.

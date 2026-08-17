@@ -868,8 +868,10 @@ function openClientMessageComposer() {
   const quotation = records.quotation;
   const obligations = booking ? list('ClientObligation', (obligation) => obligation.booking_id === booking.booking_id) : [];
   const name = String(client.display_name || '');
-  const deposit = obligations[0] ? obligations[0].amount + ' ' + (obligations.currency || obligations[0].currency || 'PHP') : '';
-  const balanceObligation = obligations.slice().sort((a, b) => String(b.due_at || '').localeCompare(String(a.due_at || '')))[0];
+  const byDue = obligations.slice().filter((obligation) => obligation.due_at).sort((a, b) => String(a.due_at).localeCompare(String(b.due_at)));
+  const depositObligation = obligations.find((obligation) => String(obligation.purpose || '').toUpperCase() === 'DOWN_PAYMENT') || byDue[0] || obligations[0];
+  const balanceObligation = obligations.find((obligation) => String(obligation.purpose || '').toUpperCase() === 'FINAL_BALANCE') || byDue[byDue.length - 1] || obligations[obligations.length - 1];
+  const nextDue = byDue.find((obligation) => obligation.state !== 'SATISFIED') || byDue[0];
   window.wmitOpenMessageComposer({
     title: 'Message ' + (name.split(/\s+/)[0] || 'client'),
     mobile: client.primary_phone,
@@ -879,9 +881,9 @@ function openClientMessageComposer() {
       destination: requirements.destination || (quotation && quotation.destination) || '',
       travel_month: requirements.travel_month || '',
       booking_id: booking ? booking.booking_id : '',
-      deposit: deposit,
+      deposit: depositObligation ? depositObligation.amount + ' ' + (depositObligation.currency || 'PHP') : '',
       balance: balanceObligation ? balanceObligation.amount + ' ' + (balanceObligation.currency || 'PHP') : '',
-      due_date: balanceObligation && balanceObligation.due_at ? String(balanceObligation.due_at).slice(0, 10) : '',
+      due_date: nextDue ? String(nextDue.due_at).slice(0, 10) : '',
       valid_until: quotation ? quotation.valid_until : '',
       consultant: 'your Worldmaster consultant'
     },
