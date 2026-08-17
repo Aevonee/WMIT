@@ -29,6 +29,19 @@ function createHostedServer(options) {
   ensureEntityTables(db, ENTITY_DEFS);
   ensureSystemTables(db);
 
+  // Runtime settings (quotation defaults, message templates) survive restarts:
+  // restored into config at boot, rewritten by updateSettings' change hook.
+  db.exec('CREATE TABLE IF NOT EXISTS app_configuration (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL)');
+  const selectConfiguration = db.prepare('SELECT value FROM app_configuration WHERE key = ?');
+  const upsertConfiguration = db.prepare('INSERT INTO app_configuration (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at');
+  const persistedSettings = (() => {
+    try {
+      const row = selectConfiguration.get('runtime_settings');
+      const parsed = row ? JSON.parse(row.value) : null;
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (_) { return {}; }
+  })();
+
   const auditLog = new SqliteAuditLog(db);
   const idGenerator = new SqliteIdGenerator(db);
   const repositoryFactory = (type, repoOptions) => new SqliteRepository(db, type, repoOptions.idField);
@@ -38,7 +51,10 @@ function createHostedServer(options) {
     idGenerator,
     auditLog,
     repositoryFactory,
-    config: { trustedActors: {} }
+    config: Object.assign({ trustedActors: {} }, persistedSettings),
+    onSettingsChanged: (settings) => {
+      upsertConfiguration.run('runtime_settings', JSON.stringify({ quotationDefaults: settings.quotationDefaults, messageTemplates: settings.messageTemplates }), new Date().toISOString());
+    }
   });
 
   const auth = new AuthStore(db, {

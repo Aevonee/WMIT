@@ -10,8 +10,8 @@
     body { background: var(--chart-paper); }
     .kiosk { max-width: 860px; margin: 0 auto; padding: 22px 18px 56px; }
     .kiosk-hero { background: var(--harbor-navy); color: #fff; border-radius: 11px; padding: 38px 36px 34px; }
-    .kiosk-hero img { display: block; width: 100%; height: auto; max-width: 420px; }
-    .kiosk-hero h1 { font-size: clamp(26px, 4.5vw, 40px); margin-top: 16px; line-height: 1.15; letter-spacing: -.01em; }
+    .kiosk-hero img { display: block; width: 100%; height: auto; }
+    .kiosk-hero h1 { font-size: clamp(26px, 4.5vw, 40px); margin-top: 20px; line-height: 1.15; letter-spacing: -.01em; }
     .kiosk-hero p { color: var(--mist); margin-top: 10px; font-size: 17px; max-width: 560px; }
     .kiosk-card { background: var(--paper); border: 1px solid var(--rule); border-radius: 11px; padding: 26px; margin-top: 18px; box-shadow: 0 4px 16px rgba(23,35,52,.08); }
     .kiosk-fieldset { border: 0; padding: 0; margin: 0 0 8px; }
@@ -20,7 +20,8 @@
     .kiosk-row .full { grid-column: 1 / -1; }
     .kiosk-field label { font-size: 16px; font-weight: 700; color: var(--ledger-ink); display: block; margin-bottom: 6px; }
     .kiosk-field .hint { font-weight: 500; color: var(--sea-fog); font-size: 13px; }
-    .kiosk-field input, .kiosk-field select { font-size: 20px; padding: 14px; min-height: 54px; width: 100%; border: 1px solid var(--rule-input); border-radius: 6px; background: var(--paper); color: var(--ledger-ink); }
+    .kiosk-field input, .kiosk-field select, .kiosk-field textarea { font-size: 20px; font-family: inherit; padding: 14px; min-height: 54px; width: 100%; border: 1px solid var(--rule-input); border-radius: 6px; background: var(--paper); color: var(--ledger-ink); }
+    .kiosk-field textarea { min-height: 84px; resize: vertical; line-height: 1.4; }
     .chips { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
     .chip input { position: absolute; opacity: 0; width: 0; height: 0; }
     .chip > span { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 54px; padding: 10px 18px; border: 2px solid var(--rule-input); border-radius: 8px; font-size: 17px; font-weight: 700; color: var(--ledger-ink); cursor: pointer; background: var(--paper); }
@@ -56,8 +57,10 @@
   <main class="kiosk">
     <div class="kiosk-hero">
       <img src="/assets/wmit-logo.png" alt="Worldmaster International Travel">
-      <h1>Where do you want to travel next?</h1>
-      <p>Tell us about your trip in 30 seconds and we'll prepare your travel quotation. One follow-up from a real travel consultant — no spam.</p>
+      <div class="kiosk-hero-copy">
+        <h1>Where do you want to travel next?</h1>
+        <p>Tell us about your trip in 30 seconds and we'll prepare your travel quotation. One follow-up from a real travel consultant — no spam.</p>
+      </div>
     </div>
 
     <form id="kiosk-form" class="kiosk-card" autocomplete="off" novalidate>
@@ -98,6 +101,10 @@
           <div class="kiosk-field full">
             <label for="k-days">How many days?</label>
             <select id="k-days" name="duration_days"></select>
+          </div>
+          <div class="kiosk-field full">
+            <label for="k-notes">Anything else? <span class="hint">(optional)</span></label>
+            <textarea id="k-notes" name="notes" rows="3" maxlength="500" placeholder="e.g. celebrating an anniversary, prefer direct flights, on a budget…"></textarea>
           </div>
         </div>
       </fieldset>
@@ -322,7 +329,8 @@
           adults: adultsSelect.value,
           children: kidsSelect.value,
           hotel_stars: radioValue('hotel_stars') || null,
-          meal_plan: radioValue('meal_plan') || null
+          meal_plan: radioValue('meal_plan') || null,
+          notes: document.getElementById('k-notes').value.trim() || null
         };
         if (!payload.name) return show('Please enter your name.');
         if (!payload.mobile) return show('Please enter your mobile number.');

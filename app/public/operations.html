@@ -67,22 +67,6 @@
   </style>
 
   <style>
-    @media (prefers-color-scheme: dark){
-      :root{
-        color-scheme:dark;
-        --chart-paper:#0d1824;--surface:#14212e;--paper-tint:#182636;--paper-well:#0f1c29;--passage-tint:#15293b;--rule:#24384c;--rule-soft:#223448;--rule-hair:#20303f;--rule-input:#3d5266;--rule-dashed:#32465a;--rule-tint:#1a2836;
-        --ledger-ink:#dfe9f3;--sea-fog:#9db0c4;--label-ink:#a9bacd;--why-ink:#b9c8d9;
-        --passage-blue:#5d9bd2;--registry-blue:#8fc3ee;--seal-ink:#9fc0de;
-        --amber-wash:#2b2412;--amber-rule:#5a4a1e;--amber-ink:#e3b96d;
-        --good-wash:#122a1c;--good-rule:#2c5a3d;--bad-wash:#331c1c;--bad-rule:#6e3434;
-        --status-good-bg:#17361f;--status-good-text:#8fd8a8;--status-warn-bg:#3a3010;--status-warn-text:#eac670;--status-bad-bg:#3d2020;--status-bad-text:#f2a8a8;--status-info-bg:#16334a;--status-neutral-bg:#243240;--status-neutral-text:#b3c2d2;
-        --msg-ok-bg:#122a1c;--msg-ok-rule:#2c5a3d;--msg-err-bg:#331c1c;--msg-err-text:#f2a8a8;--msg-err-rule:#6e3434;--msg-warn-bg:#33290e;--msg-warn-text:#eac670;--msg-warn-rule:#5a4a1e;
-        --required-wash:#331a1a;--required-text:#f2a8a8;
-        --step-done-bg:#122a1c;--step-done-rule:#2c5a3d;--ready-wash:#122a1c;--blocked-wash:#331c1c;--monitoring-wash:#0f2018;
-        --command-bar-bg:#152430;--command-bar-rule:#2a4256;--client-preview-rule:#32465a;--booking-rule:#32465a;--summary-rule:#24384c;--timeline-rail:#32465a;
-      }
-      .why div:before{color:var(--status-good-text)}
-    }
     @media print{
       :root{--ledger-ink:#172334;--sea-fog:#607085;--label-ink:#56677a;--surface:#fff;--paper-tint:#fbfcfe;--paper-well:#f7fafc;--rule:#d9e2ec;--rule-tint:#f1f5f9;--passage-blue:#3679b6;--passage-tint:#f5f9fd;--registry-blue:#245c89;--seal-ink:#14334f}
       .why div:before{color:var(--status-good-text)}
@@ -91,7 +75,7 @@
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to main content</a>
-<header><div class="header-row"><div><div class="eyebrow">WMIT local operations</div><h1>Operations Workspace</h1><div class="header-muted">LOCAL SYNTHETIC TEST DATA</div></div><div class="actions"><span id="auth-state" class="header-muted" style="display:flex;align-items:center;gap:8px;"></span><button class="secondary" onclick="refreshWorkspace()">Refresh</button><button class="warning" id="btn-fill-test" onclick="fillSyntheticFormFields()">Fill test fields</button><button class="danger" id="btn-reset-synthetic" onclick="resetSynthetic()">Reset synthetic data</button></div></div><nav class="nav" aria-label="Operations workspaces"><a data-tab="dashboard" href="#dashboard">Dashboard</a><span class="nav-sep" aria-hidden="true"></span><a data-tab="inquiry" href="#inquiry">Inquiries</a><a data-tab="quotation" href="#quotation">Quotations</a><a data-tab="booking" href="#booking">Bookings</a><a data-tab="finance" href="#finance">Finance</a><a data-tab="monitoring" href="#monitoring">Monitoring</a><a data-tab="departures" href="#departures">Departures</a><span class="nav-sep" aria-hidden="true"></span><a data-tab="clients" href="#clients">Clients</a><a data-tab="suppliers" href="#suppliers">Suppliers</a><a data-tab="subagents" href="#subagents">Sub-agents</a><a data-tab="tariffs" href="#tariffs">Tariff Library</a><span class="nav-sep" aria-hidden="true"></span><a data-tab="operations" href="#operations">Follow-ups</a><a data-tab="settings" href="#settings">Settings</a><a href="/expo-console.html">Events</a></nav></header>
+<header><div class="header-row"><div><div class="eyebrow">WMIT local operations</div><h1>Operations Workspace</h1><div class="header-muted">LOCAL SYNTHETIC TEST DATA</div></div><div class="actions"><input id="wmit-global-search" type="search" placeholder="Search clients, cases, suppliers…" autocomplete="off" aria-label="Search clients, cases, quotations, bookings, suppliers" style="background:#fff;color:#172334;border:1px solid #c8d2df;border-radius:6px;padding:8px 10px;font:inherit;font-size:13px;min-width:200px;"><span id="auth-state" class="header-muted" style="display:flex;align-items:center;gap:8px;"></span><button class="secondary" onclick="refreshWorkspace()">Refresh</button><button class="warning" id="btn-fill-test" onclick="fillSyntheticFormFields()">Fill test fields</button><button class="danger" id="btn-reset-synthetic" onclick="resetSynthetic()">Reset synthetic data</button></div></div><nav class="nav" aria-label="Operations workspaces"><a data-tab="dashboard" href="#dashboard">Dashboard</a><span class="nav-sep" aria-hidden="true"></span><a data-tab="inquiry" href="#inquiry">Inquiries</a><a data-tab="quotation" href="#quotation">Quotations</a><a data-tab="booking" href="#booking">Bookings</a><a data-tab="finance" href="#finance">Finance</a><a data-tab="monitoring" href="#monitoring">Monitoring</a><a data-tab="departures" href="#departures">Departures</a><span class="nav-sep" aria-hidden="true"></span><a data-tab="clients" href="#clients">Clients</a><a data-tab="suppliers" href="#suppliers">Suppliers</a><a data-tab="subagents" href="#subagents">Sub-agents</a><a data-tab="tariffs" href="#tariffs">Tariff Library</a><span class="nav-sep" aria-hidden="true"></span><a data-tab="operations" href="#operations">Follow-ups</a><a data-tab="settings" href="#settings">Settings</a><a href="/expo-console.html">Events</a></nav></header>
   <main id="main" tabindex="-1"><div id="message" class="message" role="status" aria-live="polite" tabindex="-1"></div><section id="case-header" class="case-header"></section>
     <section id="dashboard" class="workspace-view panel"><div class="panel-head"><div><div class="eyebrow">Overview</div><h2>Dashboard</h2><p class="muted">Needs attention.</p></div></div><div id="dashboard-content"></div></section>
      <section id="inquiry" class="workspace-view panel"><div class="panel-head"><div><div class="eyebrow">Client requests</div><h2>Inquiries</h2><p class="muted">Capture requests and prepare quotations.</p></div></div><div id="inquiry-content"></div><div id="options-content"></div></section>
@@ -108,5 +92,9 @@
     <section id="clients" class="workspace-view panel"><div class="panel-head"><div><div class="eyebrow">Client records</div><h2>Clients</h2><p class="muted">Clients and trip history.</p></div></div><div id="clients-content"></div></section>
   </main>
   <script src="/operations.js"></script>
+  <script src="/wmit-toasts.js"></script>
+  <script src="/wmit-templates.js"></script>
+  <script src="/wmit-search.js"></script>
+  <script src="/auth-ui.js"></script>
 </body>
 </html>

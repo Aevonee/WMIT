@@ -128,8 +128,10 @@ class Phase1Runtime {
       cardPaypalFee: 5, tariffDefaultUnits: { accommodation: 'PER_PERSON', transfer: 'PER_PERSON_PER_WAY' },
       tariffRateUnits: DEFAULT_TARIFF_RATE_UNITS.slice(),
       quotationDefaults: { paymentTerms: '50% deposit upon confirmation; balance due 30 business days before departure.', validityDays: 7, currency: 'PHP', paymentCurrencyPolicy: 'Payment due in quotation currency.', downPaymentDaysAfterReservation: 3, finalBalanceBusinessDaysBeforeDeparture: 30 },
+      messageTemplates: [],
       trustedActors: {}, expo: { id: 'EXPO-MVP', name: 'WMIT Expo', startAt: null, endAt: null, discountPercent: 0 }
     }, opts.config || {});
+    this.onSettingsChanged = typeof opts.onSettingsChanged === 'function' ? opts.onSettingsChanged : null;
     this.repos = {};
     // Hosted deployments inject SQLite-backed repositories; local and test
     // runs keep the in-memory default. The interface is identical.
@@ -253,8 +255,29 @@ class Phase1Runtime {
       }), context);
     } catch (error) { return fail(error); }
   }
-  createSupplier(input, context) { return this.createRecord('Supplier', Object.assign({ status: 'ACTIVE', capabilities: [] }, input), context); }
-  createSupplierContact(input, context) { this.must('Supplier', input.supplier_id); return this.createRecord('SupplierContact', input, context); }
+  createSupplier(input, context) {
+    try {
+      const value = Object.assign({}, input || {});
+      const displayName = String(value.display_name || value.legal_name || '').trim();
+      requireValue(displayName, 'display_name');
+      const normalized = displayName.toLowerCase();
+      if (this.list('Supplier', (supplier) => String(supplier.display_name || '').trim().toLowerCase() === normalized).length) {
+        throw new WmitError('SUPPLIER_DUPLICATE', 'A supplier with that name already exists.', { display_name: displayName });
+      }
+      return this.createRecord('Supplier', Object.assign({ status: 'ACTIVE', capabilities: [] }, value, {
+        display_name: displayName,
+        legal_name: String(value.legal_name || displayName).trim()
+      }), context);
+    } catch (error) { return fail(error); }
+  }
+  createSupplierContact(input, context) {
+    try {
+      const value = Object.assign({}, input || {});
+      requireValue(value.supplier_id, 'supplier_id');
+      this.must('Supplier', value.supplier_id);
+      return this.createRecord('SupplierContact', value, context);
+    } catch (error) { return fail(error); }
+  }
   createSubAgent(input, context) {
     try {
       const value = Object.assign({}, input || {});
@@ -1548,9 +1571,34 @@ class Phase1Runtime {
       });
       if (next.currency && !/^[A-Z]{3}$/i.test(next.currency)) throw new WmitError('INVALID_SETTING', 'currency must be a three-letter currency code.');
       this.config.quotationDefaults = next;
+      let templatesChanged = false;
+      if (values.messageTemplates !== undefined) {
+        this.config.messageTemplates = this.validatedMessageTemplates(values.messageTemplates);
+        templatesChanged = true;
+      }
       this.auditLog.record({ actor: this.context(context).actor, action: 'UPDATE', entity_type: 'Configuration', entity_id: 'LOCAL_CONFIGURATION', details: { changedFields: Object.keys(values) }, correlation_id: this.context(context).correlationId });
-      return ok({ quotationDefaults: clone(next) }, { action: 'UPDATE_SETTINGS' });
+      if (this.onSettingsChanged) {
+        try { this.onSettingsChanged({ quotationDefaults: this.config.quotationDefaults, messageTemplates: this.config.messageTemplates }); } catch (_) { /* persistence failure must not roll back the in-memory setting */ }
+      }
+      return ok({ quotationDefaults: clone(next), messageTemplates: this.config.messageTemplates.slice() }, { action: 'UPDATE_SETTINGS' });
     } catch (error) { return fail(error); }
+  }
+  validatedMessageTemplates(templates) {
+    if (!Array.isArray(templates)) throw new WmitError('INVALID_SETTING', 'messageTemplates must be a list.');
+    if (templates.length > 50) throw new WmitError('INVALID_SETTING', 'At most 50 message templates are allowed.');
+    const seen = new Set();
+    return templates.map((template) => {
+      const value = template || {};
+      const key = String(value.key || '').trim();
+      const label = String(value.label || value.key || '').trim();
+      const body = String(value.body || '').trim();
+      if (!/^[A-Z0-9_]{2,40}$/.test(key)) throw new WmitError('INVALID_SETTING', 'Template key must use letters, numbers, and underscores (2-40 characters).');
+      if (seen.has(key)) throw new WmitError('INVALID_SETTING', 'Duplicate template key: ' + key);
+      seen.add(key);
+      if (!label) throw new WmitError('INVALID_SETTING', 'Template ' + key + ' needs a label.');
+      if (!body || body.length > 2000) throw new WmitError('INVALID_SETTING', 'Template ' + key + ' needs a body of up to 2000 characters.');
+      return { key, label, body };
+    });
   }
   createClientObligation(input, context) {
     try {

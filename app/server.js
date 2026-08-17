@@ -177,6 +177,50 @@ function createMvpServer(options) {
           if (auth) auth.logout(bearerToken(req));
           return json(res, 200, { ok: true, meta: { action: 'LOGOUT' } });
         }
+        if (parsed.pathname === '/api/settings' && req.method === 'GET') {
+          if (!phase1 || typeof phase1.settings !== 'function') return json(res, 200, { ok: true, data: { messageTemplates: [], quotationDefaults: {} } });
+          return json(res, 200, { ok: true, data: phase1.settings() });
+        }
+        // --- Account self-service and administration -------------------------
+        if (parsed.pathname === '/api/auth/password' && req.method === 'POST') {
+          if (!auth) return json(res, 501, { ok: false, error: { code: 'AUTH_UNAVAILABLE', message: 'This server runs without an account store.' } });
+          const session = req.wmitSession || auth.sessionFor(bearerToken(req));
+          if (!session) return json(res, 401, { ok: false, error: { code: 'UNAUTHORIZED', message: 'Sign in to WMIT to use this API.' } });
+          const body = await readBody(req);
+          try {
+            const result = auth.changeOwnPassword(session.username, body.current_password, body.new_password, session.token);
+            return json(res, 200, { ok: true, data: result, meta: { action: 'CHANGE_OWN_PASSWORD' } });
+          } catch (error) {
+            return json(res, 400, { ok: false, error: { code: error.code || 'ACCOUNT_PASSWORD_INVALID', message: error.message } });
+          }
+        }
+        if (parsed.pathname.startsWith('/api/admin/accounts')) {
+          if (!auth) return json(res, 501, { ok: false, error: { code: 'AUTH_UNAVAILABLE', message: 'This server runs without an account store.' } });
+          const session = req.wmitSession || auth.sessionFor(bearerToken(req));
+          if (!session) return json(res, 401, { ok: false, error: { code: 'UNAUTHORIZED', message: 'Sign in to WMIT to use this API.' } });
+          if (session.role !== 'ADMIN') return json(res, 403, { ok: false, error: { code: 'ADMIN_REQUIRED', message: 'Only Admin accounts manage WMIT accounts.' } });
+          const actor = 'USER:' + session.username;
+          if (req.method === 'GET' && parsed.pathname === '/api/admin/accounts') {
+            return json(res, 200, { ok: true, data: auth.listAccounts() });
+          }
+          if (req.method === 'POST') {
+            const body = await readBody(req);
+            const routes = {
+              '/api/admin/accounts/create': () => auth.createAccount(body, actor),
+              '/api/admin/accounts/status': () => auth.setAccountStatus(body.username, body.status, actor, session.username),
+              '/api/admin/accounts/role': () => auth.updateAccountRole(body.username, body.role, actor, session.username),
+              '/api/admin/accounts/reset-password': () => auth.resetPassword(body.username, body.new_password, actor)
+            };
+            if (!routes[parsed.pathname]) return json(res, 404, { ok: false, error: { message: 'Unknown account endpoint.' } });
+            try {
+              return json(res, 200, { ok: true, data: routes[parsed.pathname](), meta: { action: 'ADMIN_ACCOUNTS' } });
+            } catch (error) {
+              const status = error.code === 'ACCOUNT_NOT_FOUND' ? 404 : 400;
+              return json(res, status, { ok: false, error: { code: error.code || 'ACCOUNT_INVALID', message: error.message } });
+            }
+          }
+          return json(res, 405, { ok: false, error: { message: 'This account operation only supports GET or POST.' } });
+        }
         if (parsed.pathname === '/api/health' && req.method === 'GET') {
           const result = health ? health() : { env: 'local', scheduler: { running: false, jobs: [] }, heartbeat: null };
           return json(res, 200, { ok: true, data: result });

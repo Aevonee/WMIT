@@ -225,6 +225,7 @@ function createPhase1Application(options) {
         result.data.configuration = {
           tariffRateUnits: runtime.config && runtime.config.tariffRateUnits || [],
           quotationDefaults: runtime.config && runtime.config.quotationDefaults || {},
+          messageTemplates: runtime.config && runtime.config.messageTemplates || [],
           expo: {
             id: expo.id || null,
             name: expo.name || null,
@@ -237,6 +238,10 @@ function createPhase1Application(options) {
       return result;
     },
     action: (body) => call(body && body.action, body && body.input, body && body.actor),
+    settings: () => ({
+      messageTemplates: (runtime.config && runtime.config.messageTemplates) || [],
+      quotationDefaults: (runtime.config && runtime.config.quotationDefaults) || {}
+    }),
     resetSyntheticTestCase: () => call('resetSyntheticTestCase', {}, 'LOCAL_STAFF'),
     createClient: (input, actor) => call('createClient', input, actor),
     updateClient: (input, actor) => call('updateClient', input, actor),

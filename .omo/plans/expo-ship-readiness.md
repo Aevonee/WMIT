@@ -123,10 +123,10 @@ Single worker session, sequential waves (each todo commits before the next start
 
 ## Final verification wave
 
-- [ ] F1. Plan compliance audit — every todo executed as specified, all FOUR commits present (baseline + todos 2–4 = 4 total; `git log --oneline` shows exactly 4), no scope additions. Evidence: `git log` + `git diff main~3..main --stat` reviewed against this plan.
-- [ ] F2. Code quality review — offline-capture diff (`git diff main~3..main~2 -- app/public/expo.html`) read line-by-line: no dead code, no console noise beyond the specified warn, AA contrast on badge tokens, copy matches spec verbatim.
-- [ ] F3. Real manual QA — re-run todo 2's happy-path Playwright script once more on the committed tree; screenshot `.playwright-mcp/final-qa.png`; `npm test` green.
-- [ ] F4. Scope fidelity — `git status` clean; no files outside `app/public/expo.html`, `docs/`, `.gitignore` changed vs. baseline commit; Apps Script untouched.
+- [x] F1. Plan compliance audit — every todo executed as specified, all FOUR commits present (baseline + todos 2–4 = 4 total; `git log --oneline` shows exactly 4), no scope additions. Evidence: `git log` + `git diff main~3..main --stat` reviewed against this plan.
+- [x] F2. Code quality review — offline-capture diff (`git diff main~3..main~2 -- app/public/expo.html`) read line-by-line: no dead code, no console noise beyond the specified warn, AA contrast on badge tokens, copy matches spec verbatim.
+- [x] F3. Real manual QA — re-run todo 2's happy-path Playwright script once more on the committed tree; screenshot `.playwright-mcp/final-qa.png`; `npm test` green.
+- [x] F4. Scope fidelity — `git status` clean; no files outside `app/public/expo.html`, `docs/`, `.gitignore` changed vs. baseline commit; Apps Script untouched.
 
 ## Commit strategy
 

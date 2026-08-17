@@ -13,6 +13,7 @@ const MEAL_LABELS = { ROOM_ONLY: 'Room only', BREAKFAST: 'Breakfast', HALF_BOARD
 let leadsCache = [];
 let templatesCache = [];
 let exposCache = [];
+let quotesCache = [];
 let currentExpoTag = null; // null = default (current) event
 
 const leadBrief = (lead) => {
@@ -58,6 +59,7 @@ async function api(path, options) {
 }
 
 function notify(text, kind) {
+  if (window.wmitToast) { window.wmitToast(kind === 'error' ? 'error' : 'ok', kind === 'error' ? 'Action failed' : 'Done', text); return; }
   const el = $('message');
   el.textContent = text;
   el.className = 'message show ' + (kind === 'error' ? 'error' : 'ok');
@@ -120,12 +122,15 @@ $('refresh-dashboard').addEventListener('click', guard(loadDashboard));
 
 // ------------------------------------------------------------- follow-ups
 
+let followupsCache = [];
+
 async function loadFollowUps() {
   const data = await api('/api/expo/followups' + scopeQuery());
   $('followup-summary').textContent = data.open_count + ' open · ' + data.overdue_count + ' overdue (of ' + data.today + ')';
+  followupsCache = data.queue;
   const rows = data.queue.map((item) => '<tr class="' + (item.overdue ? 'overdue' : '') + '"><td>' + esc(item.due_date) + (item.overdue ? ' <b class="needs-mobile">OVERDUE</b>' : '') + '</td><td>Day ' + esc(item.day_step) + '</td><td><b>' + esc(item.lead ? item.lead.name : '?') + '</b><br><span class="muted">' + esc(item.lead ? item.lead.destination + ' · ' + item.lead.travel_month : '') + '</span><br><span class="muted">' + leadBrief(item.lead) + '</span></td><td>' + pill(item.lead ? item.lead.status : 'NEW') + '</td>' +
     '<td class="chat-actions">' + (item.whatsapp_url ? '<a class="chat-whatsapp" href="' + esc(item.whatsapp_url) + '" target="_blank" rel="noopener">WhatsApp</a>' : '<span class="needs-mobile">no mobile yet</span>') + (item.viber_url ? ' <a class="chat-viber" href="' + esc(item.viber_url) + '" target="_blank" rel="noopener">Viber</a>' : '') + '</td>' +
-    '<td class="row-actions"><button class="secondary compact" data-complete="' + esc(item.task_id) + '">Done</button></td></tr>').join('');
+    '<td class="row-actions"><button class="secondary compact" data-msg-followup="' + esc(item.task_id) + '">Message</button> <button class="secondary compact" data-complete="' + esc(item.task_id) + '">Done</button></td></tr>').join('');
   $('followup-content').innerHTML = tableWrap(rows, '<th>Due</th><th>Step</th><th>Lead</th><th>Status</th><th>Chat</th><th></th>', 'Queue is clear. Great work!');
   $('followup-content').querySelectorAll('[data-complete]').forEach((button) => {
     button.addEventListener('click', guard(async () => {
@@ -134,6 +139,19 @@ async function loadFollowUps() {
       notify('Follow-up completed.');
       await loadFollowUps();
     }));
+  });
+  $('followup-content').querySelectorAll('[data-msg-followup]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const item = followupsCache.find((entry) => entry.task_id === button.dataset.msgFollowup);
+      if (!item || !item.lead) return;
+      if (!item.lead.mobile) return notify('This lead has no mobile number yet — use Add mobile on the Leads tab.', 'error');
+      window.wmitOpenMessageComposer({
+        title: 'Message ' + (item.lead.name || 'lead'),
+        mobile: item.lead.mobile,
+        context: leadComposerContext(item.lead),
+        templates: await messageTemplates()
+      });
+    });
   });
 }
 $('refresh-followups').addEventListener('click', guard(loadFollowUps));
@@ -155,7 +173,8 @@ async function loadLeads() {
   const query = $('lead-search') ? $('lead-search').value.trim() : '';
   leadsCache = await api('/api/expo/leads' + scopeQuery(query ? 'q=' + encodeURIComponent(query) : ''));
   const rows = leadsCache.map((lead) => '<tr><td class="muted">' + esc(lead.expo_lead_id.slice(-8)) + '</td><td><b>' + esc(lead.name) + '</b>' + (lead.needs_mobile ? ' <span class="needs-mobile">NEEDS MOBILE</span>' : '') + (lead.email ? '<br><span class="muted">' + esc(lead.email) + '</span>' : '') + '</td><td>' + esc(lead.mobile || '—') + '</td><td>' + esc(lead.destination) + '</td><td>' + esc(lead.travel_month) + '</td><td>' + esc(leadBrief(lead)) + '</td><td>' + pill(lead.status) + '</td><td class="muted">' + esc(lead.source) + '</td>' +
-    '<td class="row-actions"><select data-status="' + esc(lead.expo_lead_id) + '">' + ['NEW', 'CONTACTED', 'QUOTED', 'ACCEPTED', 'BOOKED', 'LOST', 'UNREACHABLE'].map((status) => '<option ' + (status === lead.status ? 'selected' : '') + '>' + status + '</option>').join('') + '</select>' +
+    '<td class="row-actions"><select data-status="' + esc(lead.expo_lead_id) + '">' + ['NEW', 'CONTACTED', 'QUOTED', 'ACCEPTED', 'BOOKED', 'LOST', 'UNREACHABLE'].map((status) => '<option ' + (status === lead.status ? 'selected' : '') + '>' + status + '</option>').join('') + '</select> ' +
+    '<button class="secondary compact" data-msg-lead="' + esc(lead.expo_lead_id) + '"' + (lead.mobile ? '' : ' title="No mobile number yet"') + '>Message</button>' +
     (lead.needs_mobile ? ' <button class="secondary compact" data-attach="' + esc(lead.expo_lead_id) + '">Add mobile</button>' : '') + '</td></tr>').join('');
   $('lead-content').innerHTML = tableWrap(rows, '<th>ID</th><th>Name</th><th>Mobile</th><th>Destination</th><th>Month</th><th>Trip brief</th><th>Status</th><th>Source</th><th>Set status</th>', 'No leads yet — share the sign-up form or import badges.');
   $('lead-content').querySelectorAll('[data-status]').forEach((select) => {
@@ -174,7 +193,50 @@ async function loadLeads() {
       await loadLeads();
     }));
   });
+  $('lead-content').querySelectorAll('[data-msg-lead]').forEach((button) => {
+    button.addEventListener('click', () => openLeadComposer(button.dataset.msgLead));
+  });
 }
+
+let composerTemplates = null;
+async function messageTemplates() {
+  if (composerTemplates) return composerTemplates;
+  try {
+    const data = await api('/api/settings');
+    composerTemplates = window.wmitMessageTemplates(data.messageTemplates);
+  } catch (_) {
+    composerTemplates = window.wmitMessageTemplates([]);
+  }
+  return composerTemplates;
+}
+
+function leadComposerContext(lead) {
+  const name = String(lead.name || '');
+  return {
+    name: name,
+    first_name: name.split(/\s+/)[0] || name,
+    destination: lead.destination,
+    travel_month: lead.travel_month ? ' (' + lead.travel_month + ')' : '',
+    consultant: 'your Worldmaster consultant'
+  };
+}
+
+async function openLeadComposer(leadId) {
+  const lead = leadsCache.find((item) => item.expo_lead_id === leadId);
+  if (!lead) return;
+  if (!lead.mobile) return notify('Add a mobile number first — the Message button needs one.', 'error');
+  window.wmitOpenMessageComposer({
+    title: 'Message ' + (lead.name || 'lead'),
+    mobile: lead.mobile,
+    context: leadComposerContext(lead),
+    templates: await messageTemplates()
+  });
+}
+let leadSearchTimer = null;
+if ($('lead-search')) $('lead-search').addEventListener('input', () => {
+  clearTimeout(leadSearchTimer);
+  leadSearchTimer = setTimeout(() => guard(loadLeads)(), 200);
+});
 $('refresh-leads').addEventListener('click', guard(loadLeads));
 
 // --------------------------------------------------------------- packages
@@ -250,9 +312,11 @@ $('quote-create').addEventListener('click', guard(async () => {
 
 async function loadQuotes() {
   const quotes = await api('/api/expo/quotes' + scopeQuery());
+  quotesCache = quotes;
   const leadNames = new Map(leadsCache.map((lead) => [lead.expo_lead_id, lead.name]));
   const rows = quotes.map((quote) => '<tr><td class="muted">' + esc(quote.expo_quote_id) + '</td><td>' + esc(leadNames.get(quote.expo_lead_id) || quote.lead_snapshot.name) + '</td><td class="muted">' + quote.options.map((option) => esc(option.name)).join('<br>') + '</td><td>' + pill(quote.status) + '</td><td>' + esc(quote.sent_to_email || '—') + '</td>' +
     '<td class="row-actions">' +
+    '<button class="secondary compact" data-msg-quote="' + esc(quote.expo_quote_id) + '">Message</button> ' +
     (['DRAFT', 'SENT'].includes(quote.status) ? '<button class="secondary compact" data-send="' + esc(quote.expo_quote_id) + '" data-email="' + esc(quote.lead_snapshot.email || '') + '">Email quote</button>' : '') +
     (['DRAFT', 'SENT'].includes(quote.status) ? '<button class="secondary compact" data-link="' + esc(quote.expo_quote_id) + '">Get link</button>' : '') +
     (quote.status === 'ACCEPTED' ? '<button class="compact" data-book="' + esc(quote.expo_quote_id) + '">Mark booked</button>' : '') +
@@ -268,6 +332,29 @@ async function loadQuotes() {
       notify('Quote ' + (data.delivery && data.delivery.sent ? 'emailed' : 'prepared') + ' — ' + delivery + '.');
       await loadQuotes();
     }));
+  });
+  $('quote-content').querySelectorAll('[data-msg-quote]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const quote = quotesCache.find((entry) => entry.expo_quote_id === button.dataset.msgQuote);
+      if (!quote) return;
+      const snapshot = quote.lead_snapshot || {};
+      const name = String(snapshot.name || '');
+      const canIssueLink = ['DRAFT', 'SENT'].includes(quote.status);
+      window.wmitOpenMessageComposer({
+        title: 'Message ' + (name || 'client'),
+        mobile: snapshot.mobile,
+        context: Object.assign(leadComposerContext({ name: name, destination: snapshot.destination, travel_month: null }), {
+          valid_until: quote.valid_until
+        }),
+        templates: await messageTemplates(),
+        fetchContext: canIssueLink ? function (pending) {
+          if (!pending.includes('quote_link')) return Promise.resolve({});
+          return api('/api/expo/quotes/link', { method: 'POST', body: JSON.stringify({ expo_quote_id: quote.expo_quote_id }) }).then(function (data) {
+            return { quote_link: data.url };
+          });
+        } : null
+      });
+    });
   });
   $('quote-content').querySelectorAll('[data-link]').forEach((button) => {
     button.addEventListener('click', guard(async () => {
@@ -373,6 +460,35 @@ $('expo-kiosk-copy').addEventListener('click', async () => {
   }
 });
 
+window.wmitSearchResults = function (query) {
+  const q = String(query || '').toLowerCase();
+  const matches = (value) => value !== undefined && value !== null && String(value).toLowerCase().includes(q);
+  const results = [];
+  const openTab = (tab) => document.querySelector('.nav a[data-tab="' + tab + '"]').click();
+  leadsCache.forEach((lead) => {
+    if (matches(lead.name) || matches(lead.mobile) || matches(lead.email) || matches(lead.destination) || matches(lead.expo_lead_id)) {
+      results.push({ title: lead.name || lead.expo_lead_id, subtitle: [lead.mobile, lead.destination, lead.expo_lead_id].filter(Boolean).join(' · '), kind: 'Lead', run: () => { openTab('leads'); const search = $('lead-search'); if (search) { search.value = lead.name || ''; search.dispatchEvent(new Event('input')); } } });
+    }
+  });
+  quotesCache.forEach((quote) => {
+    const name = quote.lead_snapshot && quote.lead_snapshot.name;
+    if (matches(quote.expo_quote_id) || matches(name)) {
+      results.push({ title: name || quote.expo_quote_id, subtitle: quote.expo_quote_id + ' · ' + quote.status, kind: 'Quote', run: () => openTab('quotes') });
+    }
+  });
+  templatesCache.forEach((template) => {
+    if (matches(template.name) || matches(template.destination)) {
+      results.push({ title: template.name, subtitle: [template.destination, template.price_per_person + ' ' + template.currency].filter(Boolean).join(' · '), kind: 'Package', run: () => openTab('packages') });
+    }
+  });
+  exposCache.forEach((expo) => {
+    if (matches(expo.expo_tag) || matches(expo.name)) {
+      results.push({ title: expo.name || expo.expo_tag, subtitle: expo.expo_tag + ' · ' + expo.status, kind: 'Event', run: () => openTab('expos') });
+    }
+  });
+  return results;
+};
+
 // ------------------------------------------------------------------- boot
 
 (async function boot() {
@@ -381,4 +497,9 @@ $('expo-kiosk-copy').addEventListener('click', async () => {
   } catch (_) { /* login.html redirect already handled */ }
   await loadExpoBar();
   await guard(loadDashboard)();
+  // Prime the tab caches so global search finds leads, quotes, and packages
+  // without someone having opened those tabs first.
+  loadLeads().catch(() => {});
+  loadQuotes().catch(() => {});
+  loadPackages().catch(() => {});
 })();

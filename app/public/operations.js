@@ -152,6 +152,32 @@ function quotationDefaultsMarkup() {
   return '<div class="card"><h3>Quotation defaults</h3><p class="muted">Applied to new quotations and payment schedules. Existing records do not change.</p>' + field('Default payment terms', defaults.paymentTerms) + field('Default validity', defaults.validityDays + ' days') + field('Default currency', defaults.currency) + field('Payment currency policy', defaults.paymentCurrencyPolicy) + field('Down payment due', defaults.downPaymentDaysAfterReservation + ' days after reservation') + field('Final balance due', defaults.finalBalanceBusinessDaysBeforeDeparture + ' business days before departure') + '<button class="secondary compact" onclick="window.location.hash=\'settings\'">Edit settings</button></div>';
 }
 
+function messageTemplatesCard() {
+  if (!window.wmitCurrentUser || window.wmitCurrentUser.role !== 'ADMIN') return '';
+  const templates = window.wmitMessageTemplates(state && state.configuration && state.configuration.messageTemplates);
+  const rows = templates.map((template) =>
+    '<div class="field"><label for="tpl-' + esc(template.key) + '">' + esc(template.label) + ' <span class="muted">(' + esc(template.key) + ')</span></label>' +
+    '<textarea id="tpl-' + esc(template.key) + '" rows="3" data-tpl-key="' + esc(template.key) + '" data-tpl-label="' + esc(template.label) + '">' + esc(template.body) + '</textarea></div>'
+  ).join('');
+  return '<div class="card" id="templates-card"><h3>Message templates</h3><p class="muted">The messages staff send from the Message buttons (follow-ups, leads, quotes, cases). Placeholders like {{first_name}} or {{destination}} fill from the record; missing details are simply left out. Changes apply to every workspace immediately.</p>' + rows +
+    '<div class="row-actions" style="margin-top:10px"><button onclick="saveMessageTemplates()">Save templates</button> <button class="secondary" onclick="resetMessageTemplates()">Reset to defaults</button></div></div>';
+}
+
+async function saveMessageTemplates(templates) {
+  const payload = templates || Array.from(document.querySelectorAll('[data-tpl-key]')).map((textarea) => ({
+    key: textarea.dataset.tplKey,
+    label: textarea.dataset.tplLabel,
+    body: textarea.value
+  })).filter((template) => template.body.trim());
+  const saved = await api('updateSettings', { messageTemplates: payload });
+  if (saved) showMessage('✓ Message templates saved', 'Staff will see the new wording immediately.', 'ok');
+}
+
+function resetMessageTemplates() {
+  if (!window.confirm('Discard all template edits and restore the default wording?')) return;
+  saveMessageTemplates([]);
+}
+
 function settingsMarkup() {
   const defaults = quotationDefaults();
   return '<div class="card"><h3>Quotation and payment defaults</h3><p class="muted">These are starting values for new quotations and payment schedules. Staff can edit them before saving.</p><div class="field"><label>Default payment terms / T&Cs</label><textarea id="settings-payment-terms" rows="3">' + esc(defaults.paymentTerms || '') + '</textarea></div><div class="field"><label>Payment currency policy</label><textarea id="settings-payment-currency-policy" rows="2">' + esc(defaults.paymentCurrencyPolicy || '') + '</textarea></div><div class="grid3"><div class="field"><label>Default quotation validity (days)</label><input id="settings-validity-days" type="number" min="1" step="1" value="' + esc(defaults.validityDays || 7) + '"></div><div class="field"><label>Down payment due after reservation (days)</label><input id="settings-downpayment-days" type="number" min="0" step="1" value="' + esc(defaults.downPaymentDaysAfterReservation === undefined ? 3 : defaults.downPaymentDaysAfterReservation) + '"></div><div class="field"><label>Final balance due before departure (business days)</label><input id="settings-final-balance-days" type="number" min="0" step="1" value="' + esc(defaults.finalBalanceBusinessDaysBeforeDeparture === undefined ? 30 : defaults.finalBalanceBusinessDaysBeforeDeparture) + '"></div></div><div class="field"><label>Default currency</label><input id="settings-currency" maxlength="3" value="' + esc(defaults.currency || 'PHP') + '"></div><button onclick="saveSettings()">Save settings</button></div>' + (isLocalWorkspace() ? '<div class="card warn"><h3>Temporary test tool</h3><p class="muted">Fill test fields fills only empty required fields in the current workspace. It does not save, approve, verify, allocate, confirm, or pay anything.</p><button class="warning" onclick="fillSyntheticFormFields()">Fill test fields</button></div>' : '');
@@ -159,7 +185,77 @@ function settingsMarkup() {
 
 function renderSettings() {
   if (!$('settings-content')) return;
-  $('settings-content').innerHTML = settingsMarkup();
+  $('settings-content').innerHTML = settingsMarkup() + messageTemplatesCard() + '<div class="card" id="accounts-panel" style="display:none"><h3>WMIT accounts</h3><div id="accounts-panel-content"><p class="muted">Loading accounts…</p></div></div>';
+  renderAccountsPanel();
+}
+
+async function renderAccountsPanel() {
+  const panel = $('accounts-panel');
+  const content = $('accounts-panel-content');
+  if (!panel || !content) return;
+  if (!window.wmitCurrentUser) { panel.style.display = 'none'; return; }
+  try {
+    const response = await fetch('/api/admin/accounts', { headers: wmitAuthHeaders() });
+    if (response.status === 403 || response.status === 501 || response.status === 401) { panel.style.display = 'none'; return; }
+    const body = await response.json();
+    if (!body.ok) { panel.style.display = 'none'; return; }
+    panel.style.display = '';
+    const rows = body.data.map((account) => '<tr><td><strong>' + esc(account.username) + '</strong></td><td>' + esc(account.display_name) + '</td><td>' + esc(account.role) + '</td><td><span class="status ' + (account.status === 'ACTIVE' ? 'good' : '') + '">' + esc(account.status) + '</span></td><td>' +
+      '<button class="secondary compact" onclick="resetStaffPassword(\'' + esc(account.username) + '\')">Reset password</button> ' +
+      '<button class="secondary compact" onclick="toggleStaffAccount(\'' + esc(account.username) + '\', \'' + (account.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE') + '\')">' + (account.status === 'ACTIVE' ? 'Disable' : 'Enable') + '</button>' +
+      '</td></tr>').join('');
+    content.innerHTML =
+      '<p class="muted">Staff sign-in accounts for this server. Every action is audit-logged.</p>' +
+      tableWrapMarkup(rows, '<th>Username</th><th>Name</th><th>Role</th><th>Status</th><th>Actions</th>') +
+      '<h3 style="margin-top:14px">Add an account</h3>' +
+      '<div class="grid3">' +
+      '<div class="field"><label>Username</label><input id="account-username" placeholder="e.g. grace" autocomplete="off"></div>' +
+      '<div class="field"><label>Display name</label><input id="account-display-name" placeholder="e.g. Grace Reyes" autocomplete="off"></div>' +
+      '<div class="field"><label>Role</label><select id="account-role"><option value="STAFF">Staff</option><option value="ADMIN">Admin</option><option value="INTERN">Intern (read-only)</option></select></div>' +
+      '</div>' +
+      '<div class="field"><label>Temporary password (min 10 characters)</label><input id="account-password" type="text" autocomplete="off" placeholder="Give this to the staff member to change on first sign-in"></div>' +
+      '<button onclick="createStaffAccount()">Create account</button>';
+  } catch (_) {
+    panel.style.display = 'none';
+  }
+}
+
+function tableWrapMarkup(rowsHtml, headHtml) {
+  if (!rowsHtml) return '<p class="muted">No accounts yet.</p>';
+  return '<div class="table-wrap"><table><thead><tr>' + headHtml + '</tr></thead><tbody>' + rowsHtml + '</tbody></table></div>';
+}
+
+async function adminAccountAction(path, payload, successText) {
+  try {
+    const response = await fetch(path, { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, wmitAuthHeaders()), body: JSON.stringify(payload) });
+    const body = await response.json();
+    if (!body.ok) return showMessage('✕ Account action failed', body.error && body.error.message || 'The request failed.', 'error');
+    showMessage('✓ ' + successText, '', 'ok');
+    renderAccountsPanel();
+  } catch (error) {
+    showMessage('✕ Account action failed', error.message, 'error');
+  }
+}
+
+function createStaffAccount() {
+  const payload = {
+    username: $('account-username').value,
+    display_name: $('account-display-name').value,
+    role: $('account-role').value,
+    password: $('account-password').value
+  };
+  adminAccountAction('/api/admin/accounts/create', payload, 'Account ' + payload.username + ' created');
+}
+
+function resetStaffPassword(username) {
+  const password = window.prompt('New temporary password for ' + username + ' (min 10 characters):', '');
+  if (!password) return;
+  adminAccountAction('/api/admin/accounts/reset-password', { username, new_password: password }, 'Password reset for ' + username);
+}
+
+function toggleStaffAccount(username, status) {
+  if (!window.confirm(status === 'DISABLED' ? 'Disable sign-in for ' + username + '?' : 'Re-enable sign-in for ' + username + '?')) return;
+  adminAccountAction('/api/admin/accounts/status', { username, status }, username + ' is now ' + status);
 }
 
 function expoEligibilityMessage(quote) {
@@ -308,6 +404,118 @@ function openCase(inquiryId) {
   window.location.hash = 'inquiry/' + encodeURIComponent(inquiryId);
 }
 
+function openCaseAt(tab, inquiryId) {
+  if (inquiryId && latest('Inquiry', (item) => item.inquiry_id === inquiryId)) {
+    sessionStorage.setItem('wmit.operations.selectedInquiryId', inquiryId);
+    clearCaseWorkspaceSelections();
+  }
+  window.location.hash = tab || 'dashboard';
+  render();
+}
+
+window.wmitSearchResults = function (query) {
+  const q = String(query || '').toLowerCase();
+  const matches = (value) => value !== undefined && value !== null && String(value).toLowerCase().includes(q);
+  const results = [];
+  list('Client').forEach((client) => {
+    if (matches(client.display_name) || matches(client.legal_name) || matches(client.primary_phone) || matches(client.primary_email) || matches(client.client_id)) {
+      results.push({ title: client.display_name || client.legal_name || client.client_id, subtitle: [client.primary_phone, client.primary_email, client.client_id].filter(Boolean).join(' · '), kind: 'Client', run: () => openClientRecord(client.client_id) });
+    }
+  });
+  list('Inquiry').forEach((inquiry) => {
+    const requirements = inquiry.current_requirements || {};
+    const client = latest('Client', (item) => item.client_id === inquiry.client_id);
+    if (matches(inquiry.inquiry_id) || matches(requirements.destination) || matches(client && client.display_name)) {
+      results.push({ title: (client && client.display_name || 'Case') + ' · ' + (requirements.destination || 'Destination pending'), subtitle: inquiry.inquiry_id + (requirements.travel_start ? ' · from ' + requirements.travel_start : ''), kind: 'Case', run: () => openCase(inquiry.inquiry_id) });
+    }
+  });
+  list('Quotation').forEach((quote) => {
+    if (!quote.inquiry_id) return;
+    const client = latest('Client', (item) => item.client_id === quote.client_id);
+    if (matches(quote.quotation_id) || matches(quote.destination) || matches(client && client.display_name)) {
+      results.push({ title: (client && client.display_name || 'Client') + ' · ' + (quote.destination || 'Quotation'), subtitle: quote.quotation_id + ' · ' + (quote.status || 'draft'), kind: 'Quotation', run: () => openCaseAt('quotation', quote.inquiry_id) });
+    }
+  });
+  list('Booking').forEach((booking) => {
+    const inquiryId = inquiryIdForBooking(booking);
+    if (!inquiryId) return;
+    if (matches(booking.booking_id) || matches(booking.status)) {
+      results.push({ title: booking.booking_id, subtitle: [booking.status, booking.travel_start].filter(Boolean).join(' · '), kind: 'Booking', run: () => openCaseAt('booking', inquiryId) });
+    }
+  });
+  list('Supplier').forEach((supplier) => {
+    if (matches(supplier.display_name) || matches(supplier.legal_name) || matches(supplier.country) || matches(supplier.supplier_id)) {
+      results.push({ title: supplier.display_name || supplier.legal_name || supplier.supplier_id, subtitle: [supplier.country, supplier.supplier_id].filter(Boolean).join(' · '), kind: 'Supplier', run: () => openSupplierRecord(supplier.supplier_id) });
+    }
+  });
+  return results;
+};
+
+function dashboardQueuesMarkup() {
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const weekAheadIso = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+  const rows = [];
+
+  list('Quotation', (quote) => quote.status === 'DRAFT' && Number(quote.client_total) > 0).forEach((quote) => {
+    const client = latest('Client', (item) => item.client_id === quote.client_id);
+    rows.push({
+      group: 'Quotes awaiting approval',
+      label: ((client && client.display_name) || 'Client') + ' · ' + (quote.destination || 'Destination pending') + ' — ' + quote.client_total + ' ' + (quote.currency || ''),
+      action: quote.inquiry_id ? "openCaseAt('quotation', '" + quote.inquiry_id + "')" : '',
+      actionLabel: 'Review quote'
+    });
+  });
+
+  ((state && state.caseProjections) || []).forEach((projection) => {
+    const inquiryId = projection.identity && projection.identity.inquiryId;
+    const finance = projection.finance || {};
+    (finance.obligations || []).forEach((obligation) => {
+      if (obligation.state === 'SATISFIED' || !obligation.dueAt) return;
+      const due = String(obligation.dueAt).slice(0, 10);
+      if (due > weekAheadIso) return;
+      rows.push({
+        group: due < todayIso ? 'Payments overdue' : 'Payments due within 7 days',
+        label: (projection.clientName || 'Client') + ' — ' + obligation.outstanding + ' ' + (obligation.currency || '') + ' due ' + due + (obligation.purpose && obligation.purpose !== 'INSTALLMENT' ? ' (' + obligation.purpose.toLowerCase() + ')' : ''),
+        action: inquiryId ? "openCaseAt('finance', '" + inquiryId + "')" : '',
+        actionLabel: 'Open payments'
+      });
+    });
+  });
+
+  list('Task', (task) => task.state === 'OPEN' && task.due_at && String(task.due_at).slice(0, 10) < todayIso).forEach((task) => {
+    const inquiryId = task.related_type === 'Inquiry' ? task.related_id : null;
+    rows.push({
+      group: 'Overdue follow-ups',
+      label: task.title + ' — due ' + String(task.due_at).slice(0, 10),
+      action: inquiryId ? "openCaseAt('operations', '" + inquiryId + "')" : "window.location.hash='operations'",
+      actionLabel: 'Open'
+    });
+  });
+
+  const leadsWithoutMobile = list('ExpoLead', (lead) => !lead.mobile);
+  leadsWithoutMobile.slice(0, 5).forEach((lead) => {
+    rows.push({
+      group: 'Leads needing mobile',
+      label: lead.name + (lead.destination ? ' · ' + lead.destination : '') + ' — no mobile number yet',
+      action: "window.open('/expo-console.html#leads', '_blank', 'noopener')",
+      actionLabel: 'Open Events console'
+    });
+  });
+  if (leadsWithoutMobile.length > 5) {
+    rows.push({ group: 'Leads needing mobile', label: '…and ' + (leadsWithoutMobile.length - 5) + ' more', action: "window.open('/expo-console.html#leads', '_blank', 'noopener')", actionLabel: 'Open Events console' });
+  }
+
+  if (!rows.length) return '<div class="card good"><h3>All clear</h3><p class="muted">Nothing needs your attention right now. New quotes, due payments, and follow-ups appear here.</p></div>';
+  const groupOrder = ['Payments overdue', 'Quotes awaiting approval', 'Payments due within 7 days', 'Overdue follow-ups', 'Leads needing mobile'];
+  const groups = groupOrder.map((name) => ({ name: name, rows: rows.filter((row) => row.group === name) })).filter((group) => group.rows.length);
+  return '<div class="panel"><div class="panel-head"><div><h3>What needs you now</h3><p class="muted">Every row opens the case it belongs to.</p></div></div>' +
+    groups.map((group) => '<div style="margin-bottom:12px"><div class="eyebrow">' + esc(group.name) + ' (' + group.rows.length + ')</div>' +
+      group.rows.slice(0, 8).map((row) => '<div class="event" style="display:flex;justify-content:space-between;gap:10px;align-items:center"><span style="min-width:0;word-wrap:break-word">' + esc(row.label) + '</span>' +
+        (row.action ? '<button class="secondary compact" style="flex:none" onclick="' + esc(row.action) + '">' + esc(row.actionLabel) + '</button>' : '') + '</div>').join('') +
+      (group.rows.length > 8 ? '<p class="muted">…and ' + (group.rows.length - 8) + ' more</p>' : '') + '</div>').join('') +
+    '</div>';
+}
+
 function openInquiries() {
   sessionStorage.removeItem('wmit.operations.selectedInquiryId');
   clearCaseWorkspaceSelections();
@@ -334,6 +542,8 @@ function actionLabel(action) {
   return ({
     createClient: 'Client created',
     updateClient: 'Client updated',
+    createSupplier: 'Supplier created',
+    createSupplierContact: 'Supplier contact saved',
     createInquiry: 'Inquiry created',
     updateInquiry: 'Inquiry requirements updated',
     uploadTariff: 'Synthetic tariff uploaded',
@@ -423,6 +633,14 @@ function actionDetail(action, data) {
 
 function showMessage(title, detail, kind) {
   detail = humanizeError({ message: detail }, null);
+  if (window.wmitToast) {
+    window.wmitToast(kind || 'ok', title || '', detail || '');
+    const container = document.getElementById('wmit-toast-container');
+    if (container && container.lastChild && typeof container.lastChild.focus === 'function') {
+      try { container.lastChild.focus({ preventScroll: true }); } catch (_) { /* focus is best-effort; the toast is announced by aria-live */ }
+    }
+    return;
+  }
   const message = $('message');
   if (message) {
     message.className = 'message show ' + (kind || 'ok');
@@ -638,7 +856,37 @@ function renderHeader() {
   const requirements = records.inquiry.current_requirements || {};
   const projection = projectionForCase(records);
   const next = projection && projection.nextAction && projection.nextAction.label || nextAction(records);
-  target.innerHTML = '<div><div class="eyebrow">Current case · LOCAL SYNTHETIC TEST DATA</div><h2>' + esc((records.client && records.client.display_name) || 'Client') + ' · ' + esc(requirements.destination || 'Destination pending') + '</h2><div class="case-meta"><span>' + esc(requirements.travel_start || requirements.travel_month || requirements.travel_year || 'Travel timing not recorded') + (requirements.travel_end ? ' – ' + esc(requirements.travel_end) : '') + '</span><span>' + esc(requirements.pax_count || '—') + ' travelers</span><span>Inquiry ' + esc(records.inquiry.inquiry_id) + '</span></div><p class="muted">Current next action: <b>' + esc(next) + '</b></p></div><div class="card warn"><b>Next action</b><div>' + esc(next) + '</div><div class="row-actions"><button class="secondary" onclick="openInquiries()">Switch Inquiry</button></div></div>';
+  target.innerHTML = '<div><div class="eyebrow">Current case · LOCAL SYNTHETIC TEST DATA</div><h2>' + esc((records.client && records.client.display_name) || 'Client') + ' · ' + esc(requirements.destination || 'Destination pending') + '</h2><div class="case-meta"><span>' + esc(requirements.travel_start || requirements.travel_month || requirements.travel_year || 'Travel timing not recorded') + (requirements.travel_end ? ' – ' + esc(requirements.travel_end) : '') + '</span><span>' + esc(requirements.pax_count || '—') + ' travelers</span><span>Inquiry ' + esc(records.inquiry.inquiry_id) + '</span></div><p class="muted">Current next action: <b>' + esc(next) + '</b></p></div><div class="card warn"><b>Next action</b><div>' + esc(next) + '</div><div class="row-actions"><button class="secondary" onclick="openInquiries()">Switch Inquiry</button>' + (records.client && records.client.primary_phone ? '<button class="secondary" onclick="openClientMessageComposer()">Message client</button>' : '') + '</div></div>';
+}
+
+function openClientMessageComposer() {
+  const records = caseRecords();
+  const client = records.client;
+  if (!client || !client.primary_phone) return showMessage('✕ Message client — NOT EXECUTED', 'This client has no phone number recorded.', 'error');
+  const requirements = (records.inquiry && records.inquiry.current_requirements) || {};
+  const booking = records.booking;
+  const quotation = records.quotation;
+  const obligations = booking ? list('ClientObligation', (obligation) => obligation.booking_id === booking.booking_id) : [];
+  const name = String(client.display_name || '');
+  const deposit = obligations[0] ? obligations[0].amount + ' ' + (obligations.currency || obligations[0].currency || 'PHP') : '';
+  const balanceObligation = obligations.slice().sort((a, b) => String(b.due_at || '').localeCompare(String(a.due_at || '')))[0];
+  window.wmitOpenMessageComposer({
+    title: 'Message ' + (name.split(/\s+/)[0] || 'client'),
+    mobile: client.primary_phone,
+    context: {
+      name: name,
+      first_name: name.split(/\s+/)[0] || name,
+      destination: requirements.destination || (quotation && quotation.destination) || '',
+      travel_month: requirements.travel_month || '',
+      booking_id: booking ? booking.booking_id : '',
+      deposit: deposit,
+      balance: balanceObligation ? balanceObligation.amount + ' ' + (balanceObligation.currency || 'PHP') : '',
+      due_date: balanceObligation && balanceObligation.due_at ? String(balanceObligation.due_at).slice(0, 10) : '',
+      valid_until: quotation ? quotation.valid_until : '',
+      consultant: 'your Worldmaster consultant'
+    },
+    templates: window.wmitMessageTemplates(state && state.configuration && state.configuration.messageTemplates)
+  });
 }
 
 function renderDashboard() {
@@ -651,7 +899,7 @@ function renderDashboard() {
     const lifecycle = projection && projection.currentStage || 'NOT_PROJECTED';
     return '<tr><td><strong>' + esc(records.client && records.client.display_name || 'Client') + '</strong></td><td>' + esc(requirements.destination || 'Not recorded') + '</td><td>' + esc(requirements.travel_start || requirements.travel_month || requirements.travel_year || 'Not recorded') + '</td><td>' + status(lifecycle, records.booking ? 'good' : 'info') + '</td><td>' + esc(nextAction(records)) + '</td><td><button class="secondary" onclick="openCase(\'' + esc(inquiry.inquiry_id) + '\')">Open case</button></td></tr>';
   }).join('');
-  $('dashboard-content').innerHTML = '<div class="grid3"><div class="card"><h3>Open inquiries</h3><div class="money">' + inquiries.length + '</div><p class="muted">Select the client case you want to operate.</p></div><div class="card"><h3>Tariffs needing review</h3><div class="money">' + list('TariffSource', (item) => !item.trusted).length + '</div><p class="muted">Untrusted extraction cannot be used for client pricing.</p></div><div class="card"><h3>Follow-ups</h3><div class="money">' + list('Task', (item) => !['COMPLETED', 'CANCELLED'].includes(item.state)).length + '</div><p class="muted">Open tasks and deadlines.</p></div></div><div class="panel"><div class="panel-head"><div><h3>Inquiry work queue</h3><p class="muted">Nothing is silently selected as the current case.</p></div><button onclick="openInquiries()">Create or view Inquiries</button></div>' + (rows ? '<div class="table-wrap"><table><thead><tr><th>Client</th><th>Destination</th><th>Travel start</th><th>Inquiry state</th><th>Next action</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty">No Inquiry cases yet. Open Inquiries to create the first case.</div>') + '</div>' + (selected.inquiry ? '<div class="card good"><h3>Selected case</h3><p>' + esc(selected.client && selected.client.display_name || 'Client') + ' · ' + esc(selected.inquiry.current_requirements && selected.inquiry.current_requirements.destination || 'Destination not recorded') + '</p><button class="secondary" onclick="window.location.hash=\'inquiry\'">Open selected Inquiry</button></div>' : '<div class="card warn"><h3>No case selected</h3><p>Select a case before opening case-specific quotation, Booking, or finance workspaces.</p></div>');
+  $('dashboard-content').innerHTML = dashboardQueuesMarkup() + '<div class="grid3"><div class="card"><h3>Open inquiries</h3><div class="money">' + inquiries.length + '</div><p class="muted">Select the client case you want to operate.</p></div><div class="card"><h3>Tariffs needing review</h3><div class="money">' + list('TariffSource', (item) => !item.trusted).length + '</div><p class="muted">Untrusted extraction cannot be used for client pricing.</p></div><div class="card"><h3>Follow-ups</h3><div class="money">' + list('Task', (item) => !['COMPLETED', 'CANCELLED'].includes(item.state)).length + '</div><p class="muted">Open tasks and deadlines.</p></div></div><div class="panel"><div class="panel-head"><div><h3>Inquiry work queue</h3><p class="muted">Nothing is silently selected as the current case.</p></div><button onclick="openInquiries()">Create or view Inquiries</button></div>' + (rows ? '<div class="table-wrap"><table><thead><tr><th>Client</th><th>Destination</th><th>Travel start</th><th>Inquiry state</th><th>Next action</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty">No Inquiry cases yet. Open Inquiries to create the first case.</div>') + '</div>' + (selected.inquiry ? '<div class="card good"><h3>Selected case</h3><p>' + esc(selected.client && selected.client.display_name || 'Client') + ' · ' + esc(selected.inquiry.current_requirements && selected.inquiry.current_requirements.destination || 'Destination not recorded') + '</p><button class="secondary" onclick="window.location.hash=\'inquiry\'">Open selected Inquiry</button></div>' : '<div class="card warn"><h3>No case selected</h3><p>Select a case before opening case-specific quotation, Booking, or finance workspaces.</p></div>');
 }
 
 function inquiryForBooking(booking) {
@@ -1741,7 +1989,7 @@ async function previewQuotation() {
   const records = caseRecords();
   if (!records.quotation) return failLocal('Create a quotation first.');
   try {
-    const response = await fetch('/api/phase1/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'getClientQuotationPreview', input: { quotation_id: records.quotation.quotation_id }, actor: 'LOCAL_STAFF' }) });
+    const response = await wmitGuard401(await fetch('/api/phase1/action', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, wmitAuthHeaders()), body: JSON.stringify({ action: 'getClientQuotationPreview', input: { quotation_id: records.quotation.quotation_id }, actor: 'LOCAL_STAFF' }) }));
     const result = await response.json();
     if (!result.ok) return failLocal(result.error && result.error.message || 'The client preview could not be generated.');
     quotationPreview = result.data;
@@ -2518,6 +2766,57 @@ function renderSubAgents() {
   $('subagents-content').innerHTML = form + '<div class="card"><h3>Sub-agent directory</h3>' + (rows ? '<div class="table-wrap"><table><thead><tr><th>Partner</th><th>Roles</th><th>Email</th><th>Phone</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty">No sub-agents recorded yet.</div>') + '</div>';
 }
 
+const SUPPLIER_CAPABILITY_CHOICES = ['DMC', 'Tariff Supplier', 'Transport Provider', 'Hotel Partner', 'Visa Assistance', 'Insurance'];
+
+function supplierAddFormMarkup(supplierCount) {
+  const capabilityChips = SUPPLIER_CAPABILITY_CHOICES.map((capability) =>
+    '<label style="display:inline-flex;align-items:center;gap:7px;margin:2px 16px 2px 0;font-size:13px;font-weight:500;cursor:pointer"><input type="checkbox" class="supplier-cap-checkbox" value="' + esc(capability) + '">' + esc(capability) + '</label>'
+  ).join('');
+  return '<div class="panel">' +
+    '<div class="panel-head"><div><h3>Add supplier</h3><p class="muted">' + (supplierCount ? 'Every tariff, supplier reservation, and payable links to a Supplier record.' : 'No suppliers yet — create the first one. Every tariff, supplier reservation, and payable links to a Supplier record.') + '</p></div></div>' +
+    '<div class="grid2">' +
+    '<div class="field"><label>Supplier name *</label><input id="supplier-new-name" maxlength="120" placeholder="e.g. Sunshine Tours" autocomplete="off"></div>' +
+    '<div class="field"><label>Legal name (optional)</label><input id="supplier-new-legal" maxlength="160" placeholder="e.g. Sunshine Tours Co., Ltd." autocomplete="off"></div>' +
+    '<div class="field"><label>Country (optional)</label><input id="supplier-new-country" maxlength="60" placeholder="e.g. Thailand" autocomplete="off"></div>' +
+    '<div class="field"><label>Primary email (optional)</label><input id="supplier-new-email" type="email" maxlength="120" placeholder="ops@supplier.com" autocomplete="off"></div>' +
+    '</div>' +
+    '<div class="field"><label>Capabilities</label><div>' + capabilityChips + '</div></div>' +
+    '<details class="secondary-details"><summary>Terms and procedures (optional)</summary><div class="field"><label>Payment terms</label><textarea id="supplier-new-payment-terms" rows="2" placeholder="e.g. 50% on confirmation, balance 30 days before departure"></textarea></div><div class="field"><label>Booking procedure</label><textarea id="supplier-new-booking-procedure" rows="2" placeholder="e.g. email reservations@… with the voucher and pax names"></textarea></div><div class="field"><label>Cancellation terms</label><textarea id="supplier-new-cancellation-terms" rows="2"></textarea></div><div class="field"><label>Operational notes</label><textarea id="supplier-new-notes" rows="2"></textarea></div></details>' +
+    '<details class="secondary-details"><summary>Primary contact (optional)</summary><div class="grid2"><div class="field"><label>Contact name</label><input id="supplier-new-contact-name" maxlength="120" autocomplete="off"></div><div class="field"><label>Contact role / purpose</label><input id="supplier-new-contact-role" maxlength="120" placeholder="e.g. Reservations" autocomplete="off"></div><div class="field"><label>Contact email</label><input id="supplier-new-contact-email" type="email" maxlength="120" autocomplete="off"></div><div class="field"><label>Contact phone</label><input id="supplier-new-contact-phone" maxlength="40" autocomplete="off"></div><div class="field"><label>WhatsApp (optional)</label><input id="supplier-new-contact-whatsapp" maxlength="40" autocomplete="off"></div></div></details>' +
+    '<button onclick="createSupplierFromForm()">Add supplier</button>' +
+    '</div>';
+}
+
+async function createSupplierFromForm() {
+  const displayName = $('supplier-new-name').value.trim();
+  if (!displayName) { focusRequiredField('supplier-new-name'); return showMessage('✕ Add supplier — NOT EXECUTED', 'Enter the supplier name.', 'error'); }
+  // Collect every field up front: the first api() call re-renders the tab
+  // and would otherwise blank the form before the contact section is read.
+  const payload = { display_name: displayName };
+  const optionalText = [['supplier-new-legal', 'legal_name'], ['supplier-new-country', 'country'], ['supplier-new-email', 'primary_email'], ['supplier-new-payment-terms', 'payment_terms'], ['supplier-new-booking-procedure', 'booking_procedure'], ['supplier-new-cancellation-terms', 'cancellation_terms'], ['supplier-new-notes', 'notes']];
+  optionalText.forEach(([id, key]) => { const value = $(id).value.trim(); if (value) payload[key] = value; });
+  const capabilities = Array.from(document.querySelectorAll('.supplier-cap-checkbox:checked')).map((checkbox) => checkbox.value);
+  if (capabilities.length) payload.capabilities = capabilities;
+  const contactName = $('supplier-new-contact-name').value.trim();
+  const contactEmail = $('supplier-new-contact-email').value.trim();
+  const contactPhone = $('supplier-new-contact-phone').value.trim();
+  const contactWhatsapp = $('supplier-new-contact-whatsapp').value.trim();
+  const contactRole = $('supplier-new-contact-role').value.trim();
+  const supplier = await api('createSupplier', payload);
+  if (!supplier) return;
+  if (contactName || contactEmail || contactPhone || contactWhatsapp) {
+    const contact = { supplier_id: supplier.supplier_id };
+    if (contactName) contact.name = contactName;
+    if (contactRole) contact.contact_type = contactRole;
+    if (contactEmail) contact.email = contactEmail;
+    if (contactPhone) contact.phone = contactPhone;
+    if (contactWhatsapp) contact.whatsapp = contactWhatsapp;
+    const saved = await api('createSupplierContact', contact);
+    if (!saved) showMessage('Supplier created', 'The contact could not be saved — reopen the supplier to add it.', 'warn');
+  }
+  openSupplierRecord(supplier.supplier_id);
+}
+
 function renderSuppliers() {
   const suppliers = list('Supplier');
   const selectedId = selectedWorkspaceId('supplier');
@@ -2540,7 +2839,7 @@ function renderSuppliers() {
     const contact = contacts[0];
     return '<tr><td><strong>' + esc(supplier.display_name || supplier.legal_name || supplier.supplier_id) + '</strong></td><td>' + esc(supplier.status || 'Not recorded') + '</td><td>' + esc(contact && (contact.email || contact.phone || contact.whatsapp) || 'Not recorded') + '</td><td>' + esc(tariffs.length + ' tariffs · ' + bookings.length + ' bookings') + '</td><td><button class="secondary" onclick="openSupplierRecord(\'' + esc(supplier.supplier_id) + '\')">Open supplier</button></td></tr>';
   }).join('');
-  $('suppliers-content').innerHTML = '<div class="panel"><div class="panel-head"><div><h3>Supplier directory</h3><p class="muted">Select a supplier to view its operational knowledge hub.</p></div></div>' + (rows ? '<div class="table-wrap"><table><thead><tr><th>Supplier</th><th>Status</th><th>Primary contact</th><th>Operational records</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty">No Supplier records are currently available.</div>') + '</div>';
+  $('suppliers-content').innerHTML = supplierAddFormMarkup(suppliers.length) + '<div class="panel"><div class="panel-head"><div><h3>Supplier directory</h3><p class="muted">Select a supplier to view its operational knowledge hub.</p></div></div>' + (rows ? '<div class="table-wrap"><table><thead><tr><th>Supplier</th><th>Status</th><th>Primary contact</th><th>Operational records</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty">No Supplier records are currently available.</div>') + '</div>';
   return;
   const cards = suppliers.map((supplier) => {
     const contacts = list('SupplierContact', (item) => item.supplier_id === supplier.supplier_id);
@@ -2909,8 +3208,12 @@ async function updateAuthIndicator() {
     const response = await fetch('/api/auth/me', { headers: token ? { Authorization: 'Bearer ' + token } : {} });
     const body = await response.json();
     if (body.ok && body.data && body.data.username) {
-      target.innerHTML = '<span class="status">' + esc(body.data.username) + ' · ' + esc(body.data.role) + '</span><button class="secondary" onclick="signOut()">Sign out</button>';
+      window.wmitCurrentUser = body.data;
+      target.innerHTML = '<span class="status">' + esc(body.data.username) + ' · ' + esc(body.data.role) + '</span><button class="secondary" onclick="wmitOpenChangePassword()">Change password</button><button class="secondary" onclick="signOut()">Sign out</button>';
+      renderAccountsPanel();
+      if (currentTab() === 'settings') renderSettings();
     } else {
+      window.wmitCurrentUser = null;
       target.innerHTML = '<span class="status">Not signed in</span><button class="secondary" onclick="window.location.href=\'login.html\'">Sign in</button>';
     }
   } catch (_) {

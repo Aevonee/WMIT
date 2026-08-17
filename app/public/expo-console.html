@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Events — WMIT Workspace</title>
+  <link rel="stylesheet" href="/tokens.css">
   <link rel="stylesheet" href="/events-base.css">
   <style>
     .event-bar{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;background:#eef5fb;border:1px solid #c8dceb;border-radius:7px;padding:10px 12px;margin-bottom:14px;font-size:13px}
@@ -11,6 +12,8 @@
     .event-bar select{padding:8px;border:1px solid #c8d3de;border-radius:6px;font:inherit;background:#fff;min-width:280px}
     .event-bar .kiosk-link{flex:1;min-width:240px;font-size:12px;color:#56677a}
     .event-bar .kiosk-link a{color:#245c89;font-weight:700;word-break:break-all}
+    .event-bar>div{min-width:0}
+    .event-bar select{max-width:100%}
     .chat-actions a{display:inline-block;margin-right:6px;text-decoration:none;font-weight:700;font-size:12px;padding:5px 9px;border-radius:6px}
     .chat-whatsapp{background:#e7f6ec;color:#116936}
     .chat-viber{background:#ece7f6;color:#553099}
@@ -48,7 +51,9 @@
         <div class="header-muted">Expo lead capture, follow-ups, quotations, and results</div>
       </div>
       <div class="actions">
+        <input id="wmit-global-search" type="search" placeholder="Search leads, quotes, packages…" autocomplete="off" aria-label="Search leads, quotes, packages" style="background:#fff;color:#172334;border:1px solid #c8d2df;border-radius:6px;padding:8px 10px;font:inherit;font-size:13px;min-width:200px;">
         <button class="secondary" onclick="window.open(kioskUrlForSelected ? kioskUrlForSelected() : '/expo.html', '_blank', 'noopener')">Open sign-up form</button>
+        <button class="secondary" id="nav-change-password">Change password</button>
         <button class="secondary" id="nav-logout">Sign out</button>
       </div>
     </div>
@@ -60,7 +65,6 @@
       <a data-tab="quotes" href="#quotes">Quotes</a>
       <a data-tab="expos" href="#expos">Events</a>
       <a href="/operations.html">Operations</a>
-      <a href="/phase1.html">Phase 1</a>
     </nav>
   </header>
 
@@ -91,7 +95,7 @@
     </section>
 
     <section id="tab-leads" class="workspace-view panel" style="display:none">
-      <div class="panel-head"><div><div class="eyebrow">Badge import</div><h2>Leads &amp; import</h2><p class="muted">One lead per line — name only, or name, mobile, destination, travel month (YYYY-MM), email.</p></div><button id="refresh-leads">Refresh</button></div>
+      <div class="panel-head"><div><div class="eyebrow">Badge import</div><h2>Leads &amp; import</h2><p class="muted">One lead per line — name only, or name, mobile, destination, travel month (YYYY-MM), email.</p></div><div style="display:flex;gap:8px;align-items:center"><input id="lead-search" type="search" placeholder="Filter leads…" autocomplete="off" aria-label="Filter leads" style="padding:8px 10px;border:1px solid #c8d3de;border-radius:6px;font:inherit;background:#fff;"><button id="refresh-leads">Refresh</button></div></div>
       <details class="compact-form">
         <summary>Import scanned badges</summary>
         <div class="form-grid" style="margin-top:10px">
@@ -154,5 +158,9 @@
   </main>
 
   <script src="/expo-console.js"></script>
+  <script src="/wmit-toasts.js"></script>
+  <script src="/wmit-templates.js"></script>
+  <script src="/wmit-search.js"></script>
+  <script src="/auth-ui.js"></script>
 </body>
 </html>
