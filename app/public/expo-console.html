@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Events — WMIT Workspace</title>
+  <link rel="stylesheet" href="/events-base.css">
+  <style>
+    .event-bar{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;background:#eef5fb;border:1px solid #c8dceb;border-radius:7px;padding:10px 12px;margin-bottom:14px;font-size:13px}
+    .event-bar label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#56677a;margin-bottom:3px}
+    .event-bar select{padding:8px;border:1px solid #c8d3de;border-radius:6px;font:inherit;background:#fff;min-width:280px}
+    .event-bar .kiosk-link{flex:1;min-width:240px;font-size:12px;color:#56677a}
+    .event-bar .kiosk-link a{color:#245c89;font-weight:700;word-break:break-all}
+    .chat-actions a{display:inline-block;margin-right:6px;text-decoration:none;font-weight:700;font-size:12px;padding:5px 9px;border-radius:6px}
+    .chat-whatsapp{background:#e7f6ec;color:#116936}
+    .chat-viber{background:#ece7f6;color:#553099}
+    .overdue{background:#fff5f0}
+    .pill-NEW{background:#e9f2f9}.pill-CONTACTED{background:#fff6df;color:#70530b}.pill-QUOTED{background:#e8f0fb;color:#0b4775}
+    .pill-ACCEPTED{background:#eaf7f0;color:#176237}.pill-BOOKED{background:#176b48;color:#fff}
+    .pill-LOST,.pill-UNREACHABLE,.pill-DECLINED{background:#f6e8e8;color:#8d2c2c}
+    .pill-DRAFT{background:#f1f3f5;color:#5b6673}.pill-SENT{background:#e8f0fb;color:#0b4775}
+    .pill-ACTIVE{background:#eaf7f0;color:#176237}.pill-ENDED{background:#f1f3f5;color:#5b6673}
+    .needs-mobile{color:#8c5b00;font-weight:700;font-size:11px}
+    .ended-note{color:#8c5b00;font-size:12px;font-weight:700}
+    .option-pick{display:flex;gap:10px;align-items:flex-start;border:1px solid #d9e2ec;border-radius:7px;padding:10px;margin-top:8px;background:#fbfcfe}
+    .option-pick input[type="checkbox"]{width:18px;height:18px;margin-top:2px}
+    .mini-input{max-width:130px}
+    .form-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+    .form-grid label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#56677a;margin-bottom:3px}
+    .form-grid input,.form-grid select,.form-grid textarea{width:100%;padding:8px;border:1px solid #c8d3de;border-radius:6px;font:inherit;background:#fff}
+    .card{border:1px solid #d9e2ec;border-radius:9px;padding:14px;background:#fff;margin-top:14px}
+    details.compact-form{margin:0 0 14px;padding:10px 12px;border:1px solid #d9e2ec;border-radius:7px;background:#fbfcfe}
+    details.compact-form summary{cursor:pointer;font-weight:700;color:#245c89}
+    .metric-row{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
+    .metric{background:#fff;border:1px solid #d9e2ec;border-radius:8px;padding:12px}
+    .metric small{color:#68788a;display:block;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+    .metric strong{display:block;font-size:24px;margin-top:4px}
+    @media(max-width:900px){.form-grid,.metric-row{grid-template-columns:1fr 1fr}.event-bar select{min-width:200px}}
+    @media(max-width:620px){.form-grid,.metric-row{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-row">
+      <div>
+        <div class="eyebrow">WMIT workspace</div>
+        <h1>Events</h1>
+        <div class="header-muted">Expo lead capture, follow-ups, quotations, and results</div>
+      </div>
+      <div class="actions">
+        <button class="secondary" onclick="window.open(kioskUrlForSelected ? kioskUrlForSelected() : '/expo.html', '_blank', 'noopener')">Open sign-up form</button>
+        <button class="secondary" id="nav-logout">Sign out</button>
+      </div>
+    </div>
+    <nav class="nav" aria-label="Events workspaces">
+      <a data-tab="dashboard" href="#dashboard" class="active">Dashboard</a>
+      <a data-tab="followups" href="#followups">Follow-ups</a>
+      <a data-tab="leads" href="#leads">Leads &amp; import</a>
+      <a data-tab="packages" href="#packages">Packages</a>
+      <a data-tab="quotes" href="#quotes">Quotes</a>
+      <a data-tab="expos" href="#expos">Events</a>
+      <a href="/operations.html">Operations</a>
+      <a href="/phase1.html">Phase 1</a>
+    </nav>
+  </header>
+
+  <main>
+    <div id="message" class="message"></div>
+
+    <div class="event-bar">
+      <div>
+        <label for="expo-select">Event</label>
+        <select id="expo-select"></select>
+      </div>
+      <button class="secondary" id="expo-kiosk-copy" title="Copy the client-facing sign-up form link for this event">Copy form link</button>
+      <div class="kiosk-link" id="expo-kiosk-url"></div>
+    </div>
+
+    <section id="tab-dashboard" class="workspace-view panel">
+      <div class="panel-head"><div><div class="eyebrow">Results</div><h2>Dashboard</h2><p class="muted">Leads → quotes → acceptances → bookings for the selected event.</p></div><button id="refresh-dashboard">Refresh</button></div>
+      <div class="metric-row" id="funnel-metrics"></div>
+      <div class="case-header" style="margin-top:14px">
+        <div style="flex:1"><h3>By day</h3><div id="by-day-wrap"></div></div>
+        <div style="flex:1"><h3>By package</h3><div id="by-package-wrap"></div></div>
+      </div>
+    </section>
+
+    <section id="tab-followups" class="workspace-view panel" style="display:none">
+      <div class="panel-head"><div><div class="eyebrow">Day 1 · 3 · 7</div><h2>Follow-ups</h2><p class="muted" id="followup-summary"></p></div><button id="refresh-followups">Refresh</button></div>
+      <div id="followup-content"></div>
+    </section>
+
+    <section id="tab-leads" class="workspace-view panel" style="display:none">
+      <div class="panel-head"><div><div class="eyebrow">Badge import</div><h2>Leads &amp; import</h2><p class="muted">One lead per line — name only, or name, mobile, destination, travel month (YYYY-MM), email.</p></div><button id="refresh-leads">Refresh</button></div>
+      <details class="compact-form">
+        <summary>Import scanned badges</summary>
+        <div class="form-grid" style="margin-top:10px">
+          <div style="grid-column:1/-1"><label for="import-text">Paste lines</label><textarea id="import-text" rows="5" placeholder="Juan Dela Cruz,09181234567,Bangkok,2026-11&#10;Maria Santos&#10;Ana Reyes,09171234567,Seoul,2026-12,ana@example.test"></textarea></div>
+          <div><label for="import-destination">Default destination (name-only lines)</label><input id="import-destination" placeholder="e.g. Bangkok"></div>
+          <div><label for="import-month">Default travel month</label><input id="import-month" placeholder="2026-11"></div>
+          <div style="align-self:end"><button id="import-run">Import</button></div>
+        </div>
+        <div id="import-result" class="muted" style="margin-top:8px"></div>
+      </details>
+      <div id="lead-content"></div>
+    </section>
+
+    <section id="tab-packages" class="workspace-view panel" style="display:none">
+      <div class="panel-head"><div><div class="eyebrow">Quote on the floor in minutes</div><h2>Packages</h2><p class="muted">Manual pricing — update prices as suppliers confirm.</p></div><button id="refresh-packages">Refresh</button></div>
+      <details class="compact-form">
+        <summary>Add a package</summary>
+        <div class="form-grid" style="margin-top:10px">
+          <div><label for="pkg-destination">Destination</label><input id="pkg-destination" placeholder="Seoul"></div>
+          <div><label for="pkg-name">Package name</label><input id="pkg-name" placeholder="Seoul Discovery 5D4N"></div>
+          <div><label for="pkg-days">Duration (days)</label><input id="pkg-days" type="number" min="1" max="60" value="5"></div>
+          <div><label for="pkg-price">Price per person (PHP)</label><input id="pkg-price" placeholder="32900.00"></div>
+          <div><label for="pkg-inclusions">Inclusions (one per line)</label><textarea id="pkg-inclusions" rows="3" placeholder="Round-trip airfare&#10;Hotel with breakfast"></textarea></div>
+          <div><label for="pkg-exclusions">Exclusions (one per line)</label><textarea id="pkg-exclusions" rows="3" placeholder="Visa fee&#10;Travel tax"></textarea></div>
+        </div>
+        <button id="package-create" style="margin-top:10px">Save package</button>
+      </details>
+      <div id="package-content"></div>
+    </section>
+
+    <section id="tab-quotes" class="workspace-view panel" style="display:none">
+      <div class="panel-head"><div><div class="eyebrow">Multi-option quotation</div><h2>Quotes</h2><p class="muted">Pick 2–3 packages per quote; email the client link or open WhatsApp with it prefilled.</p></div><button id="refresh-quotes">Refresh</button></div>
+      <details class="compact-form">
+        <summary>Create a quote</summary>
+        <div class="form-grid" style="margin-top:10px">
+          <div><label for="quote-lead">Lead</label><select id="quote-lead"></select></div>
+          <div><label for="quote-valid">Valid until</label><input id="quote-valid" type="date"></div>
+        </div>
+        <div style="margin-top:10px"><label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#56677a;margin-bottom:6px">Pick 2-3 packages (edit price to override)</label><div id="quote-option-picks"></div></div>
+        <button id="quote-create" style="margin-top:10px">Create draft quote</button>
+      </details>
+      <div id="quote-content"></div>
+      <div id="quote-detail" class="card hidden"></div>
+    </section>
+
+    <section id="tab-expos" class="workspace-view panel" style="display:none">
+      <div class="panel-head"><div><div class="eyebrow">Future &amp; past events</div><h2>Events</h2><p class="muted">Add the next event before the current one ends. Ended events stay fully viewable — pick one above to browse its history.</p></div><button id="refresh-expos">Refresh</button></div>
+      <details class="compact-form">
+        <summary>＋ Add event</summary>
+        <div class="form-grid" style="margin-top:10px">
+          <div><label for="expo-name">Name</label><input id="expo-name" placeholder="e.g. PTA Travel Fair 2027"></div>
+          <div><label for="expo-start">Start date</label><input id="expo-start" type="date"></div>
+          <div><label for="expo-end">End date</label><input id="expo-end" type="date"></div>
+        </div>
+        <button id="expo-create" style="margin-top:10px">Create event</button>
+        <div id="expo-create-result" class="muted" style="margin-top:8px"></div>
+      </details>
+      <div id="expo-content"></div>
+    </section>
+  </main>
+
+  <script src="/expo-console.js"></script>
+</body>
+</html>

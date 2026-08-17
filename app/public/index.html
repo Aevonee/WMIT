@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WMIT Operations</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div><span class="eyebrow">World Master International Travel</span><h1>WMIT Operations</h1><p><a href="/operations.html" style="color:#d5e3f0">Open Phase 1 Operations Workspace</a> · <a href="/phase1.html" style="color:#d5e3f0">Developer/Test Console</a></p></div>
+    <div class="topbar-actions"><nav class="quick-nav" aria-label="Main sections"><a href="#sales-panel">Sales</a><a href="#commercial-panel">Bookings</a><a href="#operations-panel">Operations</a><a href="#finance-panel">Finance</a><a href="#attendance-panel">Attendance</a></nav><button id="refresh" class="secondary">Refresh</button></div>
+  </header>
+  <main>
+    <div id="message" class="message hidden"></div>
+    <section id="dashboard" class="dashboard-grid"></section>
+    <section id="sales-panel" class="panel">
+      <div class="section-heading"><div><span class="eyebrow">Sales</span><h2>Lead → quotation</h2></div></div>
+      <div class="two-columns">
+        <form id="lead-form" class="card form-card">
+          <h3>Create lead</h3>
+          <label>Contact name<input name="contact_name" required value="New Demo Contact"></label>
+          <label>Client<select name="client_id" id="lead-client" required></select></label>
+          <label>Contact<select name="contact_id" id="lead-contact"></select></label>
+          <div class="form-row"><label>Source<select name="source"><option>Facebook</option><option>WhatsApp</option><option>Other</option><option>B2B</option></select></label><label>Lead type<select name="lead_type"><option value="B2C">B2C</option><option value="B2B">B2B</option></select></label></div>
+          <label>Destination<input name="destination" required value="Demo Destination"></label>
+          <div class="form-row"><label>Travel start<input type="date" name="travel_start" required value="2027-01-10"></label><label>Travel end<input type="date" name="travel_end" value="2027-01-14"></label></div>
+          <label>Pax<input type="number" name="pax_count" min="1" value="2"></label>
+          <button>Create lead</button>
+        </form>
+        <form id="quotation-form" class="card form-card">
+          <h3>Create quotation from lead</h3>
+          <label>Lead<select name="lead_id" id="quotation-lead" required></select></label>
+          <div class="form-row"><label>Currency<select name="currency"><option>PHP</option><option>USD</option><option>EUR</option></select></label><label>Destination<input name="destination" placeholder="Defaults from lead"></label><label>Pax<input type="number" name="pax_count" min="1" placeholder="Defaults from lead"></label></div>
+          <div class="form-row"><label>Travel start<input type="date" name="travel_start"></label><label>Travel end<input type="date" name="travel_end"></label><label>Validity<input type="date" name="valid_until" value="2026-08-19"></label></div>
+          <label>Inclusions<textarea name="inclusions">Accommodation and transfers</textarea></label>
+          <label>Exclusions<textarea name="exclusions">Personal expenses</textarea></label>
+          <label>Payment terms<textarea name="payment_terms">Deposit and balance before travel</textarea></label>
+          <label>Payment currency policy<textarea name="payment_currency_policy">Payment is due in the quotation currency. Installments are subject to the agreed payment terms.</textarea></label>
+          <button>Create quotation</button>
+        </form>
+      </div>
+      <div id="leads-table" class="table-wrap"></div>
+      <div id="lead-detail" class="detail-empty">Select a lead to inspect it.</div>
+      <form id="lead-update-form" class="card form-card compact-form">
+        <h3>Update lead status or notes</h3>
+        <div class="form-row"><label>Lead<select name="lead_id" id="update-lead" required></select></label><label>Status<select name="status"><option>New</option><option>Contacted</option><option>Qualified</option><option>Quoted</option><option>Won</option><option>Lost</option><option>Closed</option></select></label><label>Notes<input name="notes" value="Updated from Operations MVP"></label></div>
+        <button>Update lead</button>
+      </form>
+    </section>
+    <section id="commercial-panel" class="panel">
+      <div class="section-heading"><div><span class="eyebrow">Commercial flow</span><h2>Quotations and bookings</h2></div></div>
+      <div class="two-columns">
+        <form id="quotation-item-form" class="card form-card">
+          <h3>Add quotation item</h3>
+          <label>Quotation<select name="quotation_id" id="quotation-item-quotation" required></select></label>
+          <label>Service type<select name="service_type"><option>Hotel</option><option>Flight</option><option>Transfer</option><option>Tour</option><option>Land Arrangement</option><option>Other</option></select></label>
+          <label>Description<input name="description" required value="Demo service"></label>
+          <div class="form-row"><label>Quantity<input type="number" name="quantity" min="1" value="1"></label><label>Unit cost<input type="number" name="unit_cost" min="0" step="0.01" value="1000"></label><label>Unit price<input type="number" name="unit_selling_price" min="0" step="0.01" value="1250"></label></div>
+          <label>Supplier<select name="supplier_id" id="quotation-item-supplier"></select></label>
+          <label>Currency<select name="currency"><option>PHP</option><option>USD</option><option>EUR</option></select></label>
+          <button>Add quotation item</button>
+        </form>
+        <form id="booking-form" class="card form-card">
+          <h3>Create booking from quotation</h3>
+          <label>Quotation<select name="quotation_id" id="booking-quotation" required></select></label>
+          <button>Create booking and booking items</button>
+        </form>
+      </div>
+      <div id="quotations-table" class="table-wrap"></div>
+      <div id="bookings-table" class="table-wrap"></div>
+      <div id="quotation-editor" class="editor-shell">
+        <div class="section-heading"><div><span class="eyebrow">Manual quotation editor</span><h2>Edit and preview a WMIT quotation</h2><p class="section-help">Enter the client-facing details and internal supplier costs. Supplier costs never appear in the client preview.</p></div></div>
+        <div class="editor-toolbar"><label>Quotation<select id="quotation-editor-select"></select></label><button type="button" id="quotation-preview-button">Preview</button><button type="button" id="quotation-print-button" disabled>Print preview</button></div>
+        <div id="quotation-editor-empty" class="detail-empty">Select or create a quotation to begin editing.</div>
+        <form id="quotation-details-form" class="card form-card hidden">
+          <input type="hidden" name="quotation_id" id="editor-quotation-id">
+          <div class="form-row"><label>Client<select name="client_id" id="editor-client" required></select></label><label>Quotation date<input type="date" name="quotation_date" id="editor-quotation-date" required></label><label>Valid until<input type="date" name="valid_until" id="editor-valid-until"></label></div>
+          <div class="form-row"><label>Destination<input name="destination" id="editor-destination" required></label><label>Travel start<input type="date" name="travel_start" id="editor-travel-start"></label><label>Travel end<input type="date" name="travel_end" id="editor-travel-end"></label></div>
+          <div class="form-row"><label>Pax<input type="number" min="1" name="pax_count" id="editor-pax"></label><label>Currency<select name="currency" id="editor-currency"><option>PHP</option><option>USD</option><option>EUR</option></select></label><label>Status<select name="status" id="editor-status"><option>Draft</option><option>Approved</option><option>Sent</option><option>Accepted</option><option>Rejected</option><option>Expired</option></select></label></div>
+          <div class="form-row"><label>Discount<input type="number" min="0" step="0.01" name="discount_total" id="editor-discount"></label><label>Fees<input type="number" min="0" step="0.01" name="fees_total" id="editor-fees"></label><label>Tax<input type="number" min="0" step="0.01" name="tax_total" id="editor-tax"></label></div>
+          <div class="form-row"><label>Inclusions<textarea name="inclusions" id="editor-inclusions"></textarea></label><label>Exclusions<textarea name="exclusions" id="editor-exclusions"></textarea></label><label>Payment terms<textarea name="payment_terms" id="editor-payment-terms"></textarea></label></div>
+          <div class="form-row"><label>Payment currency policy<textarea name="payment_currency_policy" id="editor-payment-currency-policy"></textarea><span class="field-help">For USD quotations, clients may pay USD or PHP using the BDO Forex Selling Rate + 1.0 on the payment date. Enter the agreed wording here.</span></label><div class="itinerary-editor"><label>Day-by-day itinerary</label><div id="itinerary-days"></div><button type="button" id="add-itinerary-day" class="secondary">Add day</button><input type="hidden" name="itinerary" id="editor-itinerary"><span class="field-help">Each day has separate activities, meals, and overnight details for a clearer client quotation.</span></div></div>
+          <label>Internal notes<textarea name="notes" id="editor-notes"></textarea></label>
+          <button>Save quotation</button>
+        </form>
+        <div id="quotation-items-editor" class="table-wrap hidden"></div>
+        <form id="quotation-editor-item-form" class="card form-card hidden">
+          <h3>Add service to quotation</h3>
+          <input type="hidden" name="quotation_id" id="editor-item-quotation-id">
+          <div class="form-row"><label>Service type<select name="service_type"><option>Hotel</option><option>Flight</option><option>Transfer</option><option>Tour</option><option>Land Arrangement</option><option>Ticket</option><option>Other</option></select></label><label>Description<input name="description" required></label><label>Supplier<select name="supplier_id" id="editor-item-supplier"></select></label></div>
+          <div class="form-row"><label>Quantity<input type="number" min="1" step="1" name="quantity" value="1" required></label><label>Internal cost<input type="number" min="0" step="0.01" name="unit_cost" value="0" required></label><label>Selling price<input type="number" min="0" step="0.01" name="unit_selling_price" value="0" required></label></div>
+          <div class="form-row"><label>Currency<select name="currency"><option>PHP</option><option>USD</option><option>EUR</option></select></label><label>Service start<input type="date" name="service_start"></label><label>Service end<input type="date" name="service_end"></label></div>
+          <button>Add quotation item</button>
+        </form>
+        <div id="quotation-preview" class="quotation-preview hidden"></div>
+      </div>
+    </section>
+    <section id="operations-panel" class="panel">
+      <div class="section-heading"><div><span class="eyebrow">Operations</span><h2>Supplier bookings</h2><p class="section-help">Create the supplier-side transaction from an unassigned booking item. Supplier payment records are shown in Finance.</p></div></div>
+      <div class="two-columns">
+        <form id="supplier-booking-form" class="card form-card">
+          <h3>Create supplier booking</h3>
+          <label>Booking item<select name="booking_item_id" id="supplier-booking-item" required></select></label>
+          <label>Supplier<select name="supplier_id" id="supplier-booking-supplier" required></select></label>
+          <label>Reference<input name="supplier_reference" value="NEW-SUPPLIER-001"></label>
+          <label>Supplier cost<input type="number" name="supplier_cost" min="0" step="0.01" value="1000"></label>
+          <label>Final payment due<input type="date" name="final_payment_due_date" value="2026-11-30"></label>
+          <button>Create supplier booking</button>
+        </form>
+        <div class="card info-card"><h3>How this connects</h3><p>A booking can have multiple supplier bookings. Each supplier booking can have its own reference, cost, deadlines, confirmation, and supplier payments.</p><p class="muted">If every booking item is already linked, create another booking first or refresh the page.</p></div>
+      </div>
+      <div id="supplier-bookings-table" class="table-wrap"></div>
+    </section>
+    <section id="finance-panel" class="panel">
+      <div class="section-heading"><div><span class="eyebrow">Finance</span><h2>Invoices and payments</h2><p class="section-help">Track money coming from clients separately from money going to suppliers.</p></div></div>
+      <div class="three-columns">
+        <form id="invoice-form" class="card form-card">
+          <h3>Create invoice from booking</h3>
+          <label>Booking<select name="booking_id" id="invoice-booking" required></select></label>
+          <label>Invoice number<input name="invoice_number" placeholder="Leave blank to generate automatically"></label>
+          <label>Due date<input type="date" name="due_date" value="2026-09-01"></label>
+          <label>Fees<input type="number" name="fees_total" min="0" step="0.01" value="0"></label>
+          <button>Create invoice</button>
+        </form>
+        <form id="payment-form" class="card form-card">
+          <h3>Payment from client</h3>
+          <label>Invoice<select name="invoice_id" id="payment-invoice" required></select></label>
+          <label>Amount<input type="number" name="amount" min="0.01" step="0.01" value="1000" required></label>
+          <label>Payment currency<select name="currency" id="payment-currency"><option>PHP</option><option>USD</option><option>EUR</option></select></label>
+          <div class="payment-conversion-fields">
+            <label>Conversion rate<input type="number" name="exchange_rate" min="0.000001" step="0.000001" placeholder="Required when paying in a different currency"></label>
+            <label>Rate date<input type="date" name="exchange_rate_date"></label>
+            <label>Rate source<input name="exchange_rate_source" value="BDO Forex Selling Rate + 1.0 - manual snapshot"></label>
+          </div>
+          <p class="field-help">For a USD invoice, enter the actual PHP amount received and the BDO forex selling rate + 1.0 used on the payment date. Multiple payments are supported as installments. Live BDO lookup is not connected.</p>
+          <label>Method<select name="method"><option>Bank Transfer</option><option>Cash</option><option>Card</option><option>Other</option></select></label>
+          <label>Reference<input name="reference" value="LOCAL-PAYMENT-001"></label>
+          <button>Record payment</button>
+        </form>
+        <form id="supplier-payment-form" class="card form-card">
+          <h3>Payment to supplier</h3>
+          <label>Supplier booking<select name="supplier_booking_id" id="supplier-payment-booking" required></select></label>
+          <label>Amount<input type="number" name="amount" min="0.01" step="0.01" value="1000" required></label>
+          <label>Method<select name="method"><option>Bank Transfer</option><option>Cash</option><option>Card</option><option>Other</option></select></label>
+          <label>Reference<input name="reference" value="SUPPLIER-PAY-LOCAL-001"></label>
+          <button>Record payment to supplier</button>
+        </form>
+      </div>
+      <div id="finance-table" class="table-wrap"></div>
+    </section>
+    <section id="attendance-panel" class="panel">
+      <div class="section-heading"><div><span class="eyebrow">Read-only source</span><h2>Attendance monitoring</h2><p class="section-help">Attendance Log remains authoritative. WMIT Operations only reads and projects attendance; it never writes punches back to the source.</p></div></div>
+      <div id="attendance-disabled" class="detail-empty hidden"></div>
+      <div id="attendance-content">
+        <div class="attendance-toolbar"><div class="button-group"><button type="button" class="secondary" data-attendance-period="today">Today</button><button type="button" class="secondary" data-attendance-period="week">This week</button><button type="button" class="secondary" data-attendance-period="month">This month</button></div><span id="attendance-source-note" class="field-help"></span></div>
+        <div id="attendance-metrics" class="dashboard-grid attendance-metrics"></div>
+        <div class="two-columns attendance-summary-grid"><div id="attendance-people-breakdown" class="card"></div><div id="attendance-branch-breakdown" class="card"></div></div>
+        <form id="attendance-filter-form" class="card form-card attendance-filter-form">
+          <h3>Attendance history filters</h3>
+          <div class="form-row"><label>From<input type="date" name="from" id="attendance-from"></label><label>To<input type="date" name="to" id="attendance-to"></label><label>Employee<select name="employee" id="attendance-employee"><option value="">All employees</option></select></label></div>
+          <div class="form-row"><label>Role<select name="role" id="attendance-role"><option value="">All roles</option></select></label><label>Branch<select name="branch" id="attendance-branch"><option value="">All branches</option></select></label><label>Status<select name="status" id="attendance-status"><option value="">All statuses</option><option>PAIRED</option><option>INCOMPLETE</option><option>NEEDS_REVIEW</option><option>NOT_OBSERVED</option><option>ABSENT</option></select></label></div>
+          <button>Apply attendance filters</button>
+        </form>
+        <div id="attendance-history-table" class="table-wrap"></div>
+        <div id="attendance-event-table" class="table-wrap"></div>
+        <div id="attendance-exceptions-table" class="table-wrap"></div>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="section-heading"><div><span class="eyebrow">Selected record</span><h2>Booking detail</h2></div></div>
+      <div id="booking-detail" class="detail-empty">Select a booking reference above to inspect its connected records.</div>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

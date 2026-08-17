@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in — WMIT Workspace</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, -apple-system, sans-serif; background: #f2f4f7; color: #1c2733; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .card { background: #fff; border: 1px solid #d8dee6; border-radius: 12px; box-shadow: 0 12px 32px rgba(16, 32, 48, 0.08); width: 100%; max-width: 380px; padding: 28px; }
+  .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+  .brand-mark { width: 44px; height: 44px; border-radius: 10px; background: #0e3a5d; color: #fff; font-weight: 700; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  .brand-name { font-weight: 700; font-size: 16px; line-height: 1.2; }
+  .brand-sub { font-size: 12px; color: #5b6b7b; }
+  label { display: block; font-size: 13px; font-weight: 600; margin: 14px 0 6px; }
+  input { width: 100%; padding: 10px 12px; border: 1px solid #c4ccd6; border-radius: 8px; font-size: 15px; }
+  input:focus { outline: 2px solid #2d7ff9; outline-offset: 1px; border-color: #2d7ff9; }
+  button { width: 100%; margin-top: 20px; padding: 11px 12px; background: #0e3a5d; color: #fff; border: 0; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; }
+  button:disabled { opacity: 0.6; cursor: default; }
+  .status { margin-top: 14px; font-size: 13px; color: #a4262c; min-height: 18px; }
+  .hint { margin-top: 16px; font-size: 12px; color: #5b6b7b; line-height: 1.5; }
+</style>
+</head>
+<body>
+  <main class="card">
+    <div class="brand">
+      <div class="brand-mark">WM</div>
+      <div><div class="brand-name">WMIT Workspace</div><div class="brand-sub">World Master International Travel</div></div>
+    </div>
+    <form id="login-form">
+      <label for="login-username">Username</label>
+      <input id="login-username" name="username" autocomplete="username" required autofocus>
+      <label for="login-password">Password</label>
+      <input id="login-password" name="password" type="password" autocomplete="current-password" required>
+      <button id="login-button" type="submit">Sign in</button>
+      <div class="status" id="login-status"></div>
+    </form>
+    <p class="hint">Sessions expire after six hours of inactivity. Failed sign-ins are rate limited. Contact your administrator if your account is locked or disabled.</p>
+  </main>
+<script>
+(function () {
+  'use strict';
+  var next = new URLSearchParams(window.location.search).get('next');
+  var force = new URLSearchParams(window.location.search).get('force');
+  function redirect() { window.location.href = next && next.startsWith('/') ? next : 'operations.html'; }
+  var me = new XMLHttpRequest();
+  me.open('GET', '/api/auth/me');
+  var token = sessionStorage.getItem('wmit_session');
+  if (token) me.setRequestHeader('Authorization', 'Bearer ' + token);
+  me.onload = function () {
+    if (me.status !== 200 || force) return; // ?force=1 always shows the form (account switching)
+    try {
+      var body = JSON.parse(me.responseText || '{}');
+      // Skip the form only for a real session, or when the server has no
+      // account store at all (pure local MVP). When accounts exist but
+      // sessions are optional (development), stay here: authority-gated
+      // actions still need a signed-in manager.
+      if (body.data && body.data.username) return redirect();
+      if (body.data && body.data.enforced === false && body.data.auth_available === false) return redirect();
+    } catch (_) { /* stay on the form when the probe is unreadable */ }
+  };
+  me.send();
+  document.getElementById('login-form').addEventListener('submit', async function (event) {
+    event.preventDefault();
+    var button = document.getElementById('login-button');
+    var status = document.getElementById('login-status');
+    button.disabled = true;
+    status.textContent = '';
+    try {
+      var response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: document.getElementById('login-username').value, password: document.getElementById('login-password').value })
+      });
+      var result = await response.json();
+      if (!result.ok) { status.textContent = result.error && result.error.message || 'Sign-in failed.'; button.disabled = false; return; }
+      sessionStorage.setItem('wmit_session', result.data.session_token);
+      sessionStorage.setItem('wmit_user', result.data.username);
+      redirect();
+    } catch (error) {
+      status.textContent = 'The server could not be reached. Check your connection and retry.';
+      button.disabled = false;
+    }
+  });
+})();
+</script>
+</body>
+</html>

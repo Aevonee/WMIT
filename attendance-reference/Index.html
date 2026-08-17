@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Poppins', sans-serif; background-color: #f4f7f9; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; }
+    .container { background: white; padding: 35px; border-radius: 24px; box-shadow: 0 15px 35px rgba(0,0,0,0.08); width: 100%; max-width: 440px; text-align: center; }
+    .logo { max-height: 120px; margin-bottom: 10px; border-radius: 8px; }
+    h1 { color: #008080; font-size: 22px; font-weight: 700; margin-bottom: 5px; line-height: 1.3; }
+    .subtitle { color: #95a5a6; font-size: 13px; margin-bottom: 30px; }
+    label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 8px; color: #34495e; text-align: left; }
+    select { width: 100%; padding: 12px; border: 1px solid #dfe6e9; border-radius: 12px; font-family: inherit; font-size: 15px; color: #2d3436; background: #fff; box-sizing: border-box; margin-bottom: 18px; }
+    .photo-area { background: #f8f9fa; border-radius: 16px; padding: 20px; margin: 25px 0; border: 2px dashed #dcdde1; }
+    #photoPreview { width: 100%; max-width: 240px; border-radius: 12px; display: none; margin: 10px auto; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+    .photo-btn { background: #0984e3; color: white; border: none; padding: 12px 24px; font-weight: 600; border-radius: 10px; cursor: pointer; display: inline-block; margin: 4px; font-size: 14px; }
+    .photo-btn.clear { background: #6c757d; }
+    #fileInput { display: none; }
+    .btn-submit { width: 100%; background: #bdc3c7; color: white; border: none; padding: 14px; font-size: 16px; font-weight: 700; border-radius: 14px; cursor: not-allowed; transition: 0.3s; }
+    .btn-submit.ready { background: #27ae60; cursor: pointer; box-shadow: 0 5px 15px rgba(39, 174, 96, 0.3); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <img src="https://drive.google.com/thumbnail?id=109QZFAz1Z3IbSaXBRDSNE1vLGhKeWXm7&sz=w1000" class="logo" alt="World Master Logo">
+    <h1>World Master International Travel</h1>
+    <div class="subtitle">Attendance System</div>
+    
+    <form id="clockForm" onsubmit="event.preventDefault();">
+      <label for="nameSelect">👤 Select Your Name</label>
+      <select id="nameSelect" onchange="checkForm()" required>
+        <option value="">-- Loading Roster... --</option>
+      </select>
+
+      <label for="actionSelect">📌 Action</label>
+      <select id="actionSelect">
+        <option value="Time In">Time In</option>
+        <option value="Time Out">Time Out</option>
+      </select>
+
+      <div class="photo-area">
+        <div id="photoStatus" style="font-size:13px; color:#57606f; margin-bottom:12px;">Tap below to take your check-in selfie.</div>
+        <img id="photoPreview" src="#" alt="Selfie Preview">
+        <div>
+          <button type="button" class="photo-btn" id="cameraBtn">📸 Take Selfie</button>
+          <button type="button" class="photo-btn clear" id="clearBtn" style="display:none;">✖ Clear</button>
+        </div>
+        <input type="file" id="fileInput" accept="image/*" capture="user">
+      </div>
+
+      <button type="submit" class="btn-submit" id="submitBtn" onclick="doSubmit()" disabled>✅ SUBMIT CHECK-IN</button>
+    </form>
+  </div>
+
+  <canvas id="compressCanvas" style="display:none;"></canvas>
+
+  <script>
+    let imageData = null;
+    const fileInput = document.getElementById('fileInput');
+    const cameraBtn = document.getElementById('cameraBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const photoPreview = document.getElementById('photoPreview');
+    const photoStatus = document.getElementById('photoStatus');
+
+    // Run dynamic roster fetch instantly on screen initialize load
+    window.addEventListener('load', () => {
+      google.script.run.withSuccessHandler((names) => {
+        const select = document.getElementById('nameSelect');
+        select.innerHTML = '<option value="">-- Choose Name --</option>';
+        if (names.length === 0) {
+          select.innerHTML = '<option value="">Roster is empty</option>';
+          return;
+        }
+        names.forEach(name => {
+          const opt = document.createElement('option');
+          opt.value = name;
+          opt.textContent = name;
+          select.appendChild(opt);
+        });
+      }).getRosterNames();
+    });
+
+    cameraBtn.addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      const reader = new FileReader();
+      reader.onload = function(ev) {
+        const img = new Image();
+        img.onload = function() {
+          const canvas = document.getElementById('compressCanvas');
+          const ctx = canvas.getContext('2d');
+          const maxW = 640;
+          const scale = maxW / img.width;
+          canvas.width = maxW;
+          canvas.height = img.height * scale;
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          imageData = canvas.toDataURL('image/jpeg', 0.70);
+          
+          photoPreview.src = imageData;
+          photoPreview.style.display = 'block';
+          photoStatus.textContent = '✅ Selfie Attached!';
+          clearBtn.style.display = 'inline-block';
+          cameraBtn.textContent = '🔄 Retake';
+          checkForm();
+        };
+        img.src = ev.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    clearBtn.addEventListener('click', () => {
+      imageData = null;
+      photoPreview.style.display = 'none';
+      photoPreview.src = '#';
+      photoStatus.textContent = 'Tap below to take your check-in selfie.';
+      clearBtn.style.display = 'none';
+      cameraBtn.textContent = '📸 Take Selfie';
+      fileInput.value = '';
+      checkForm();
+    });
+
+    function checkForm() {
+      const nameVal = document.getElementById('nameSelect').value;
+      const ready = nameVal && imageData;
+      
+      const btn = document.getElementById('submitBtn');
+      btn.disabled = !ready;
+      if (ready) { btn.classList.add('ready'); } else { btn.classList.remove('ready'); }
+    }
+
+    function doSubmit() {
+      const btn = document.getElementById('submitBtn');
+      btn.disabled = true;
+      btn.classList.remove('ready');
+      btn.textContent = 'UPLOADING...';
+      
+      google.script.run.withSuccessHandler((res) => {
+        if(res === "Success") {
+          alert("Attendance submitted successfully!");
+          location.reload();
+        } else {
+          alert("Server Response: " + res);
+          checkForm();
+          btn.textContent = '✅ SUBMIT CHECK-IN';
+        }
+      }).processAttendance(
+        document.getElementById('nameSelect').value,
+        '',
+        document.getElementById('actionSelect').value,
+        imageData
+      );
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Your Worldmaster Travel Quotation</title>
+  <link rel="stylesheet" href="/tokens.css">
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    body { background: var(--chart-paper); }
+    .quote-wrap { max-width: 860px; margin: 0 auto; padding: 22px 16px 60px; }
+    .quote-sheet { background: var(--paper); border: 1px solid var(--rule); border-radius: 11px; overflow: hidden; box-shadow: 0 4px 18px rgba(23,35,52,.09); }
+    .quote-banner { background: var(--harbor-navy); padding: 26px; }
+    .quote-banner img { display: block; width: 210px; height: auto; }
+    .quote-banner .brand-subtitle { color: var(--mist); letter-spacing: .12em; text-transform: uppercase; font-size: 11px; margin-top: 8px; }
+    .quote-body { padding: 26px; }
+    .quote-greeting { font-size: 21px; font-weight: 800; color: var(--ledger-ink); }
+    .quote-meta-row { display: flex; flex-wrap: wrap; gap: 18px; color: var(--sea-fog); font-size: 13px; margin-top: 8px; }
+    .option { border: 1px solid var(--rule); border-radius: 8px; margin-top: 16px; padding: 18px; }
+    .option.selected { border: 2px solid var(--passage-blue); background: var(--passage-tint); }
+    .option input[type="radio"] { width: 22px; height: 22px; min-height: 0; margin: 0; accent-color: var(--passage-blue); }
+    .option-head { display: flex; align-items: flex-start; gap: 12px; }
+    .option-title { flex: 1; }
+    .option-title strong { font-size: 17px; color: var(--ledger-ink); }
+    .option-title .muted { display: block; margin-top: 3px; }
+    .option-price { text-align: right; }
+    .option-price strong { font-size: 21px; color: var(--harbor-navy); white-space: nowrap; }
+    .option-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 12px; }
+    .option-columns h4 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--label-ink); }
+    .option-columns ul { margin: 0; padding-left: 18px; font-size: 13px; }
+    .accept-box { margin-top: 24px; border-top: 2px solid var(--rule); padding-top: 20px; }
+    .accept-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+    .accept-controls label { flex: 1; min-width: 220px; color: var(--ledger-ink); font-size: 13px; font-weight: 700; }
+    .accept-controls input { min-height: 44px; border: 1px solid var(--rule-input); border-radius: 6px; background: var(--paper); color: var(--ledger-ink); }
+    .q-inline-error { display: none; margin-top: 12px; padding: 12px 14px; border-radius: 8px; font-size: 14px; background: var(--msg-err-bg); border: 1px solid var(--msg-err-rule); color: var(--msg-err-text); }
+    .q-inline-error.show { display: block; }
+    .btn-accept { font-size: 16px; padding: 13px 22px; min-height: 48px; background: var(--manifest-green); border-radius: 6px; color: #fff; font-weight: 700; border: 0; cursor: pointer; }
+    .btn-accept:hover { background: var(--manifest-green-hover); }
+    .btn-decline { background: none; color: var(--sea-fog); border: 1px solid var(--rule-input); border-radius: 6px; margin-top: 12px; font-weight: 700; cursor: pointer; padding: 10px 14px; }
+    .status-card { text-align: center; padding: 46px 20px; }
+    .status-card h2 { font-size: 26px; color: var(--ledger-ink); }
+    .status-card p { color: var(--sea-fog); margin-top: 10px; font-size: 15px; }
+    .spin { color: var(--sea-fog); text-align: center; padding: 60px 0; }
+    @media (max-width: 640px) { .option-columns { grid-template-columns: 1fr; } .quote-body { padding: 16px; } }
+    @media print { body { background: #fff; } .accept-box, .btn-decline, .q-inline-error { display: none !important; } }
+  </style>
+</head>
+<body>
+  <main class="quote-wrap">
+    <div id="quote-sheet" class="quote-sheet">
+      <div class="quote-banner">
+        <img src="/assets/wmit-logo.png" alt="Worldmaster International Travel">
+        <div class="brand-subtitle">International Travel · Travel Quotation</div>
+      </div>
+      <div id="quote-body" class="quote-body"><p class="spin">Loading your quotation…</p></div>
+    </div>
+  </main>
+
+  <script>
+    'use strict';
+    (function () {
+      var esc = function (value) { return String(value === undefined || value === null ? '' : value).replace(/[&<>"']/g, function (c) { return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]; }); };
+      var money = function (value, currency) { return esc(value) + ' ' + esc(currency); };
+      var token = (function () {
+        var match = window.location.pathname.match(/^\/q\/([a-f0-9]+)$/i);
+        return match ? match[1] : new URLSearchParams(window.location.search).get('token');
+      })();
+
+      var body = document.getElementById('quote-body');
+
+      function renderError(message) {
+        body.innerHTML = '<div class="status-card"><h2>We could not open this quotation</h2><p>' + esc(message) + '</p><p>Please contact Worldmaster International Travel and we will send you a fresh link.</p></div>';
+      }
+
+      function renderQuote(quote) {
+        if (quote.expired) {
+          return renderError('This quotation expired on ' + esc(quote.valid_until) + '.');
+        }
+        var isFinal = quote.status === 'ACCEPTED' || quote.status === 'BOOKED';
+        var chosen = quote.accepted_option_id || quote.options[0].option_id;
+        var optionsHtml = quote.options.map(function (option) {
+          return '<div class="option' + (option.option_id === chosen ? ' selected' : '') + '">' +
+            '<div class="option-head">' +
+            (isFinal ? '' : '<input type="radio" name="option" value="' + esc(option.option_id) + '" ' + (option.option_id === chosen ? 'checked' : '') + ' aria-label="Choose ' + esc(option.name) + '">') +
+            '<div class="option-title"><strong>' + esc(option.name) + '</strong><span class="muted">' + esc(option.destination) + ' · ' + esc(option.duration_days) + ' days</span></div>' +
+            '<div class="option-price"><strong>' + money(option.price_per_person, option.currency) + '</strong><br><span class="muted" style="font-size:12px;">per person</span></div>' +
+            '</div>' +
+            '<div class="option-columns">' +
+            '<div><h4>Includes</h4><ul>' + (option.inclusions || []).map(function (item) { return '<li>' + esc(item) + '</li>'; }).join('') + '</ul></div>' +
+            '<div><h4>Not included</h4><ul>' + (option.exclusions || []).map(function (item) { return '<li>' + esc(item) + '</li>'; }).join('') + '</ul></div>' +
+            '</div>' +
+            (option.notes ? '<p class="muted" style="margin-top:10px;font-size:13px;">' + esc(option.notes) + '</p>' : '') +
+            '</div>';
+        }).join('');
+
+        var controls;
+        if (isFinal) {
+          var chosenOption = quote.options.filter(function (option) { return option.option_id === quote.accepted_option_id; })[0] || quote.options[0];
+          controls = '<div class="status-card"><h2>Thank you — quotation accepted</h2><p>You chose <b>' + esc(chosenOption.name) + '</b>. Our team will contact you about the next steps.</p></div>';
+        } else {
+          controls = '<div class="accept-box">' +
+            '<div class="accept-controls">' +
+            '<label for="accept-name">Your full name (to confirm acceptance)<input id="accept-name" type="text" maxlength="80" placeholder="e.g. Maria Santos"></label>' +
+            '<button type="button" class="btn-accept" id="btn-accept">Accept this quotation</button>' +
+            '</div>' +
+            '<div id="q-msg" class="q-inline-error" role="alert"></div>' +
+            '<button type="button" class="btn-decline" id="btn-decline">Not for me — decline this quotation</button>' +
+            '<p class="muted" style="font-size:12px;margin-top:12px;">Accepting records your choice with Worldmaster International Travel. Payment terms and booking steps follow separately. Quotation valid until ' + esc(quote.valid_until) + '.</p>' +
+            '</div>';
+        }
+
+        body.innerHTML =
+          '<p class="quote-greeting">Hi ' + esc(quote.traveller_first_name || 'there') + ', here are your travel options</p>' +
+          '<div class="quote-meta-row"><span>Quotation ' + esc(quote.quotation_id) + '</span><span>Prepared ' + esc(quote.quotation_date) + '</span><span>Valid until ' + esc(quote.valid_until) + '</span>' + (quote.pax_count ? '<span>' + esc(quote.pax_count) + ' traveller(s)</span>' : '') + '</div>' +
+          '<form id="accept-form">' + optionsHtml + controls + '</form>';
+
+        if (!isFinal) {
+          document.getElementById('btn-accept').addEventListener('click', function () {
+            var name = document.getElementById('accept-name').value.trim();
+            if (!name) { document.getElementById('accept-name').focus(); inlineError('Please type your name to confirm acceptance.'); return; }
+            var selected = document.querySelector('input[name="option"]:checked');
+            post({ accepted_by: name, option_id: selected ? selected.value : undefined });
+          });
+          document.getElementById('btn-decline').addEventListener('click', function () {
+            if (!window.confirm('Decline this quotation? You can always ask us for different options.')) return;
+            post({ reason: 'Declined from quotation page' }, true);
+          });
+        }
+      }
+
+      function inlineError(message) {
+        var box = document.getElementById('q-msg');
+        if (!box) { window.alert(message); return; }
+        box.textContent = message;
+        box.className = 'q-inline-error show';
+      }
+
+      function post(payload, isDecline) {
+        var url = isDecline ? '/api/public/expo/quote/decline' : '/api/public/expo/quote/accept';
+        payload.token = token;
+        fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+          .then(function (response) { return response.json().then(function (result) { return { ok: response.ok, result: result }; }); })
+          .then(function (outcome) {
+            if (outcome.ok && outcome.result.ok) { load(); return; }
+            inlineError((outcome.result && outcome.result.error && outcome.result.error.message) || 'That did not go through — please try again.');
+          })
+          .catch(function () { inlineError('No connection — please try again.'); });
+      }
+
+      function load() {
+        if (!token) return renderError('This quotation link is missing its code.');
+        fetch('/api/public/expo/quote?token=' + encodeURIComponent(token))
+          .then(function (response) { return response.json(); })
+          .then(function (result) {
+            if (result.ok) renderQuote(result.data);
+            else renderError(result.error && result.error.message || 'This quotation link is invalid.');
+          })
+          .catch(function () { renderError('No connection — please try again.'); });
+      }
+
+      load();
+    })();
+  </script>
+</body>
+</html>

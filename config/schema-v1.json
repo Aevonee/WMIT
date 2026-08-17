@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "1.4.0-quotation-payments-itinerary",
+  "storage": "Google Sheets tables with header rows; IDs are stable text values",
+  "operationalEntities": [
+    "Client",
+    "Contact",
+    "Traveler",
+    "Lead",
+    "Quotation",
+    "QuotationItem",
+    "Booking",
+    "BookingTraveler",
+    "BookingItem",
+    "Departure",
+    "Supplier",
+    "Invoice",
+    "InvoiceItem",
+    "Payment",
+    "Document",
+    "SupplierTariff",
+    "SupplierBooking",
+    "SupplierBookingItem",
+    "InvoiceBooking",
+    "DocumentLink",
+    "Task"
+  ],
+  "productionSpreadsheetId": "",
+  "productionDriveRootFolderId": ""
+}

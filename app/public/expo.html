@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Worldmaster — Expo Sign-Up</title>
+  <link rel="stylesheet" href="/tokens.css">
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    body { background: var(--chart-paper); }
+    .kiosk { max-width: 860px; margin: 0 auto; padding: 22px 18px 56px; }
+    .kiosk-hero { background: var(--harbor-navy); color: #fff; border-radius: 11px; padding: 38px 36px 34px; }
+    .kiosk-hero img { display: block; width: 100%; height: auto; max-width: 420px; }
+    .kiosk-hero h1 { font-size: clamp(26px, 4.5vw, 40px); margin-top: 16px; line-height: 1.15; letter-spacing: -.01em; }
+    .kiosk-hero p { color: var(--mist); margin-top: 10px; font-size: 17px; max-width: 560px; }
+    .kiosk-card { background: var(--paper); border: 1px solid var(--rule); border-radius: 11px; padding: 26px; margin-top: 18px; box-shadow: 0 4px 16px rgba(23,35,52,.08); }
+    .kiosk-fieldset { border: 0; padding: 0; margin: 0 0 8px; }
+    .kiosk-legend { font-size: 13px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--registry-blue); border-bottom: 2px solid var(--rule-tint); padding-bottom: 8px; margin-bottom: 14px; width: 100%; display: block; }
+    .kiosk-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .kiosk-row .full { grid-column: 1 / -1; }
+    .kiosk-field label { font-size: 16px; font-weight: 700; color: var(--ledger-ink); display: block; margin-bottom: 6px; }
+    .kiosk-field .hint { font-weight: 500; color: var(--sea-fog); font-size: 13px; }
+    .kiosk-field input, .kiosk-field select { font-size: 20px; padding: 14px; min-height: 54px; width: 100%; border: 1px solid var(--rule-input); border-radius: 6px; background: var(--paper); color: var(--ledger-ink); }
+    .chips { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
+    .chip input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .chip > span { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 54px; padding: 10px 18px; border: 2px solid var(--rule-input); border-radius: 8px; font-size: 17px; font-weight: 700; color: var(--ledger-ink); cursor: pointer; background: var(--paper); }
+    .chip input:checked + span { border-color: var(--passage-blue); background: var(--passage-tint); color: var(--registry-blue); }
+    .chip input:focus-visible + span { outline: 2px solid var(--passage-blue); outline-offset: 2px; }
+    .hotel-chips .chip > span { flex-direction: column; gap: 5px; padding: 12px 24px; }
+    .star-row { display: flex; gap: 3px; color: var(--stamp-amber); }
+    .star-row svg { width: 17px; height: 17px; display: block; }
+    .chip-label { font-size: 12px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
+    .kiosk-submit { width: 100%; font-size: 22px; padding: 20px; margin-top: 24px; min-height: 68px; border-radius: 8px; background: var(--manifest-green); color: #fff; }
+    .kiosk-submit:hover { background: var(--manifest-green-hover); }
+    .kiosk-note { text-align: center; color: var(--sea-fog); font-size: 13px; margin-top: 16px; }
+    .kiosk-message { display: none; margin-top: 16px; padding: 14px 16px; border-radius: 8px; font-size: 16px; }
+    .kiosk-message.error { display: block; background: var(--msg-err-bg); border: 1px solid var(--msg-err-rule); color: var(--msg-err-text); }
+    .kiosk-done { display: none; text-align: center; padding: 40px 10px; }
+    .kiosk-done .check { width: 104px; height: 104px; border-radius: 50%; background: var(--good-wash); color: var(--status-good-text); display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; }
+    .kiosk-done .check svg { width: 52px; height: 52px; }
+    .kiosk-done h2 { font-size: 34px; letter-spacing: -.01em; color: var(--ledger-ink); }
+    .kiosk-done p { color: var(--sea-fog); font-size: 17px; margin-top: 10px; }
+    .kiosk-agree { display: flex; gap: 12px; align-items: flex-start; margin-top: 18px; color: var(--sea-fog); font-size: 13px; }
+    .kiosk-agree input { width: 24px; height: 24px; min-height: 0; flex: none; margin-top: 0; }
+    .kiosk-agree label { color: var(--sea-fog); font-size: 13px; font-weight: 400; }
+    @media (max-width: 640px) {
+      .kiosk-row { grid-template-columns: 1fr; }
+      .kiosk-hero { padding: 26px 22px; }
+      .kiosk-card { padding: 18px; }
+    }
+  </style>
+</head>
+<body>
+  <svg style="display:none" aria-hidden="true"><symbol id="wmit-star" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2.6l2.92 5.95 6.6.94-4.79 4.62 1.15 6.51L12 17.55l-5.88 3.07 1.15-6.51-4.79-4.62 6.6-.94z"/></symbol></svg>
+  <main class="kiosk">
+    <div class="kiosk-hero">
+      <img src="/assets/wmit-logo.png" alt="Worldmaster International Travel">
+      <h1>Where do you want to travel next?</h1>
+      <p>Tell us about your trip in 30 seconds and we'll prepare your travel quotation. One follow-up from a real travel consultant — no spam.</p>
+    </div>
+
+    <form id="kiosk-form" class="kiosk-card" autocomplete="off" novalidate>
+      <fieldset class="kiosk-fieldset">
+        <legend class="kiosk-legend">About you</legend>
+        <div class="kiosk-row">
+          <div class="kiosk-field full">
+            <label for="k-name">Your name</label>
+            <input id="k-name" name="name" type="text" inputmode="text" maxlength="80" placeholder="e.g. Maria Santos" required>
+          </div>
+          <div class="kiosk-field">
+            <label for="k-mobile">Mobile number</label>
+            <input id="k-mobile" name="mobile" type="tel" inputmode="tel" maxlength="20" placeholder="09xx xxx xxxx" required>
+          </div>
+          <div class="kiosk-field">
+            <label for="k-email">Email</label>
+            <input id="k-email" name="email" type="email" inputmode="email" maxlength="80" placeholder="you@email.com" required>
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset class="kiosk-fieldset">
+        <legend class="kiosk-legend">Your trip</legend>
+        <div class="kiosk-row">
+          <div class="kiosk-field">
+            <label for="k-destination">Destination</label>
+            <input id="k-destination" name="destination" type="text" list="k-destinations" maxlength="80" placeholder="e.g. Seoul, Korea" required>
+            <datalist id="k-destinations">
+              <option value="Seoul"></option><option value="Bangkok"></option><option value="Ho Chi Minh City"></option>
+              <option value="Tokyo"></option><option value="Singapore"></option><option value="Bali"></option>
+              <option value="Hong Kong"></option><option value="Dubai"></option><option value="Europe"></option><option value="Japan"></option>
+            </datalist>
+          </div>
+          <div class="kiosk-field">
+            <label for="k-month">Travel month</label>
+            <select id="k-month" name="travel_month" required></select>
+          </div>
+          <div class="kiosk-field full">
+            <label for="k-days">How many days?</label>
+            <select id="k-days" name="duration_days"></select>
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset class="kiosk-fieldset">
+        <legend class="kiosk-legend">Who is travelling?</legend>
+        <div class="kiosk-row">
+          <div class="kiosk-field">
+            <label for="k-adults">Adults</label>
+            <select id="k-adults" name="adults"></select>
+          </div>
+          <div class="kiosk-field">
+            <label for="k-kids">Kids <span class="hint">(under 12)</span></label>
+            <select id="k-kids" name="children"></select>
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset class="kiosk-fieldset">
+        <legend class="kiosk-legend">Hotel &amp; meals</legend>
+        <div class="kiosk-field" style="margin-bottom:16px;">
+          <label>Hotel standard</label>
+          <div class="chips hotel-chips" role="radiogroup" aria-label="Hotel standard">
+            <label class="chip"><input type="radio" name="hotel_stars" value="3"><span><span class="star-row"><svg aria-hidden="true"><use href="#wmit-star"/></svg><svg aria-hidden="true"><use href="#wmit-star"/></svg><svg aria-hidden="true"><use href="#wmit-star"/></svg></span><span class="chip-label">Value</span></span></label>
+            <label class="chip"><input type="radio" name="hotel_stars" value="4" checked><span><span class="star-row"><svg aria-hidden="true"><use href="#wmit-star"/></svg><svg aria-hidden="true"><use href="#wmit-star"/></svg><svg aria-hidden="true"><use href="#wmit-star"/></svg><svg aria-hidden="true"><use href="#wmit-star"/></svg></span><span class="chip-label">First class</span></span></label>
+            <label class="chip"><input type="radio" name="hotel_stars" value="5"><span><span class="star-row"><svg aria-hidden="true"><use href="#wmit-star"/></svg><svg aria-hidden="true"><use href="#wmit-star"/></svg><svg aria-hidden="true"><use href="#wmit-star"/></svg><svg aria-hidden="true"><use href="#wmit-star"/></svg><svg aria-hidden="true"><use href="#wmit-star"/></svg></span><span class="chip-label">Luxury</span></span></label>
+            <label class="chip"><input type="radio" name="hotel_stars" value=""><span><span class="chip-label" style="padding:6px 0;">Any</span></span></label>
+          </div>
+        </div>
+        <div class="kiosk-field">
+          <label>Meals</label>
+          <div class="chips" role="radiogroup" aria-label="Meal plan">
+            <label class="chip"><input type="radio" name="meal_plan" value="BREAKFAST" checked><span>Breakfast only</span></label>
+            <label class="chip"><input type="radio" name="meal_plan" value="HALF_BOARD"><span>Breakfast + dinner</span></label>
+            <label class="chip"><input type="radio" name="meal_plan" value="FULL_BOARD"><span>All meals</span></label>
+            <label class="chip"><input type="radio" name="meal_plan" value=""><span>No preference</span></label>
+          </div>
+        </div>
+      </fieldset>
+
+      <div id="k-message" class="kiosk-message" role="alert"></div>
+      <button type="submit" class="kiosk-submit">Send my travel request</button>
+      <div class="kiosk-agree">
+        <input type="checkbox" id="k-consent" checked>
+        <label for="k-consent">By submitting you agree that Worldmaster International Travel may contact you about this travel request. Your details are used only for this quotation.</label>
+      </div>
+    </form>
+
+    <div id="kiosk-done" class="kiosk-card kiosk-done">
+      <div class="check">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+      </div>
+      <h2 id="k-done-heading">Salamat!</h2>
+      <p id="k-done-line">Your trip request is with our travel consultants.</p>
+      <p>We'll prepare your quotation and follow up within the next few days. Safe travels!</p>
+      <button type="button" class="kiosk-submit" id="k-again">Next traveller</button>
+    </div>
+
+    <p class="kiosk-note">Worldmaster International Travel · Expo 2026 · Questions? Ask any of our staff at the booth.</p>
+  </main>
+
+  <script>
+    'use strict';
+    (function () {
+      var form = document.getElementById('kiosk-form');
+      var done = document.getElementById('kiosk-done');
+      var message = document.getElementById('k-message');
+      var monthSelect = document.getElementById('k-month');
+      var daysSelect = document.getElementById('k-days');
+      var adultsSelect = document.getElementById('k-adults');
+      var kidsSelect = document.getElementById('k-kids');
+      var currentKey = null;
+      var expoTag = null;
+
+      // Which expo this form serves: ?expo=TAG pins it (while ACTIVE),
+      // otherwise the server's current event.
+      var requestedExpo = new URLSearchParams(window.location.search).get('expo');
+      fetch('/api/public/expo/config' + (requestedExpo ? '?expo=' + encodeURIComponent(requestedExpo) : ''))
+        .then(function (response) { return response.json(); })
+        .then(function (result) {
+          if (!result.ok) {
+            show(result.error && result.error.message || 'This sign-up form is not available right now — please ask our staff for help.');
+            document.getElementById('k-name').disabled = true;
+            return;
+          }
+          expoTag = result.data.expo_tag;
+          if (result.data.name) {
+            var note = document.querySelector('.kiosk-note');
+            if (note) note.textContent = result.data.name + ' · Questions? Ask any of our staff at the booth.';
+          }
+        })
+        .catch(function () { /* the form still works; the server resolves the expo */ });
+
+      // Travel month: next 14 months, current first.
+      var now = new Date();
+      var monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+      for (var i = 0; i < 14; i += 1) {
+        var d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+        var value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+        monthSelect.appendChild(new Option(monthNames[d.getMonth()] + ' ' + d.getFullYear(), value));
+      }
+      // Trip length: 3-15 days plus flexible.
+      for (var days = 3; days <= 15; days += 1) daysSelect.appendChild(new Option(days + ' days', String(days)));
+      daysSelect.appendChild(new Option('Flexible / not sure yet', ''));
+      // Travellers: adults 1-10, kids 0-10.
+      for (var a = 1; a <= 10; a += 1) adultsSelect.appendChild(new Option(a + (a === 1 ? ' adult' : ' adults'), String(a)));
+      for (var k = 0; k <= 10; k += 1) kidsSelect.appendChild(new Option(k + (k === 1 ? ' kid' : ' kids'), String(k)));
+
+      function show(error) {
+        message.textContent = error;
+        message.className = 'kiosk-message error';
+      }
+      function clearMessage() {
+        message.className = 'kiosk-message';
+        message.textContent = '';
+      }
+      function radioValue(name) {
+        var selected = document.querySelector('input[name="' + name + '"]:checked');
+        return selected ? selected.value : '';
+      }
+
+      form.addEventListener('submit', function (event) {
+        event.preventDefault();
+        clearMessage();
+        var email = document.getElementById('k-email').value.trim();
+        var payload = {
+          name: document.getElementById('k-name').value.trim(),
+          mobile: document.getElementById('k-mobile').value.trim(),
+          email: email,
+          destination: document.getElementById('k-destination').value.trim(),
+          travel_month: monthSelect.value,
+          duration_days: daysSelect.value || null,
+          adults: adultsSelect.value,
+          children: kidsSelect.value,
+          hotel_stars: radioValue('hotel_stars') || null,
+          meal_plan: radioValue('meal_plan') || null
+        };
+        if (!payload.name) return show('Please enter your name.');
+        if (!payload.mobile) return show('Please enter your mobile number.');
+        if (!email) return show('Please enter your email so we can send your quotation.');
+        if (!payload.destination) return show('Please tell us your destination.');
+        if (!payload.travel_month) return show('Please choose a travel month.');
+        if (expoTag) payload.expo_tag = expoTag;
+        // A stable key per filled form: kiosk double-taps never create
+        // duplicate leads even if the network retries.
+        if (!currentKey) currentKey = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now() + '-' + Math.random());
+        payload.idempotency_key = 'KIOSK:' + currentKey;
+        var submit = form.querySelector('button[type="submit"]');
+        submit.disabled = true;
+        fetch('/api/public/expo/lead', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+          .then(function (response) { return response.json().then(function (body) { return { ok: response.ok, body: body }; }); })
+          .then(function (result) {
+            submit.disabled = false;
+            if (!result.ok || !result.body.ok) {
+              currentKey = null;
+              return show((result.body && result.body.error && result.body.error.message) || 'Something went wrong — please ask our staff for help.');
+            }
+            document.getElementById('k-done-heading').textContent = 'Salamat, ' + payload.name.split(/\s+/)[0] + '!';
+            document.getElementById('k-done-line').textContent = 'Your ' + payload.destination + ' trip request is with our travel consultants.';
+            form.style.display = 'none';
+            done.style.display = 'block';
+          })
+          .catch(function () {
+            submit.disabled = false;
+            currentKey = null;
+            show('No connection — please try again or ask our staff for help.');
+          });
+      });
+
+      document.getElementById('k-again').addEventListener('click', function () {
+        form.reset();
+        currentKey = null;
+        done.style.display = 'none';
+        form.style.display = 'block';
+        document.getElementById('k-name').focus();
+      });
+    })();
+  </script>
+</body>
+</html>

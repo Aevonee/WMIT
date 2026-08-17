@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-17T07:50:00Z",
+  "title": "Design System: WMIT Operations Workspace",
+  "extensions": {
+    "colorMeta": {
+      "harbor-navy": { "role": "primary", "displayName": "Harbor Navy", "canonical": "#14334f", "tonalRamp": ["#0a1a28", "#2b3945", "#4b5762", "#6c767f", "#8d959c", "#aeb4b9", "#ced2d6", "#eff1f3"] },
+      "manifest-green": { "role": "primary", "displayName": "Manifest Green", "canonical": "#177245", "tonalRamp": ["#0c3923", "#2c5441", "#4d6f5e", "#6d8a7c", "#8ea499", "#aebfb7", "#cfdad4", "#eff5f2"] },
+      "manifest-green-hover": { "role": "primary", "displayName": "Manifest Green Hover", "canonical": "#14603c", "purpose": "Hover state for Manifest Green actions, console and public surfaces." },
+      "surface": { "role": "neutral", "displayName": "Surface", "canonical": "#ffffff", "purpose": "Panel and card backgrounds; splits from --paper (which stays white) so dark mode can retint surfaces without touching text-on-color." },
+      "seal-ink": { "role": "secondary", "displayName": "Seal Ink", "canonical": "#14334f", "purpose": "Harbor-Navy-family ink for text and rules on light surfaces (quote-header rule, grand-total rule, preview headings); lightens independently in dark mode." },
+      "chart-paper": { "role": "neutral", "displayName": "Chart Paper", "canonical": "#f5f7fb", "tonalRamp": ["#7b7c7e", "#8e8f90", "#a0a1a3", "#b3b4b5", "#c6c6c8", "#d9d9da", "#ebebed", "#fefeff"] },
+      "ledger-ink": { "role": "neutral", "displayName": "Ledger Ink", "canonical": "#172334", "tonalRamp": ["#0c121a", "#2c3239", "#4d5157", "#6d7176", "#8e9195", "#aeb1b4", "#cfd0d2", "#eff0f1"] },
+      "ledger-slate": { "role": "secondary", "displayName": "Ledger Slate", "canonical": "#34526f", "tonalRamp": ["#1a2938", "#394653", "#57636e", "#768089", "#959ca4", "#b4b9bf", "#d2d6da", "#f1f3f5"] },
+      "stamp-amber": { "role": "tertiary", "displayName": "Stamp Amber", "canonical": "#966308", "tonalRamp": ["#4b3204", "#644e25", "#7c6947", "#958568", "#aea18a", "#c7bdab", "#dfd8cd", "#f8f4ee"] },
+      "ensign-red": { "role": "tertiary", "displayName": "Ensign Red", "canonical": "#9b3434", "tonalRamp": ["#4e1a1a", "#663939", "#7f5757", "#977676", "#af9595", "#c7b4b4", "#e0d2d2", "#f8f1f1"] },
+      "passage-blue": { "role": "secondary", "displayName": "Passage Blue", "canonical": "#3679b6", "tonalRamp": ["#1b3d5b", "#3a5772", "#587288", "#778c9f", "#95a7b6", "#b4c1cd", "#d2dce3", "#f1f6fa"] },
+      "registry-blue": { "role": "secondary", "displayName": "Registry Blue", "canonical": "#245c89", "tonalRamp": ["#122e45", "#324a5e", "#516778", "#718391", "#919fab", "#b1bbc4", "#d0d8de", "#f0f4f7"] },
+      "sea-fog": { "role": "neutral", "displayName": "Sea Fog", "canonical": "#607085", "tonalRamp": ["#303843", "#4c535d", "#686e76", "#848990", "#a0a4a9", "#bcbfc3", "#d8dadc", "#f4f5f6"] }
+    },
+    "typographyMeta": {
+      "headline": { "displayName": "Headline", "purpose": "Workspace title only — once per page." },
+      "title": { "displayName": "Title", "purpose": "One per panel: the workspace name." },
+      "subheading": { "displayName": "Subheading", "purpose": "Card titles and case headers." },
+      "body": { "displayName": "Body", "purpose": "Prose and meta lines; secondary in Sea Fog." },
+      "table": { "displayName": "Table", "purpose": "All record tables with sticky rule-tint headers." },
+      "label": { "displayName": "Label", "purpose": "Form labels and uppercase tracked eyebrows." }
+    },
+    "shadows": [
+      { "name": "quotation-preview", "value": "0 2px 8px rgba(23,35,52,0.07)", "purpose": "The printable client-facing quotation card only — the page that leaves the building." },
+      { "name": "hover-lift", "value": "0 2px 9px rgba(23,35,52,0.09)", "purpose": "Shortcut-card hover feedback." }
+    ],
+    "motion": [],
+    "breakpoints": [
+      { "name": "stack-header", "value": "700px" },
+      { "name": "stack-content", "value": "800px" },
+      { "name": "grid-2col", "value": "1000px" },
+      { "name": "service-grid-2col", "value": "1100px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one sanctioned action in view.",
+      "html": "<button class=\"ds-btn-primary\">Record payment</button>",
+      "css": ".ds-btn-primary { background: #177245; color: #fff; border: 0; border-radius: 6px; padding: 9px 12px; font: 700 13px 'IBM Plex Sans', Inter, system-ui, sans-serif; cursor: pointer; } .ds-btn-primary:hover { background: #14603c; } .ds-btn-primary:focus-visible { outline: 2px solid #3679b6; outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Reversible and navigational actions.",
+      "html": "<button class=\"ds-btn-secondary\">Switch inquiry</button>",
+      "css": ".ds-btn-secondary { background: #34526f; color: #fff; border: 0; border-radius: 6px; padding: 9px 12px; font: 700 13px 'IBM Plex Sans', Inter, system-ui, sans-serif; cursor: pointer; } .ds-btn-secondary:hover { background: #2b455d; } .ds-btn-secondary:focus-visible { outline: 2px solid #3679b6; outline-offset: 2px; }"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "refersTo": "status-badge",
+      "description": "Stamped pill carrying a readable state word; never color alone.",
+      "html": "<span class=\"ds-status ds-status-good\">Verified</span> <span class=\"ds-status ds-status-warn\">Pending</span> <span class=\"ds-status ds-status-info\">Booking not ready</span>",
+      "css": ".ds-status { display: inline-block; border-radius: 16px; padding: 3px 8px; font: 800 11px 'IBM Plex Sans', Inter, system-ui, sans-serif; } .ds-status-good { background: #dcf3e3; color: #176237; } .ds-status-warn { background: #fff1c6; color: #70530b; } .ds-status-info { background: #dcecfb; color: #245c89; }"
+    },
+    {
+      "name": "Ledger Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "White field with 1px border and 800-weight label above.",
+      "html": "<div class=\"ds-field\"><label for=\"ds-demo-input\">Destination</label><input id=\"ds-demo-input\" class=\"ds-input\" value=\"Osaka, Japan\"></div>",
+      "css": ".ds-field label { display: block; color: #56677a; font: 800 11px 'IBM Plex Sans', Inter, system-ui, sans-serif; margin-bottom: 4px; } .ds-input { width: 100%; box-sizing: border-box; padding: 9px; border: 1px solid #c8d2df; border-radius: 6px; font: 400 13px 'IBM Plex Sans', Inter, system-ui, sans-serif; background: #fff; color: #172334; } .ds-input:focus-visible { outline: 2px solid #3679b6; outline-offset: 1px; }"
+    },
+    {
+      "name": "Nav Tab",
+      "kind": "nav",
+      "refersTo": "nav-tab",
+      "description": "Tab link on the Harbor Navy authority band.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-link ds-active\" href=\"#dashboard\">Dashboard</a><a class=\"ds-nav-link\" href=\"#finance\">Finance</a></nav>",
+      "css": ".ds-nav { display: flex; gap: 5px; background: #14334f; padding: 10px; } .ds-nav-link { color: #dbe8f4; text-decoration: none; font: 400 13px 'IBM Plex Sans', Inter, system-ui, sans-serif; white-space: nowrap; padding: 8px 10px; border-radius: 6px; } .ds-nav-link:hover, .ds-nav-link.ds-active { background: #315877; color: #fff; } .ds-nav-link:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }"
+    },
+    {
+      "name": "Panel",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "One white workspace panel with rule-line border; flat, never shadowed.",
+      "html": "<section class=\"ds-panel\"><h2 class=\"ds-panel-title\">Finance</h2><p class=\"ds-panel-muted\">Payments, obligations, payables, and supplier gates.</p></section>",
+      "css": ".ds-panel { background: #fff; border: 1px solid #d9e2ec; border-radius: 10px; padding: 18px; max-width: 480px; } .ds-panel-title { font: 700 19px 'IBM Plex Sans', Inter, system-ui, sans-serif; color: #172334; margin: 0 0 8px; } .ds-panel-muted { font: 400 13px 'IBM Plex Sans', Inter, system-ui, sans-serif; color: #607085; margin: 0; }"
+    },
+    {
+      "name": "Message Banner",
+      "kind": "custom",
+      "refersTo": "status-badge",
+      "description": "Action-result banner in the live region; complete sentences, state-tinted.",
+      "html": "<div class=\"ds-message ds-message-ok\">✓ Quotation approved<br>Q-2026-000001 · Payment schedule created.</div>",
+      "css": ".ds-message { padding: 12px 14px; border-radius: 8px; font: 400 13px/1.5 'IBM Plex Sans', Inter, system-ui, sans-serif; white-space: pre-wrap; max-width: 480px; } .ds-message-ok { background: #e8f7ed; color: #176237; border: 1px solid #a9d8b4; } .ds-message-error { background: #fff0f0; color: #922c2c; border: 1px solid #e4a7a7; }"
+    },
+    {
+      "name": "Next-Action Ticket",
+      "kind": "custom",
+      "refersTo": "card",
+      "description": "Signature component: the amber ticket naming the case's single next action.",
+      "html": "<div class=\"ds-ticket\"><span class=\"ds-ticket-label\">NEXT ACTION</span><strong class=\"ds-ticket-title\">Verify client payment</strong><p class=\"ds-ticket-reason\">Payment evidence was recorded and is waiting for an authorized actor.</p></div>",
+      "css": ".ds-ticket { padding: 14px; border: 1px solid #e5c875; border-radius: 8px; background: #fffaf0; max-width: 360px; } .ds-ticket-label { display: block; font: 800 11px 'IBM Plex Sans', Inter, system-ui, sans-serif; color: #8a5b0b; letter-spacing: 0.08em; } .ds-ticket-title { display: block; font: 700 18px 'IBM Plex Sans', Inter, system-ui, sans-serif; color: #172334; margin: 5px 0; } .ds-ticket-reason { font: 400 13px 'IBM Plex Sans', Inter, system-ui, sans-serif; color: #56677a; margin: 4px 0 0; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Operations Ledger",
+    "overview": "The Operations Workspace is a working ledger, not a dashboard showcase. One ink-navy authority band sits above an expanse of chart paper; beneath it, every panel is a page of the ledger — white surfaces, fine rule-line borders, small stamped badges recording the state of every entry. Density is high and intentional: this is an all-day staff tool. Calm and procedural is the component philosophy; a green button is the single sanctioned action, and state is always a stamped pill with words in it. The client-facing quotation preview gets the only soft shadow because that page leaves the building.",
+    "keyCharacteristics": [
+      "Ink-navy authority band over chart-paper workspace; white panels with 1px rule-line borders",
+      "High density: 12–13px working text, 11px uppercase tracked eyebrows and labels",
+      "State is a stamped pill badge carrying words, never color alone",
+      "Flat at rest; the only shadows are the printable quotation preview and one hover lift",
+      "One green action per view; slate/amber/red encode reversibility and escalation",
+      "Public surfaces (expo kiosk, quotation page) share the same tokens at a larger public register (16–22px body/inputs, 34px success headings)",
+      "Night ledger: a full prefers-color-scheme dark remap keeps every measured pair at 7:1+ contrast; print pins the light palette",
+      "Button copy is final at render time — no post-render rewriting"
+    ],
+    "rules": [
+      { "name": "The Ink Rule", "body": "Harbor Navy appears exactly once per screen as an authority band or rule. It is never a button, a badge, or a fill.", "section": "colors" },
+      { "name": "The One Action Rule", "body": "Manifest Green marks the single primary action in view. If two controls compete for green, one of them is a secondary action and takes slate.", "section": "colors" },
+      { "name": "The Stamped State Rule", "body": "Every state renders as a pill badge with words. Color alone never carries meaning.", "section": "colors" },
+      { "name": "The Ledger Scale Rule", "body": "Working text stays at 12–13px; only the panel title hierarchy may exceed it.", "section": "typography" },
+      { "name": "The Flat Ledger Rule", "body": "No shadows at rest. A shadow means this page leaves the building or you are hovering.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do render state as a stamped pill badge with words in it, in one of the five state pairs.",
+      "Do keep the working scale at 12–13px with 1px Rule Line borders.",
+      "Do put exactly one Manifest Green action in view.",
+      "Do use <details> disclosures and .table-wrap scroll wells to keep density without hiding the ledger.",
+      "Do keep error and status messages as complete sentences, paired with focus moves to the offending field."
+    ],
+    "donts": [
+      "Don't add shadows to console surfaces.",
+      "Don't introduce hues outside the ledger palette.",
+      "Don't fill large areas with Harbor Navy or any state color.",
+      "Don't use color alone to carry meaning.",
+      "Don't replicate the legacy 3–4px side-tab accent borders in new components."
+    ]
+  }
+}

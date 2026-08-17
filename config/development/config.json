@@ -1,0 +1,25 @@
+{
+  "systemName": "WMIT",
+  "environment": "development",
+  "schemaVersion": "1.4.0-quotation-payments-itinerary",
+  "google": {
+    "spreadsheetId": "",
+    "driveRootFolderId": "",
+    "driveFolderIds": {}
+  },
+  "attendance": {
+    "apiUrl": "",
+    "apiKeyId": "",
+    "googleFallbackToMock": false,
+    "absencePolicy": { "enabled": false },
+    "latePolicy": { "enabled": false }
+  },
+  "featureFlags": {
+    "googleWorkspaceEnabled": false,
+    "externalActionsEnabled": false,
+    "attendanceMonitoringEnabled": false,
+    "attendanceGoogleSourceEnabled": false,
+    "ATTENDANCE_MONITORING_ENABLED": false,
+    "ATTENDANCE_GOOGLE_SOURCE_ENABLED": false
+  }
+}
