@@ -293,7 +293,7 @@ function sourceProvenance(source) {
 
 function selectedInquiryId() {
   const parts = String(window.location.hash || '').slice(1).split('/');
-  if (parts[0] === 'inquiry' && parts[1]) {
+  if ((parts[0] === 'inquiry' || parts[0] === 'case') && parts[1]) {
     const id = decodeURIComponent(parts[1]);
     sessionStorage.setItem('wmit.operations.selectedInquiryId', id);
     return id;
@@ -390,7 +390,7 @@ function projectionForCase(records) {
 
 function currentTab() {
   const value = String(window.location.hash || '#dashboard').slice(1).split('/')[0];
-  return ['dashboard', 'inquiry', 'clients', 'tariffs', 'quotation', 'booking', 'finance', 'monitoring', 'settings', 'suppliers', 'subagents', 'operations', 'departures'].includes(value) ? value : 'dashboard';
+  return ['dashboard', 'case', 'inquiry', 'clients', 'tariffs', 'quotation', 'booking', 'finance', 'monitoring', 'settings', 'suppliers', 'subagents', 'operations', 'departures'].includes(value) ? value : 'dashboard';
 }
 
 function clearCaseWorkspaceSelections() {
@@ -401,7 +401,7 @@ function openCase(inquiryId) {
   if (!inquiryId || !latest('Inquiry', (item) => item.inquiry_id === inquiryId)) return failLocal('That Inquiry is no longer available.');
   sessionStorage.setItem('wmit.operations.selectedInquiryId', inquiryId);
   clearCaseWorkspaceSelections();
-  window.location.hash = 'inquiry/' + encodeURIComponent(inquiryId);
+  window.location.hash = 'case/' + encodeURIComponent(inquiryId);
 }
 
 function openCaseAt(tab, inquiryId) {
@@ -889,6 +889,136 @@ function openClientMessageComposer() {
     },
     templates: window.wmitMessageTemplates(state && state.configuration && state.configuration.messageTemplates)
   });
+}
+
+const BLOCKER_ACTIONS = {
+  BOOKING_REQUIRED: ['Create the Booking', 'quotation'],
+  CLIENT_BALANCE_OUTSTANDING: ['Collect the outstanding client balance', 'finance'],
+  CLIENT_COMMITMENT_PENDING: ['Confirm the client\u2019s commitment', 'booking'],
+  CLIENT_DECISION_REQUIRED: ['Get the client\u2019s decision on the quotation', 'quotation'],
+  DOCUMENT_MISSING: ['Obtain the missing document(s)', 'operations'],
+  OPTION_SELECTION_REQUIRED: ['Select one Commercial Option for this trip', 'inquiry'],
+  OPTIONS_MISSING: ['Prepare commercial options from supplier tariffs', 'tariffs'],
+  PAYMENT_ALLOCATION_PENDING: ['Allocate the received payment to obligations', 'finance'],
+  PAYMENT_OBLIGATIONS_MISSING: ['Create the payment schedule (deposit + balance)', 'finance'],
+  PAYMENT_VERIFICATION_PENDING: ['Verify the client payment evidence', 'finance'],
+  REQUIREMENT_MISSING: ['Complete the missing trip requirements', 'inquiry'],
+  SUPPLIER_FULFILLMENT_PENDING: ['Confirm the outstanding supplier reservation(s)', 'booking'],
+  SUPPLIER_PAYABLE_NOT_APPROVED: ['Approve the supplier payable', 'finance'],
+  SUPPLIER_PAYMENT_FUNDS_INSUFFICIENT: ['Verified client funds do not cover the supplier payment yet', 'finance'],
+  TASK_OUTSTANDING: ['Complete the outstanding follow-up task(s)', 'operations']
+};
+
+function caseChecklistMarkup(records, projection) {
+  const next = projection && projection.nextAction;
+  const blockers = (projection && projection.blockers || []);
+  const seen = new Set();
+  const items = [];
+  if (next && next.label) {
+    items.push({ text: next.label + (next.reason ? ' — ' + next.reason : ''), tab: null, primary: true });
+    if (next.code) seen.add(next.code);
+  }
+  blockers.forEach((blocker) => {
+    const code = typeof blocker === 'string' ? blocker : blocker && blocker.code;
+    if (!code || seen.has(code)) return;
+    seen.add(code);
+    const mapped = BLOCKER_ACTIONS[code];
+    const text = mapped ? mapped[0] : code.replace(/_/g, ' ').toLowerCase();
+    if (mapped && mapped[1]) items.push({ text: text, tab: mapped[1] });
+    else items.push({ text: text, tab: null });
+  });
+  if (!items.length) return '<div class="card good"><h3>Nothing pending</h3><p class="muted">No next action or blockers were derived for this case.</p></div>';
+  return '<div class="card" id="case-checklist"><h3>Next steps</h3>' + items.map((item) =>
+    '<div class="event" style="display:flex;justify-content:space-between;gap:10px;align-items:center' + (item.primary ? ';border-left:4px solid var(--manifest-green,#177245)' : '') + '">' +
+    '<span style="min-width:0">' + (item.primary ? '<b>Next action: </b>' : '') + esc(item.text) + '</span>' +
+    (item.tab ? '<button class="secondary compact" style="flex:none" onclick="window.location.hash=\'' + item.tab + '\'">' + esc(item.tab === 'operations' ? 'Follow-ups' : item.tab.charAt(0).toUpperCase() + item.tab.slice(1)) + '</button>' : '') +
+    '</div>').join('') + '</div>';
+}
+
+function caseJumpBar(records) {
+  const inquiryId = records.inquiryId;
+  const buttons = [['inquiry', 'Requirements'], ['quotation', 'Quotation'], ['booking', 'Booking'], ['finance', 'Payments'], ['operations', 'Documents &amp; follow-ups']];
+  return '<div class="row-actions" style="flex-wrap:wrap">' + buttons.map(([tab, label]) =>
+    '<button class="secondary compact" onclick="openCaseAt(\'' + tab + '\', \'' + esc(inquiryId) + '\')">' + label + '</button>').join('') + '</div>';
+}
+
+function renderCaseWorkspace() {
+  const target = $('case-workspace-content');
+  if (!target) return;
+  const records = caseRecords();
+  if (!records.inquiry) {
+    target.innerHTML = '<div class="empty">No case selected. Open a case from the Dashboard queues, search, or the Inquiries tab.</div>';
+    return;
+  }
+  const requirements = records.inquiry.current_requirements || {};
+  const projection = projectionForCase(records);
+  const finance = (projection && projection.finance) || {};
+  const booking = records.booking;
+  const bookingId = booking && booking.booking_id;
+  const quotations = list('Quotation', (quote) => quote.inquiry_id === records.inquiryId);
+  const participants = bookingId ? list('BookingParticipant', (participant) => participant.booking_id === bookingId) : [];
+  const tasks = list('Task', (task) => task.related_type === 'Inquiry' && task.related_id === records.inquiryId);
+  const documents = list('Document', (document) => documentRelated(document, records));
+
+  const summaryCard =
+    '<div class="card"><div class="panel-head"><div><h3>' + esc((records.client && records.client.display_name) || 'Client') + ' · ' + esc(requirements.destination || 'Destination pending') + '</h3>' +
+    '<p class="muted">' + esc(requirements.travel_start || requirements.travel_month || requirements.travel_year || 'Travel timing not recorded') + (requirements.travel_end ? ' – ' + esc(requirements.travel_end) : '') + ' · ' + esc(requirements.pax_count || travelerCompositionLabel(requirements)) + '</p></div>' +
+    status(projection && projection.currentStage || 'NOT_PROJECTED', records.booking ? 'good' : 'info') + '</div>' +
+    '<div class="case-meta">' +
+    '<span>Inquiry ' + esc(records.inquiry.inquiry_id) + '</span>' +
+    (records.quotation ? '<span>Quote ' + esc(records.quotation.quotation_id) + ' · ' + esc(records.quotation.status || '') + '</span>' : '<span>No quotation yet</span>') +
+    (bookingId ? '<span>Booking ' + esc(bookingId) + '</span>' : '') +
+    (records.client && records.client.primary_phone ? '<span>' + esc(records.client.primary_phone) + '</span>' : '') +
+    '</div>' +
+    '<div style="margin-top:10px">' + caseJumpBar(records) + '</div></div>';
+
+  const quotesCard =
+    '<div class="card"><h3>Quotations (' + quotations.length + ')</h3>' +
+    (quotations.length ? '<div class="table-wrap"><table><thead><tr><th>Quote</th><th>Status</th><th>Client total</th><th>Valid until</th><th></th></tr></thead><tbody>' +
+      quotations.map((quote) => '<tr><td>' + esc(quote.quotation_id) + '</td><td>' + status(quote.status || 'DRAFT', quote.status === 'APPROVED' ? 'good' : '') + '</td><td>' + esc(quote.client_total || '—') + ' ' + esc(quote.currency || '') + '</td><td>' + esc(quote.valid_until || '—') + '</td><td><button class="secondary compact" onclick="openCaseAt(\'quotation\', \'' + esc(records.inquiryId) + '\')">Open</button></td></tr>').join('') +
+      '</tbody></table></div>' : '<p class="muted">No quotation yet for this case.</p>') + '</div>';
+
+  const bookingCard =
+    '<div class="card"><h3>Booking &amp; travelers</h3>' +
+    (booking
+      ? field('Booking status', booking.status) + field('Travel dates', [booking.travel_start, booking.travel_end].filter(Boolean).join(' – ') || 'Not recorded') + field('Lead pax', participants.map((participant) => participant.full_name || participant.name).filter(Boolean).join(', ') || booking.lead_pax_person_id || 'Not recorded') +
+        (participants.length ? '<details class="secondary-details"><summary>Participants (' + participants.length + ')</summary>' + participants.map((participant) => '<div class="event"><strong>' + esc(participant.full_name || participant.name || 'Participant') + '</strong>' + (participant.participant_type ? ' · ' + esc(participant.participant_type) : '') + '</div>').join('') + '</details>' : '')
+      : '<p class="muted">No booking yet — the quotation must be accepted first.</p>') + '</div>';
+
+  const obligations = finance.obligations || [];
+  const paymentsCard =
+    '<div class="card"><h3>Payments</h3>' +
+    (booking
+      ? (obligations.length
+          ? '<div class="table-wrap"><table><thead><tr><th>Purpose</th><th>Amount</th><th>Outstanding</th><th>Due</th><th>State</th></tr></thead><tbody>' +
+            obligations.map((obligation) => '<tr><td>' + esc((obligation.purpose || 'INSTALLMENT').replace(/_/g, ' ').toLowerCase()) + '</td><td>' + esc(obligation.amount) + ' ' + esc(obligation.currency || '') + '</td><td>' + esc(obligation.outstanding) + '</td><td>' + esc(obligation.dueAt ? String(obligation.dueAt).slice(0, 10) : '—') + '</td><td>' + status(readableState(obligation.state), obligation.state === 'SATISFIED' ? 'good' : 'warn') + '</td></tr>').join('') +
+            '</tbody></table></div>'
+          : '<p class="muted">No payment obligations recorded yet.</p>') +
+        '<div class="case-meta" style="margin-top:8px"><span>Obligation total: ' + esc(finance.obligationTotal || '0.00') + '</span><span>Verified received: ' + esc(finance.verifiedReceived || '0.00') + '</span></div>'
+      : '<p class="muted">Payments start after the booking exists.</p>') + '</div>';
+
+  const supplierCard =
+    '<div class="card"><h3>Supplier fulfillment</h3>' +
+    (records.supplierBookings.length
+      ? records.supplierBookings.map((supplierBooking) => {
+          const supplier = latest('Supplier', (item) => item.supplier_id === supplierBooking.supplier_id);
+          return '<div class="event"><strong>' + esc((supplier && (supplier.display_name || supplier.legal_name)) || supplierBooking.supplier_id || 'Supplier') + '</strong> · ' +
+            status(readableState(supplierBooking.reservation_state || 'PENDING'), supplierBooking.reservation_state === 'CONFIRMED' ? 'good' : 'warn') +
+            (supplierBooking.fulfillment_state ? ' · ' + status(readableState(supplierBooking.fulfillment_state)) : '') + '</div>';
+        }).join('')
+      : '<p class="muted">No supplier reservations yet for this booking.</p>') + '</div>';
+
+  const docsCard =
+    '<div class="card"><h3>Documents &amp; follow-ups</h3>' +
+    (documents.length ? documents.map((document) => '<div class="event">' + esc(document.file_name || document.document_type || 'Document') + '</div>').join('') : '<p class="muted">No documents linked to this case.</p>') +
+    (tasks.length ? '<div style="margin-top:8px"><b>Tasks</b>' + tasks.map((task) => '<div class="event">' + esc(task.title) + (task.due_at ? ' · due ' + esc(String(task.due_at).slice(0, 10)) : '') + ' · ' + status(readableState(task.state), task.state === 'COMPLETED' ? 'good' : task.state === 'OPEN' ? 'warn' : '') + '</div>').join('') + '</div>' : '') +
+    '</div>';
+
+  target.innerHTML =
+    summaryCard +
+    caseChecklistMarkup(records, projection) +
+    '<div class="grid2">' + quotesCard + bookingCard + paymentsCard + supplierCard + '</div>' +
+    docsCard;
 }
 
 function renderDashboard() {
@@ -3075,6 +3205,7 @@ function renderCasePlaceholder() {
 
 const workspaceRenderers = {
   dashboard: renderDashboard,
+  case: renderCaseWorkspace,
   inquiry: renderInquiry,
   quotation: renderQuotation,
   booking: renderBooking,
