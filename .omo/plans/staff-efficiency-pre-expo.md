@@ -61,12 +61,12 @@ LEAD_FOLLOWUP_1 (day-1 thank-you), LEAD_FOLLOWUP_NUDGE (day-3/7), NO_REPLY_CLOSI
   Acceptance: typing a mobile number or last name finds the person and lands on their record in ≤2 interactions; QA covers mobile + email + ID lookups.
   Commit: `workspace: global search across clients, leads, bookings, suppliers`.
 
-- [ ] 4. Wave 2 — Case workspace
+- [x] 4. Wave 2 — Case workspace
   Steps: (a) new view (hash `#case` + client/booking selection) assembling the full trip from existing snapshot data; (b) sections: client + trip summary, inquiry → options → quotation history, booking + travelers, payments/payables, supplier fulfillments, documents, audit/timeline; (c) plain-language next-steps checklist mapped from case-projection blocker codes; (d) dashboard rows, search results, and message contexts link here.
   Acceptance: the Maria's-Korea-trip scenario (lead → quote → booking → partial payment) is fully serviceable from this one screen; every blocker sentence names the action ("Record the 50% deposit…"); QA walks the full lifecycle.
   Commit: `workspace: case workspace — one screen per trip`.
 
-- [ ] 5. Wave 2 — Mobile pass
+- [x] 5. Wave 2 — Mobile pass
   Steps: responsive audit + fixes at 390px and 768px for dashboard, case workspace, search, message actions (≥44px primary targets, no horizontal overflow, tables → stacked cards where needed).
   Acceptance: Playwright viewport QA (390×800, 768×1024) shows no horizontal scroll on those surfaces and primary actions are tappable-size; screenshots captured.
   Commit: `workspace: mobile pass on dashboard, case, search, messages`.
