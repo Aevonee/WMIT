@@ -71,13 +71,13 @@ LEAD_FOLLOWUP_1 (day-1 thank-you), LEAD_FOLLOWUP_NUDGE (day-3/7), NO_REPLY_CLOSI
   Acceptance: Playwright viewport QA (390×800, 768×1024) shows no horizontal scroll on those surfaces and primary actions are tappable-size; screenshots captured.
   Commit: `workspace: mobile pass on dashboard, case, search, messages`.
 
-- [ ] 6. Wave 3 — Invoice document  **(blocked until owner samples exist in data/samples/)**
+- [x] 6. Wave 3 — Invoice document  **(blocked until owner samples exist in data/samples/)**
   Read first: every file in `data/samples/`; mirror its structure exactly (sections, deposit/balance lines, TIN/VAT if present).
   Steps: (a) `getClientInvoicePreview`-style render from a booking's recorded obligations/payments (deposit invoice and balance statement per sample convention); (b) branded print/PDF via the existing preview pattern; (c) email via existing mailer/outbox with medium-risk confirmation; (d) audit-logged issue event; render-only — never writes financial records.
   Acceptance: generated invoice matches the owner sample's structure with values from real records; sending requires explicit confirmation; tests cover amount rendering, missing-payment handling, and the confirmation gate.
   Commit: `documents: client invoice generation from booking records`.
 
-- [ ] 7. Wave 3 — Itinerary document  **(blocked until owner samples exist)**
+- [x] 7. Wave 3 — Itinerary document  **(blocked until owner samples exist)**
   Steps: render quotation itinerary days (city, title, activities, meals, overnight) + flights and voucher references when recorded; same branded pattern and QA as todo 6.
   Commit: `documents: client itinerary generation from quotation data`.
 
