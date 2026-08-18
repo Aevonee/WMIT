@@ -149,6 +149,47 @@ function itineraryEmailText(data) {
   return lines.join('\r\n');
 }
 
+function receiptEmailText(data) {
+  const receipt = data.receipt || {};
+  const lines = [];
+  lines.push('Dear ' + ((data.client && data.client.name) || 'Client') + ',');
+  lines.push('');
+  lines.push('We confirm receipt of your payment. Thank you.');
+  lines.push('');
+  lines.push('Amount received: ' + receipt.amount + ' ' + (receipt.currency || ''));
+  lines.push('Received on: ' + String(receipt.received_at || '').slice(0, 10));
+  if (receipt.booking_id) lines.push('Booking: ' + receipt.booking_id);
+  if (receipt.proof_reference) lines.push('Reference: ' + receipt.proof_reference);
+  if (receipt.received_by) lines.push('Received by: ' + String(receipt.received_by).replace(/^USER:/, ''));
+  lines.push('Receipt status: ' + (receipt.status === 'ISSUED' ? 'Official receipt ' + (receipt.receipt_id || '') : 'Acknowledgement (official receipt not yet issued)'));
+  lines.push('');
+  lines.push('Thank you for choosing World Master International Travel.');
+  return lines.join('\r\n');
+}
+
+function voucherEmailText(data) {
+  const booking = data.booking || {};
+  const lines = [];
+  lines.push('Dear ' + (booking.client_name || 'Client') + ',');
+  lines.push('');
+  lines.push('Your confirmed tour voucher' + (booking.destination ? ' for ' + booking.destination : '') + ' is ready.');
+  if (booking.travel_start) lines.push('Travel: ' + booking.travel_start + (booking.travel_end ? ' to ' + booking.travel_end : ''));
+  lines.push('');
+  const vouchers = data.vouchers || [];
+  if (vouchers.length) {
+    lines.push('Vouchers issued:');
+    vouchers.forEach((voucher) => {
+      lines.push('  ' + voucher.voucher_number + ' — ' + (voucher.service_description || 'Booked service') + (voucher.supplier_name ? ' (' + voucher.supplier_name + ')' : ''));
+    });
+  } else {
+    lines.push('No vouchers have been issued for this booking yet.');
+  }
+  lines.push('');
+  lines.push('Please present the voucher to each supplier on arrival.');
+  lines.push('— World Master International Travel');
+  return lines.join('\r\n');
+}
+
 function createMvpServer(options) {
   const app = (options && options.app) || seedDemoRuntime(options);
   const phase1 = (options && options.phase1App) || createPhase1Application(options);
@@ -158,6 +199,7 @@ function createMvpServer(options) {
   const expo = (options && options.expo) || null;
   const mailer = (options && options.mailer) || null;
   const documentAuditLog = (options && options.auditLog) || null;
+  const auditLogReader = documentAuditLog;
   // Optional shared-secret guard for mutating endpoints. When unset (the local
   // default), the server keeps its loopback-only behaviour.
   const actorToken = (options && options.actorToken) || process.env.WMIT_MVP_ACTOR_TOKEN || null;
@@ -265,15 +307,24 @@ function createMvpServer(options) {
           } else if (kind === 'itinerary') {
             entityId = String(body.quotation_id || '');
             rendered = phase1 && typeof phase1.action === 'function' ? await Promise.resolve(phase1.action({ action: 'getClientItineraryPreview', input: { quotation_id: entityId }, actor: req.wmitActor })) : null;
+          } else if (kind === 'receipt') {
+            entityId = String(body.receipt_id || body.client_payment_id || '');
+            rendered = phase1 && typeof phase1.action === 'function' ? await Promise.resolve(phase1.action({ action: 'getPaymentReceiptPreview', input: { receipt_id: body.receipt_id, client_payment_id: body.client_payment_id }, actor: req.wmitActor })) : null;
+          } else if (kind === 'voucher') {
+            entityId = String(body.booking_id || '');
+            rendered = phase1 && typeof phase1.action === 'function' ? await Promise.resolve(phase1.action({ action: 'getClientVoucherPreview', input: { booking_id: entityId }, actor: req.wmitActor })) : null;
           } else {
-            return json(res, 400, { ok: false, error: { code: 'DOCUMENT_KIND_INVALID', message: 'kind must be invoice or itinerary.' } });
+            return json(res, 400, { ok: false, error: { code: 'DOCUMENT_KIND_INVALID', message: 'kind must be invoice, itinerary, receipt, or voucher.' } });
           }
           if (!rendered || !rendered.ok) return json(res, 400, rendered || { ok: false, error: { code: 'DOCUMENT_UNAVAILABLE', message: 'The document could not be generated.' } });
-          const subject = kind === 'invoice'
-            ? 'World Master International Travel — Statement of Account (' + (rendered.data.invoice && rendered.data.invoice.booking_id || entityId) + ')'
-            : 'World Master International Travel — Travel Itinerary (' + (rendered.data.itinerary && rendered.data.itinerary.destination || entityId) + ')';
-          const text = kind === 'invoice' ? invoiceEmailText(rendered.data) : itineraryEmailText(rendered.data);
-          const delivery = await mailer.send({ to: email, subject, text });
+          const subjects = {
+            invoice: 'World Master International Travel — Statement of Account (' + (rendered.data.invoice && rendered.data.invoice.booking_id || entityId) + ')',
+            itinerary: 'World Master International Travel — Travel Itinerary (' + (rendered.data.itinerary && rendered.data.itinerary.destination || entityId) + ')',
+            receipt: 'World Master International Travel — Payment Receipt (' + (rendered.data.receipt && rendered.data.receipt.booking_id || entityId) + ')',
+            voucher: 'World Master International Travel — Confirmed Tour Voucher (' + (rendered.data.booking && rendered.data.booking.booking_id || entityId) + ')'
+          };
+          const textFor = { invoice: invoiceEmailText, itinerary: itineraryEmailText, receipt: receiptEmailText, voucher: voucherEmailText };
+          const delivery = await mailer.send({ to: email, subject: subjects[kind], text: textFor[kind](rendered.data) });
           if (documentAuditLog) {
             try {
               documentAuditLog.record({ actor: req.wmitActor || 'LOCAL_STAFF', action: 'EMAIL_DOCUMENT', entity_type: 'Document', entity_id: kind.toUpperCase() + ':' + entityId, result: delivery && delivery.sent ? 'SUCCESS' : 'DRAFT', details: { to: email, kind, mode: delivery && delivery.mode } });
@@ -294,8 +345,35 @@ function createMvpServer(options) {
             return json(res, 400, { ok: false, error: { code: error.code || 'ACCOUNT_PASSWORD_INVALID', message: error.message } });
           }
         }
-        if (parsed.pathname.startsWith('/api/admin/accounts')) {
+        if (parsed.pathname === '/api/admin/system-health' && req.method === 'GET') {
           if (!auth) return json(res, 501, { ok: false, error: { code: 'AUTH_UNAVAILABLE', message: 'This server runs without an account store.' } });
+          const session = req.wmitSession || auth.sessionFor(bearerToken(req));
+          if (!session) return json(res, 401, { ok: false, error: { code: 'UNAUTHORIZED', message: 'Sign in to WMIT to use this API.' } });
+          if (session.role !== 'ADMIN') return json(res, 403, { ok: false, error: { code: 'ADMIN_REQUIRED', message: 'Only Admin accounts can read system health.' } });
+          const db = auditLogReader && auditLogReader.db;
+          if (!db) return json(res, 200, { ok: true, data: { available: false } });
+          const { lastSuccessfulRun, auditChainValid, latestHeartbeat } = require('../src/server/jobs');
+          let lastBackup = null;
+          let chain = null;
+          let heartbeat = null;
+          try { lastBackup = lastSuccessfulRun(db, 'backup'); } catch (_) { lastBackup = null; }
+          try { chain = auditChainValid(db); } catch (_) { chain = null; }
+          try { heartbeat = latestHeartbeat(db); } catch (_) { heartbeat = null; }
+          return json(res, 200, { ok: true, data: { available: true, lastBackup, auditChain: chain, heartbeat } });
+        }
+        if (parsed.pathname === '/api/admin/audit' && req.method === 'GET') {
+          if (!auth) return json(res, 501, { ok: false, error: { code: 'AUTH_UNAVAILABLE', message: 'This server runs without an account store.' } });
+          const session = req.wmitSession || auth.sessionFor(bearerToken(req));
+          if (!session) return json(res, 401, { ok: false, error: { code: 'UNAUTHORIZED', message: 'Sign in to WMIT to use this API.' } });
+          if (session.role !== 'ADMIN') return json(res, 403, { ok: false, error: { code: 'ADMIN_REQUIRED', message: 'Only Admin accounts can read the audit log.' } });
+          if (!auditLogReader) return json(res, 501, { ok: false, error: { code: 'AUDIT_UNAVAILABLE', message: 'This server runs without an audit log.' } });
+          const limitParam = Number(parsed.searchParams.get('limit') || 50);
+          const limit = Number.isFinite(limitParam) && limitParam > 0 && limitParam <= 500 ? limitParam : 50;
+          let chainVerified = null;
+          try { chainVerified = auditLogReader.verifyChain ? auditLogReader.verifyChain() : null; } catch (_) { chainVerified = null; }
+          return json(res, 200, { ok: true, data: { events: auditLogReader.list(limit), chain_verified: chainVerified }, meta: { action: 'ADMIN_AUDIT' } });
+        }
+        if (parsed.pathname.startsWith('/api/admin/accounts')) {          if (!auth) return json(res, 501, { ok: false, error: { code: 'AUTH_UNAVAILABLE', message: 'This server runs without an account store.' } });
           const session = req.wmitSession || auth.sessionFor(bearerToken(req));
           if (!session) return json(res, 401, { ok: false, error: { code: 'UNAUTHORIZED', message: 'Sign in to WMIT to use this API.' } });
           if (session.role !== 'ADMIN') return json(res, 403, { ok: false, error: { code: 'ADMIN_REQUIRED', message: 'Only Admin accounts manage WMIT accounts.' } });
@@ -358,6 +436,7 @@ function createMvpServer(options) {
               '/api/expo/expos/status': () => expo.setExpoStatus(body, actor),
               '/api/expo/leads/import': () => expo.importLeads(body, actor),
               '/api/expo/leads/update': () => expo.updateLeadStatus(body, actor),
+              '/api/expo/leads/convert': () => expo.convertLead(body, actor),
               '/api/expo/leads/contact': () => expo.updateLead(body, actor),
               '/api/expo/followups/complete': () => expo.completeFollowUp(body, actor),
               '/api/expo/templates/create': () => expo.createTemplate(body, actor),
