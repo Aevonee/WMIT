@@ -39,7 +39,7 @@ const ENTITY_DEFS = {
   Task: ['TASK', true], CommunicationActivity: ['COMMUNICATION', true],
   Departure: ['DEPARTURE', true], DepartureMembership: ['DEPARTURE_MEMBERSHIP', true], DepartureReadinessIssue: ['DEPARTURE_ISSUE', true],
   ExpoLead: ['EXPO_LEAD', true], ExpoPackageTemplate: ['EXPO_PACKAGE', true], ExpoQuote: ['EXPO_QUOTE', true],
-  ExpoEvent: ['EXPO_EVENT', true],
+  ExpoEvent: ['EXPO_EVENT', true], Receipt: ['RECEIPT', true],
   AuditEvent: ['AUDIT_EVENT', true]
 };
 
@@ -49,7 +49,7 @@ const ACTIONS = Object.freeze({
   RESERVE_SUPPLIER: 'RESERVE_SUPPLIER', APPROVE_PAYABLE: 'APPROVE_PAYABLE',
   SUPPLIER_PAYMENT: 'SUPPLIER_PAYMENT', PRICE_OVERRIDE: 'PRICE_OVERRIDE',
   CONFIRM_COMMITMENT: 'CONFIRM_COMMITMENT', REFUND: 'REFUND',
-  DELETE_TARIFF: 'DELETE_TARIFF',
+  DELETE_TARIFF: 'DELETE_TARIFF', DELETE_SUPPLIER: 'DELETE_SUPPLIER',
   CLIENT_ACCEPT_AMENDMENT: 'CLIENT_ACCEPT_AMENDMENT', ACCEPT_QUOTATION: 'ACCEPT_QUOTATION',
   RECORD_TICKETING: 'RECORD_TICKETING', ISSUE_VOUCHER: 'ISSUE_VOUCHER', RECONCILE_BOOKING: 'RECONCILE_BOOKING', CONFIGURE_SETTINGS: 'CONFIGURE_SETTINGS'
 });
@@ -79,7 +79,7 @@ function requireValue(value, name) {
 }
 function money(value, field) {
   try { return fromMinorUnits(toMinorUnits(requireValue(value, field || 'amount'))); }
-  catch (error) { throw new WmitError('INVALID_MONEY', field + ' must be a valid non-negative amount.'); }
+  catch (error) { throw new WmitError('INVALID_MONEY', (field || 'amount') + ' must be a valid non-negative amount.', { field: field || 'amount' }); }
 }
 function addMoney(a, b) { return fromMinorUnits(toMinorUnits(a || 0) + toMinorUnits(b || 0)); }
 function subtractMoney(a, b) {
@@ -246,6 +246,11 @@ class Phase1Runtime {
       const value = Object.assign({}, input || {});
       const displayName = String(value.display_name || value.legal_name || '').trim();
       requireValue(displayName, 'display_name');
+      const normalized = displayName.toLowerCase();
+      const duplicate = this.list('Client', (client) => String(client.display_name || '').trim().toLowerCase() === normalized);
+      if (duplicate.length) {
+        throw new WmitError('CLIENT_DUPLICATE', 'A client with that name already exists (' + duplicate[0].client_id + '). Open the existing record instead of creating a second one.', { display_name: displayName, existing_client_id: duplicate[0].client_id });
+      }
       return this.createRecord('Client', Object.assign({ status: 'ACTIVE' }, value, {
         display_name: displayName,
         legal_name: String(value.legal_name || displayName).trim()
@@ -286,6 +291,56 @@ class Phase1Runtime {
       this.must('Supplier', value.supplier_id);
       return this.createRecord('SupplierContact', value, context);
     } catch (error) { return fail(error); }
+  }
+  updateSupplier(supplierId, changes, context) {
+    try {
+      const current = this.must('Supplier', supplierId);
+      const next = Object.assign({}, current, changes || {});
+      const displayName = String(next.display_name || next.legal_name || '').trim();
+      requireValue(displayName, 'display_name');
+      const normalized = displayName.toLowerCase();
+      const clash = this.list('Supplier', (supplier) => String(supplier.display_name || '').trim().toLowerCase() === normalized && supplier.supplier_id !== supplierId);
+      if (clash.length) {
+        throw new WmitError('SUPPLIER_DUPLICATE', 'Another supplier with that name already exists.', { display_name: displayName, supplier_id: clash[0].supplier_id });
+      }
+      return this.updateRecord('Supplier', supplierId, Object.assign({}, changes || {}, {
+        display_name: displayName,
+        legal_name: String(next.legal_name || displayName).trim()
+      }), context);
+    } catch (error) { return fail(error); }
+  }
+  deleteSupplier(input, context) {
+    try {
+      this.requireAuthorization(ACTIONS.DELETE_SUPPLIER, context);
+      const value = input || {};
+      if (value.confirm !== true) {
+        throw new WmitError('DELETE_CONFIRMATION_REQUIRED', 'Supplier deletion requires an explicit confirmation.', { supplier_id: value.supplier_id || null });
+      }
+      const supplier = this.must('Supplier', requireValue(value.supplier_id, 'supplier_id'));
+      const blocking = {};
+      [['TariffSource', 'tariff_sources'], ['SupplierPackage', 'packages'], ['SupplierBooking', 'supplier_bookings'], ['SupplierPayable', 'supplier_payables'], ['BookingItem', 'booking_items'], ['Document', 'documents']].forEach((pair) => {
+        const count = this.list(pair[0], (record) => record.supplier_id === supplier.supplier_id).length;
+        if (count) blocking[pair[1]] = count;
+      });
+      if (Object.keys(blocking).length) {
+        throw new WmitError('SUPPLIER_IN_USE', 'This supplier is referenced by operational or financial records and cannot be deleted.', { supplier_id: supplier.supplier_id, blocking_records: blocking });
+      }
+      const contacts = this.list('SupplierContact', (record) => record.supplier_id === supplier.supplier_id);
+      contacts.forEach((contact) => {
+        this.repos.SupplierContact.delete(contact.supplier_contact_id);
+        this.audit('DELETE', 'SupplierContact', contact, context);
+      });
+      this.repos.Supplier.delete(supplier.supplier_id);
+      this.audit('DELETE', 'Supplier', supplier, context, {
+        deleted_contacts: contacts.length,
+        display_name: supplier.display_name || null,
+        country: supplier.country || null
+      });
+      return ok({ deleted: true, supplier_id: supplier.supplier_id, removed_contacts: contacts.length }, { action: 'DELETE_SUPPLIER' });
+    } catch (error) {
+      this.auditFailure('DELETE_SUPPLIER', 'Supplier', input, this.context(context), error);
+      return fail(error);
+    }
   }
   createSubAgent(input, context) {
     try {
@@ -1507,12 +1562,115 @@ class Phase1Runtime {
     try {
       this.requireAuthorization(ACTIONS.ISSUE_VOUCHER, context);
       const item = this.must('BookingItem', input.booking_item_id);
-      const voucherNumber = requireValue(input.voucher_number, 'voucher_number');
       const existing = this.list('Voucher', (voucher) => voucher.booking_item_id === item.booking_item_id && voucher.status === 'ISSUED');
       if (existing.length) return ok(existing[0], { action: 'IDEMPOTENT_REPLAY', idempotent: true });
-      const voucher = this.createRecord('Voucher', Object.assign({}, input, { booking_id: item.booking_id, booking_item_id: item.booking_item_id, voucher_number: voucherNumber, status: 'ISSUED', issued_at: this.now(), issued_by: this.context(context).actor }), context);
+      const suppliedNumber = String(input.voucher_number || '').trim();
+      const voucher = this.createRecord('Voucher', Object.assign({}, input, { booking_id: item.booking_id, booking_item_id: item.booking_item_id, voucher_number: suppliedNumber || undefined, status: 'ISSUED', issued_at: this.now(), issued_by: this.context(context).actor }), context);
+      if (!voucher.ok) return voucher;
+      if (!suppliedNumber) {
+        const stamped = this.updateRecord('Voucher', voucher.data.voucher_id, { voucher_number: voucher.data.voucher_id }, context);
+        if (stamped.ok) this.updateBookingItem({ booking_item_id: item.booking_item_id, fulfillment_state: 'VOUCHERED' }, context);
+        return stamped;
+      }
       if (voucher.ok) this.updateBookingItem({ booking_item_id: item.booking_item_id, fulfillment_state: 'VOUCHERED' }, context);
       return voucher;
+    } catch (error) { return fail(error); }
+  }
+  issueReceipt(input, context) {
+    try {
+      this.requireAuthorization(ACTIONS.ISSUE_VOUCHER, context);
+      const payment = this.must('ClientPayment', requireValue(input.client_payment_id, 'client_payment_id'));
+      if (payment.payment_state !== 'VERIFIED') {
+        throw new WmitError('RECEIPT_PAYMENT_NOT_VERIFIED', 'Receipts can only be issued for verified payments. Verify the payment first.', { client_payment_id: payment.client_payment_id, payment_state: payment.payment_state });
+      }
+      const existing = this.list('Receipt', (receipt) => receipt.client_payment_id === payment.client_payment_id && receipt.status === 'ISSUED');
+      if (existing.length) return ok(existing[0], { action: 'IDEMPOTENT_REPLAY', idempotent: true });
+      return this.createRecord('Receipt', Object.assign({}, input, {
+        client_payment_id: payment.client_payment_id,
+        booking_id: payment.booking_id,
+        client_id: payment.client_id || null,
+        amount: payment.amount,
+        currency: payment.currency,
+        status: 'ISSUED',
+        issued_at: this.now(),
+        issued_by: this.context(context).actor
+      }), context);
+    } catch (error) { return fail(error); }
+  }
+  getPaymentReceiptPreview(receiptId) {
+    try {
+      const id = receiptId && typeof receiptId === 'object' ? receiptId.receipt_id || receiptId.client_payment_id : receiptId;
+      if (!id) throw new WmitError('RECEIPT_REQUIRED', 'A receipt ID is required to generate the receipt preview.');
+      let receipt = this.repos.Receipt.exists(id) ? this.must('Receipt', id) : null;
+      let payment = null;
+      if (receipt) {
+        payment = this.must('ClientPayment', receipt.client_payment_id);
+      } else {
+        payment = this.must('ClientPayment', id);
+        receipt = this.list('Receipt', (record) => record.client_payment_id === payment.client_payment_id && record.status === 'ISSUED')[0] || null;
+      }
+      const booking = payment.booking_id ? this.must('Booking', payment.booking_id) : null;
+      const client = payment.client_id ? this.must('Client', payment.client_id) : (booking && booking.client_id ? this.must('Client', booking.client_id) : null);
+      const quotation = booking && booking.quotation_id ? this.must('Quotation', booking.quotation_id) : null;
+      return ok({
+        receipt: {
+          receipt_id: receipt ? receipt.receipt_id : null,
+          booking_id: payment.booking_id,
+          client_payment_id: payment.client_payment_id,
+          amount: payment.amount,
+          currency: payment.currency,
+          received_at: payment.actual_sent_at || payment.created_at,
+          purpose: payment.purpose || null,
+          proof_reference: payment.proof_reference || null,
+          verified_at: payment.verified_at || null,
+          received_by: (receipt && receipt.issued_by) || payment.verified_by || null,
+          issued_at: receipt ? receipt.issued_at : this.now(),
+          status: receipt ? 'ISSUED' : 'NOT_ISSUED'
+        },
+        client: client ? { name: client.display_name || client.legal_name, email: client.primary_email || null } : null,
+        booking: booking ? { destination: quotation ? quotation.destination : booking.travel_start, travel_start: quotation ? quotation.travel_start : booking.travel_start, travel_end: quotation ? quotation.travel_end : booking.travel_end } : null,
+        company: {
+          name: 'World Master International Travel',
+          bank_details: (this.config.quotationDefaults && this.config.quotationDefaults.bankDetails) || DEFAULT_BANK_DETAILS
+        }
+      });
+    } catch (error) { return fail(error); }
+  }
+  getClientVoucherPreview(bookingId) {
+    try {
+      const id = bookingId && typeof bookingId === 'object' ? bookingId.booking_id : bookingId;
+      if (!id) throw new WmitError('BOOKING_REQUIRED', 'A booking ID is required to generate the voucher preview.');
+      const booking = this.must('Booking', id);
+      const quotation = booking.quotation_id ? this.must('Quotation', booking.quotation_id) : null;
+      const client = booking.client_id ? this.must('Client', booking.client_id) : null;
+      const bookingItems = this.list('BookingItem', (record) => record.booking_id === booking.booking_id);
+      const itemIds = new Set(bookingItems.map((record) => record.booking_item_id));
+      const vouchers = this.list('Voucher', (voucher) => itemIds.has(voucher.booking_item_id) && String(voucher.status || 'ISSUED') === 'ISSUED');
+      return ok({
+        booking: {
+          booking_id: booking.booking_id,
+          commitment_state: booking.commitment_state || null,
+          client_name: (client && (client.display_name || client.legal_name)) || booking.client_id,
+          destination: quotation ? quotation.destination : null,
+          travel_start: quotation ? quotation.travel_start : booking.travel_start || null,
+          travel_end: quotation ? quotation.travel_end : booking.travel_end || null,
+          currency: quotation ? quotation.currency : this.config.defaultCurrency,
+          client_total: quotation ? quotation.client_total : null
+        },
+        vouchers: vouchers.map((voucher) => {
+          const item = bookingItems.find((record) => record.booking_item_id === voucher.booking_item_id);
+          const supplier = item && item.supplier_id ? (this.repos.Supplier.exists(item.supplier_id) ? this.must('Supplier', item.supplier_id) : null) : null;
+          return {
+            voucher_number: voucher.voucher_number,
+            issued_at: voucher.issued_at,
+            service_description: (item && (item.description || item.service_type)) || 'Booked service',
+            supplier_name: supplier ? supplier.display_name : null,
+            supplier_contact: supplier ? supplier.primary_email : null
+          };
+        }),
+        vouchers_issued: vouchers.length,
+        generated_at: this.now()
+      });
     } catch (error) { return fail(error); }
   }
   createRoomingListEntry(input, context) {

@@ -109,6 +109,62 @@ test('itinerary preview renders days, flights, and issued vouchers', () => {
   assert.equal(preview.data.booking.booking_id, chain.booking.booking_id);
 });
 
+test('receipts issue only for verified payments, use sequential year-based ids, and are idempotent', () => {
+  const runtime = createPhase1Runtime({ clock: () => new Date('2026-08-18T09:00:00Z'), config: { trustedActors: AUTH } });
+  const chain = buildChain(runtime);
+
+  const payment = runtime.recordClientPayment({ booking_id: chain.booking.booking_id, amount: '39000.00', currency: 'PHP', proof_reference: 'RECEIPT-PROOF-1', actual_sent_at: '2026-08-18T08:00:00Z' }, staff()).data;
+
+  const unverified = runtime.issueReceipt({ client_payment_id: payment.payment.client_payment_id }, manager());
+  assert.equal(unverified.ok, false);
+  assert.equal(unverified.error.code, 'RECEIPT_PAYMENT_NOT_VERIFIED');
+
+  runtime.verifyClientPayment({ client_payment_id: payment.payment.client_payment_id }, manager());
+  const issued = runtime.issueReceipt({ client_payment_id: payment.payment.client_payment_id }, manager());
+  assert.equal(issued.ok, true);
+  assert.match(issued.data.receipt_id, /^RECEIPT-2026-\d{6}$/);
+  assert.equal(issued.data.status, 'ISSUED');
+  assert.equal(issued.data.amount, '39000.00');
+
+  const replay = runtime.issueReceipt({ client_payment_id: payment.payment.client_payment_id }, manager());
+  assert.equal(replay.ok, true);
+  assert.equal(replay.meta.action, 'IDEMPOTENT_REPLAY');
+  assert.equal(runtime.list('Receipt').length, 1);
+
+  const previewByPayment = runtime.getPaymentReceiptPreview(payment.payment.client_payment_id);
+  assert.equal(previewByPayment.ok, true);
+  assert.equal(previewByPayment.data.receipt.receipt_id, issued.data.receipt_id);
+  assert.equal(previewByPayment.data.receipt.amount, '39000.00');
+  assert.equal(previewByPayment.data.client.name, 'Document Test Client');
+
+  const previewByReceipt = runtime.getPaymentReceiptPreview(issued.data.receipt_id);
+  assert.equal(previewByReceipt.ok, true);
+  assert.equal(previewByReceipt.data.receipt.receipt_id, issued.data.receipt_id);
+});
+
+test('voucher preview lists issued supplier vouchers with names and contacts', () => {
+  const runtime = createPhase1Runtime({ clock: () => new Date('2026-08-18T09:00:00Z'), config: { trustedActors: AUTH } });
+  const chain = buildChain(runtime);
+
+  const empty = runtime.getClientVoucherPreview(chain.booking.booking_id);
+  assert.equal(empty.ok, true);
+  assert.equal(empty.data.vouchers_issued, 0);
+  assert.equal(empty.data.booking.client_name, 'Document Test Client');
+  assert.equal(empty.data.booking.destination, 'Seoul');
+
+  runtime.issueVoucher({ booking_item_id: chain.bookingItems[0].booking_item_id, voucher_number: 'VCH-VOUCHER-PREVIEW-1' }, manager());
+  const preview = runtime.getClientVoucherPreview(chain.booking.booking_id);
+  assert.equal(preview.ok, true);
+  assert.equal(preview.data.vouchers_issued, 1);
+  assert.equal(preview.data.vouchers[0].voucher_number, 'VCH-VOUCHER-PREVIEW-1');
+  assert.equal(preview.data.vouchers[0].supplier_name, 'Document Test Supplier');
+  assert.ok(preview.data.vouchers[0].service_description.length > 0);
+
+  const unknown = runtime.getClientVoucherPreview('BOOKING-2099-999999');
+  assert.equal(unknown.ok, false);
+  assert.equal(unknown.error.code, 'NOT_FOUND');
+});
+
 test('document email route validates input and delivers through the mailer with an audit row', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wmit-docemail-'));
   const db = openDatabase(path.join(dir, 'doc-email.sqlite3'));

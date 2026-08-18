@@ -8,14 +8,14 @@ const { projectCase, projectCases } = require('../phase1/case-projection');
 
 const LOCAL_AUTH = {
   LOCAL_STAFF: [ACTIONS.SELECT_OPTION, ACTIONS.RESERVE_SUPPLIER, ACTIONS.ALLOCATE_PAYMENT, ACTIONS.EDIT_DRAFT_PRICING, ACTIONS.REVISE_QUOTATION, ACTIONS.ACCEPT_QUOTATION, ACTIONS.RECORD_TICKETING, ACTIONS.ISSUE_VOUCHER],
-  LOCAL_MANAGER: [ACTIONS.VERIFY_PAYMENT, ACTIONS.APPROVE_QUOTATION, ACTIONS.APPROVE_PAYABLE, ACTIONS.SUPPLIER_PAYMENT, ACTIONS.CONFIRM_COMMITMENT, ACTIONS.REFUND, ACTIONS.PRICE_OVERRIDE, ACTIONS.CLIENT_ACCEPT_AMENDMENT, ACTIONS.RECONCILE_BOOKING, ACTIONS.CONFIGURE_SETTINGS, ACTIONS.DELETE_TARIFF]
+  LOCAL_MANAGER: [ACTIONS.VERIFY_PAYMENT, ACTIONS.APPROVE_QUOTATION, ACTIONS.APPROVE_PAYABLE, ACTIONS.SUPPLIER_PAYMENT, ACTIONS.CONFIRM_COMMITMENT, ACTIONS.REFUND, ACTIONS.PRICE_OVERRIDE, ACTIONS.CLIENT_ACCEPT_AMENDMENT, ACTIONS.RECONCILE_BOOKING, ACTIONS.CONFIGURE_SETTINGS, ACTIONS.DELETE_TARIFF, ACTIONS.DELETE_SUPPLIER]
 };
 
 // Only these runtime methods may be reached through the generic action
 // dispatcher. Infrastructure internals (createRecord, updateRecord, list,
 // snapshot, calculation helpers) must never be callable by action name.
 const RUNTIME_ACTION_WHITELIST = new Set([
-  'createClient', 'updateClient', 'createPerson', 'createSupplier', 'createSupplierContact', 'createSubAgent', 'updateSubAgent', 'createInquiry', 'updateInquiry',
+  'createClient', 'updateClient', 'createPerson', 'createSupplier', 'createSupplierContact', 'updateSupplier', 'deleteSupplier', 'createSubAgent', 'updateSubAgent', 'createInquiry', 'updateInquiry',
   'uploadTariff', 'reviewTariff', 'deleteTariff',
   'createManualTariff', 'addTariffRate', 'removeTariffRate',
   'matchOptions', 'findMoreOptions', 'selectOption', 'calculateOptionCost',
@@ -29,7 +29,7 @@ const RUNTIME_ACTION_WHITELIST = new Set([
   'createClientObligation', 'createBookingPaymentObligations', 'updateSettings',
   'createClientInvoice', 'createPaymentScheduleItem',
   'recordClientPayment', 'verifyClientPayment', 'allocatePayment',
-  'createSupplierPayable', 'approveSupplierPayable', 'executeSupplierPayment',
+  'createSupplierPayable', 'approveSupplierPayable', 'executeSupplierPayment', 'issueReceipt',
   'requestRefund', 'executeRefund', 'amendBooking', 'acceptAmendment', 'reconcileBooking',
   'createDocument', 'createTask', 'updateTask', 'createCommunication',
   'createDeparture', 'addDepartureMembership', 'createDepartureReadinessIssue', 'updateDepartureReadinessIssue'
@@ -210,8 +210,11 @@ function createPhase1Application(options) {
     if (name === 'getCaseProjections') return getCaseProjections(body);
     if (name === 'getClientQuotationPreview') return runtime.getClientQuotationPreview(body && body.quotation_id || body, { actor: actor || 'LOCAL_STAFF', correlationId: (body && body.correlation_id) || null });
     if (name === 'getClientInvoicePreview') return runtime.getClientInvoicePreview(body && body.booking_id || body, { actor: actor || 'LOCAL_STAFF', correlationId: (body && body.correlation_id) || null });
+    if (name === 'getPaymentReceiptPreview') return runtime.getPaymentReceiptPreview(body && (body.receipt_id || body.client_payment_id) || body, { actor: actor || 'LOCAL_STAFF', correlationId: (body && body.correlation_id) || null });
+    if (name === 'getClientVoucherPreview') return runtime.getClientVoucherPreview(body && body.booking_id || body, { actor: actor || 'LOCAL_STAFF', correlationId: (body && body.correlation_id) || null });
     if (name === 'getClientItineraryPreview') return runtime.getClientItineraryPreview(body && body.quotation_id || body, { actor: actor || 'LOCAL_STAFF', correlationId: (body && body.correlation_id) || null });
     if (name === 'updateClient') return runtime.updateClient(body && body.client_id, body && (body.changes || body), { actor: actor || 'LOCAL_STAFF', correlationId: (body && body.correlation_id) || null });
+    if (name === 'updateSupplier') return runtime.updateSupplier(body && body.supplier_id, body && (body.changes || body), { actor: actor || 'LOCAL_STAFF', correlationId: (body && body.correlation_id) || null });
     if (name === 'updateSubAgent') return runtime.updateSubAgent(body && body.sub_agent_id, body && (body.changes || body), { actor: actor || 'LOCAL_STAFF', correlationId: (body && body.correlation_id) || null });
     if (name === 'updateInquiry') return runtime.updateInquiry(body && body.inquiry_id, { requirements: body && (body.requirements || body.current_requirements) }, { actor: actor || 'LOCAL_STAFF', correlationId: (body && body.correlation_id) || null });
     if (!RUNTIME_ACTION_WHITELIST.has(name) || typeof runtime[name] !== 'function') return { ok: false, error: { code: 'UNKNOWN_ACTION', message: 'Unknown Phase 1 action.' } };
@@ -250,6 +253,8 @@ function createPhase1Application(options) {
     createPerson: (input, actor) => call('createPerson', input, actor),
     createSupplier: (input, actor) => call('createSupplier', input, actor),
     createSupplierContact: (input, actor) => call('createSupplierContact', input, actor),
+    updateSupplier: (input, actor) => call('updateSupplier', input, actor),
+    deleteSupplier: (input, actor) => call('deleteSupplier', input, actor),
     createSubAgent: (input, actor) => call('createSubAgent', input, actor),
     updateSubAgent: (input, actor) => call('updateSubAgent', input, actor),
     createInquiry: (input, actor) => call('createInquiry', input, actor),

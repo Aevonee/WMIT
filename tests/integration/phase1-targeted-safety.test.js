@@ -51,7 +51,7 @@ test('Operations Workspace resolves Booking context through quotation and Commer
   const context = vm.createContext({
     console,
     sessionStorage,
-    fetch: async () => ({ json: async () => ({ ok: true, data: state }) }),
+    fetch: async () => ({ json: async () => ({ ok: true, data: state }), text: async () => JSON.stringify({ ok: true, data: state }) }),
     window: { location: { hash: '#dashboard' }, sessionStorage, addEventListener: () => {}, scrollTo: () => {}, confirm: () => true },
     document: { getElementById: element, querySelector: () => null, querySelectorAll: () => [] },
     setTimeout,
