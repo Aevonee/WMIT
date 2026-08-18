@@ -32,8 +32,7 @@ async function wmitGuard401(response) {
 function bindClientPicker(searchId, selectId) {
   const search = $(searchId);
   const select = $(selectId);
-  if (!search || !select) return;
-  const createButton = document.createElement('button');
+  if (!search || !select) return;  const createButton = document.createElement('button');
   createButton.type = 'button';
   createButton.className = 'secondary compact';
   createButton.hidden = true;
@@ -53,6 +52,30 @@ function bindClientPicker(searchId, selectId) {
   render();
 }
 
+function bindSupplierPicker(select) {
+  if (!select || select.dataset.supplierPicker) return;
+  select.dataset.supplierPicker = 'bound';
+  const selectedValue = select.value;
+  const search = document.createElement('input');
+  search.type = 'search';
+  search.placeholder = 'Type to filter suppliers…';
+  search.setAttribute('aria-label', 'Filter supplier list');
+  search.style.cssText = 'margin-bottom:6px';
+  select.insertAdjacentElement('beforebegin', search);
+  const options = Array.from(select.options).map((option) => ({ value: option.value, label: option.textContent }));
+  const render = () => {
+    const query = search.value.trim().toLowerCase();
+    const matches = query ? options.filter((option) => option.label.toLowerCase().includes(query)) : options;
+    select.innerHTML = (query ? '<option value="">' + (matches.length ? 'Select matching supplier (' + matches.length + ')' : 'No matching supplier') + '</option>' : options[0].outerHTML) + matches.slice(0, 60).map((option) => '<option value="' + esc(option.value) + '"' + (option.value === selectedValue ? ' selected' : '') + '>' + esc(option.label) + '</option>').join('');
+  };
+  search.addEventListener('input', render);
+  render();
+}
+
+function bindSupplierPickersIn(root) {
+  (root || document).querySelectorAll('select[id^="service-supplier-"], #new-qitem-supplier, #tariff-upload-supplier').forEach(bindSupplierPicker);
+}
+
 function beginClientCreation(name) {
   const value = String(name || '').trim();
   if (!value) return failLocal('Enter a client name before creating a new client.');
@@ -63,9 +86,23 @@ function beginClientCreation(name) {
 
 function readableState(value) {
   const raw = String(value || 'Pending');
-  const labels = { BOOKING_NOT_READY: 'Booking not ready', NOT_READY: 'Not ready', CONFIRM_CLIENT_COMMITMENT: 'Confirm client commitment' };
+  const labels = { BOOKING_NOT_READY: 'Booking not ready', NOT_READY: 'Not ready', CONFIRM_CLIENT_COMMITMENT: 'Confirm client commitment', NOT_APPLICABLE: 'Not applicable yet', NOT_STARTED: 'Not started', NOT_CONFIGURED: 'Not set up yet', PENDING: 'Pending', PAYMENT_DUE: 'Payment due' };
   if (labels[raw]) return labels[raw];
   return raw.replace(/_/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function readableTimestamp(value) {
+  if (!value) return 'Not recorded';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) + ' PHT';
+}
+
+function readablePerson(personId) {
+  if (!personId) return 'Not recorded';
+  const person = latest('Person', (item) => item.person_id === personId);
+  if (person) return person.display_name || person.full_name || person.name || personId;
+  return personId;
 }
 
 function status(value, kind) {
@@ -1002,11 +1039,11 @@ function caseCommandMarkup(records, projection) {
   const blockers = projection.blockers || [];
   const next = projection.nextAction || {};
   const deadline = (projection.deadlines || []).find((item) => item.overdue) || (projection.deadlines || [])[0];
-  const stateLine = [projection.commercial && projection.commercial.quotationState, projection.supplierFulfillment && projection.supplierFulfillment.state, projection.finance && projection.finance.state, projection.readiness && projection.readiness.state].filter(Boolean).join(' → ');
+  const stateLine = [projection.commercial && projection.commercial.quotationState, projection.supplierFulfillment && projection.supplierFulfillment.state, projection.finance && projection.finance.state, projection.readiness && projection.readiness.state].filter(Boolean).map(readableState).join(' → ');
   const blockerMarkup = blockers.length ? '<ul>' + blockers.slice(0, 4).map((item) => '<li>' + esc(item.message) + '</li>').join('') + '</ul>' : '<p class="muted">No current blockers.</p>';
   const services = Array.isArray(projection.services) ? projection.services : [];
   const serviceSummary = services.length ? '<div class="case-command-services"><b>Services</b><div class="table-wrap"><table><thead><tr><th>Service</th><th>Supplier fulfillment</th><th>Readiness</th></tr></thead><tbody>' + services.map((service) => '<tr><td>' + esc(service.description) + '</td><td>' + esc(readableState(service.fulfillment && service.fulfillment.state)) + '</td><td>' + status(readableState(service.readiness && service.readiness.state), service.readiness && service.readiness.state === 'READY' ? 'good' : 'warn') + '</td></tr>').join('') + '</tbody></table></div></div>' : '';
-  return '<div class="case-command"><div class="case-command-main"><div class="eyebrow">Case command center</div><div class="case-command-state">' + esc(stateLine || projection.currentStage) + '</div><div class="case-command-next"><span>NEXT ACTION</span><strong>' + esc(next.label || 'Review case') + '</strong><p>' + esc(next.reason || '') + '</p><button onclick="openNextAction(\'' + esc(next.code || '') + '\')">Open</button></div></div><div class="case-command-side"><div><b>Blockers</b>' + blockerMarkup + '</div>' + (deadline ? '<div class="case-deadline"><b>Next deadline</b><br>' + esc(deadline.label) + '<br>' + esc(deadline.at) + (deadline.overdue ? ' · OVERDUE' : '') + '</div>' : '') + '<div class="muted">Responsible: ' + esc(projection.responsibleActor && (projection.responsibleActor.actorId || projection.responsibleActor.role) || 'Derived from case state') + '</div></div>' + serviceSummary + '</div>';
+  return '<div class="case-command"><div class="case-command-main"><div class="eyebrow">Case command center</div><div class="case-command-state">' + esc(stateLine || projection.currentStage) + '</div><div class="case-command-next"><span>NEXT ACTION</span><strong>' + esc(next.label || 'Review case') + '</strong><p>' + esc(next.reason || '') + '</p><button onclick="openNextAction(\'' + esc(next.code || '') + '\')">Open</button></div></div><div class="case-command-side"><div><b>Blockers</b>' + blockerMarkup + '</div>' + (deadline ? '<div class="case-deadline"><b>Next deadline</b><br>' + esc(deadline.label) + '<br>' + esc(readableTimestamp(deadline.at)) + (deadline.overdue ? ' · OVERDUE' : '') + '</div>' : '') + '<div class="muted">Responsible: ' + esc(projection.responsibleActor && (projection.responsibleActor.actorId || projection.responsibleActor.role) || 'Derived from case state') + '</div></div>' + serviceSummary + '</div>';
 }
 
 function renderHeader() {
@@ -1321,7 +1358,7 @@ function deadlineDisplay(deadline) {
   const difference = timestamp - Date.now();
   const days = Math.ceil(Math.abs(difference) / 86400000);
   const relative = difference < 0 ? (days <= 1 ? 'OVERDUE' : days + ' days overdue') : days === 0 ? 'Due today' : days === 1 ? 'Due tomorrow' : 'Due in ' + days + ' days';
-  return String(deadline.at) + ' · ' + relative;
+  return readableTimestamp(deadline.at) + ' · ' + relative;
 }
 
 function bookingDocumentRecords(records) {
@@ -2812,8 +2849,8 @@ function enhanceFinancialReconciliation() {
 function bookingLeadPaxName(booking) {
   if (!booking) return 'Not selected';
   const participant = latest('BookingParticipant', (item) => item.booking_id === booking.booking_id && (item.role === 'LEAD_PAX' || Array.isArray(item.roles) && item.roles.includes('LEAD_PAX')));
-  const person = participant && latest('Person', (item) => item.person_id === participant.person_id);
-  return person && (person.display_name || person.name) || booking.lead_pax_name || booking.lead_pax_person_id || 'Not selected';
+  if (participant) return readablePerson(participant.person_id);
+  return booking.lead_pax_name || readablePerson(booking.lead_pax_person_id);
 }
 
 function renderBooking() {
@@ -3216,13 +3253,13 @@ function renderPayment() {
   const financeContext = '<div class="selection-bar"><strong>' + esc(records.client && records.client.display_name || records.booking.client_id) + '</strong><span>' + esc(bookingDestination(records.booking)) + '</span><span>' + esc(bookingTravelLabel(records.booking)) + '</span><span>Booking ' + esc(records.booking.booking_id) + '</span><span class="spacer"></span><button class="secondary compact" onclick="previewClientVoucher()">Tour voucher</button><button class="secondary compact" onclick="previewClientInvoice()">Client invoice</button></div>';
   const financeNextAction = '';
   const projectionMarkup = '<div class="card"><h3>Financial summary</h3>' + field('Finance state', projection && projection.finance && projection.finance.state) + field('Readiness', projection && projection.readiness && projection.readiness.state) + (projection && projection.blockers && projection.blockers.length ? '<p class="muted">' + esc(projection.blockers.map((blocker) => blocker.message).join(' · ')) + '</p>' : '<p class="muted">No current financial blockers.</p>') + '<h4>Client payment obligations</h4><div class="table-wrap"><table><thead><tr><th>Purpose</th><th>Amount</th><th>Allocated</th><th>Outstanding</th><th>State</th></tr></thead><tbody>' + obligationRows + '</tbody></table></div></div>';
-  const paymentForm = '<div class="card"><h3>Record Client Payment</h3><p class="muted">Add payment evidence. Verification and allocation are separate.</p><div class="grid3"><div class="field"><label>Amount</label><input id="payment-amount" data-error-field="amount" type="number" min="0" step="0.01"></div><div class="field"><label>Currency</label><input id="payment-currency" value="PHP"></div><div class="field"><label>Payment sent timestamp</label><input id="payment-sent-at" type="datetime-local"></div></div><div class="grid3"><div class="field"><label>Proof/reference</label><input id="payment-proof" data-error-field="proof_document_id or proof_reference" placeholder="Receipt, transfer reference, or proof ID"></div><div class="field"><label>Payment proof file</label><input id="payment-proof-file" type="file"></div><div class="field"><label>Payment method</label><input id="payment-method" placeholder="Bank transfer, cash, card, etc."></div></div><button onclick="recordPayment()">Add payment</button></div>';
+  const paymentForm = '<div class="card"><h3>Record Client Payment</h3><p class="muted">Add payment evidence. Verification and allocation are separate.</p><div class="grid3"><div class="field"><label>Amount</label><input id="payment-amount" data-error-field="amount" type="number" min="0" step="0.01"></div><div class="field"><label>Currency</label><input id="payment-currency" value="PHP"></div><div class="field"><label>Payment sent timestamp</label><input id="payment-sent-at" type="datetime-local"></div></div><div class="grid3"><div class="field"><label>Proof/reference</label><input id="payment-proof" data-error-field="proof_document_id or proof_reference" placeholder="Receipt, transfer reference, or proof ID"></div><div class="field"><label>Payment proof file</label><input id="payment-proof-file" type="file"></div><div class="field"><label>Payment method</label><input id="payment-method" placeholder="Bank transfer, cash, card, etc."></div></div><button class="secondary" onclick="recordPayment()">Add payment</button></div>';
   const paymentHistory = payments.length ? '<div class="card"><h3>Payment history</h3><div class="row-actions"><button class="secondary compact" onclick="exportPaymentsCsv()">Export payments CSV</button></div><table><thead><tr><th>Sent at</th><th>Amount</th><th>Verification</th><th>Allocation</th></tr></thead><tbody>' + payments.map((item) => '<tr><td>' + esc(item.actual_sent_at || 'Not recorded') + '</td><td>' + esc(item.amount + ' ' + item.currency) + '</td><td>' + status(readableState(item.payment_state), item.payment_state === 'VERIFIED' ? 'good' : 'warn') + '</td><td>' + esc(paymentAllocations(item.client_payment_id).map((allocation) => allocation.amount + ' ' + allocation.currency).join(', ') || 'Unallocated') + (item.payment_state === 'VERIFIED' ? ' · <button class="secondary compact" onclick="previewPaymentReceipt(\'' + esc(item.client_payment_id) + '\')">Receipt</button>' : '') + '</td></tr>').join('') + '</tbody></table></div>' : '';
-  const payment = records.payment ? '<div class="card"><h3>Client Payment</h3><p class="money">' + esc(records.payment.amount) + ' ' + esc(records.payment.currency) + '</p>' + field('Payment sent at', records.payment.actual_sent_at) + field('Proof/reference', records.payment.proof_reference || evidence && evidence.proof_reference) + field('Verification', readableState(records.payment.payment_state)) + (records.payment.payment_state === 'VERIFIED' ? '<p class="muted">Verified by ' + esc(records.payment.verified_by || 'authorized local actor') + '.</p><div class="row-actions"><button class="secondary" onclick="previewPaymentReceipt(\'' + esc(records.payment.client_payment_id) + '\', true)">Issue receipt</button><button class="secondary" onclick="previewPaymentReceipt(\'' + esc(records.payment.client_payment_id) + '\')">View receipt</button></div>' : '<button class="secondary" onclick="verifyPayment()">Verify</button>') + (allocations.length ? '<h4>Client-directed allocation</h4>' + allocations.map((item) => '<div class="event">' + esc(item.amount + ' ' + item.currency) + ' allocated to Booking ' + esc(item.booking_id || 'target') + '</div>').join('') : '<p class="muted">UNALLOCATED / NEEDS ALLOCATION — no client allocation instruction has been recorded.</p>' + (records.payment.payment_state === 'VERIFIED' ? '<div class="grid2"><div class="field"><label>Client-instructed amount for this Booking</label><input id="allocation-amount" type="number" min="0" step="0.01"></div><div class="field"><label>Instruction note</label><input id="allocation-note" placeholder="Client instruction reference"></div></div><button onclick="allocatePayment()">Allocate payment</button>' : '')) + '</div>' : '<div class="card"><h3>Record Client Payment</h3><p class="muted">Add payment evidence. Verification and allocation are separate.</p><div class="grid3"><div class="field"><label>Amount</label><input id="payment-amount" data-error-field="amount" type="number" min="0" step="0.01"></div><div class="field"><label>Currency</label><input id="payment-currency" value="PHP"></div><div class="field"><label>Payment sent timestamp</label><input id="payment-sent-at" type="datetime-local"></div></div><div class="grid2"><div class="field"><label>Proof/reference</label><input id="payment-proof" data-error-field="proof_document_id or proof_reference" placeholder="Receipt, transfer reference, or proof ID"></div><div class="field"><label>Payment method</label><input id="payment-method" placeholder="Bank transfer, cash, card, etc."></div></div><button onclick="recordPayment()">Add payment</button></div>';
+  const payment = records.payment ? '<div class="card"><h3>Client Payment</h3><p class="money">' + esc(records.payment.amount) + ' ' + esc(records.payment.currency) + '</p>' + field('Payment sent at', records.payment.actual_sent_at) + field('Proof/reference', records.payment.proof_reference || evidence && evidence.proof_reference) + field('Verification', readableState(records.payment.payment_state)) + (records.payment.payment_state === 'VERIFIED' ? '<p class="muted">Verified by ' + esc(records.payment.verified_by || 'authorized local actor') + '.</p><div class="row-actions"><button class="secondary" onclick="previewPaymentReceipt(\'' + esc(records.payment.client_payment_id) + '\', true)">Issue receipt</button><button class="secondary" onclick="previewPaymentReceipt(\'' + esc(records.payment.client_payment_id) + '\')">View receipt</button></div>' : '<button class="secondary" onclick="verifyPayment()">Verify</button>') + (allocations.length ? '<h4>Client-directed allocation</h4>' + allocations.map((item) => '<div class="event">' + esc(item.amount + ' ' + item.currency) + ' allocated to Booking ' + esc(item.booking_id || 'target') + '</div>').join('') : '<p class="muted">UNALLOCATED / NEEDS ALLOCATION — no client allocation instruction has been recorded.</p>' + (records.payment.payment_state === 'VERIFIED' ? '<div class="grid2"><div class="field"><label>Client-instructed amount for this Booking</label><input id="allocation-amount" type="number" min="0" step="0.01"></div><div class="field"><label>Instruction note</label><input id="allocation-note" placeholder="Client instruction reference"></div></div><button class="secondary" onclick="allocatePayment()">Allocate payment</button>' : '')) + '</div>' : '<div class="card"><h3>Record Client Payment</h3><p class="muted">Add payment evidence. Verification and allocation are separate.</p><div class="grid3"><div class="field"><label>Amount</label><input id="payment-amount" data-error-field="amount" type="number" min="0" step="0.01"></div><div class="field"><label>Currency</label><input id="payment-currency" value="PHP"></div><div class="field"><label>Payment sent timestamp</label><input id="payment-sent-at" type="datetime-local"></div></div><div class="grid2"><div class="field"><label>Proof/reference</label><input id="payment-proof" data-error-field="proof_document_id or proof_reference" placeholder="Receipt, transfer reference, or proof ID"></div><div class="field"><label>Payment method</label><input id="payment-method" placeholder="Bank transfer, cash, card, etc."></div></div><button class="secondary" onclick="recordPayment()">Add payment</button></div>';
   const paymentPurposeField = '<div class="field"><label>Payment purpose</label><select id="payment-purpose"><option value="DOWN_PAYMENT">Down payment</option><option value="PARTIAL_PAYMENT">Installment / partial payment</option><option value="FULL_PAYMENT">Full payment</option><option value="BALANCE_PAYMENT">Final balance payment</option><option value="OTHER">Other</option></select><span class="muted">Partial/installment is any payment before the balance is cleared. Final balance is the remaining amount due. Full payment is the client-stated intent to settle the whole obligation.</span></div>';
   const paymentFormWithPurpose = fullyPaid ? '<div class="card good"><h3>Client payment complete</h3><p class="muted">This Booking is fully paid. Additional client payments cannot be recorded here. Review duplicate or excess funds separately.</p></div>' : paymentForm.replace('<h3>Record Client Payment</h3>', '<h3>Record Client Payment</h3><p class="muted">Purpose is intent; allocation determines the balance.</p>' + paymentPurposeField);
   const paymentWithForm = records.payment ? payment + paymentFormWithPurpose : paymentFormWithPurpose;
-  const payable = records.payable ? '<div class="card"><h3>Supplier Payable</h3>' + field('Payable ID', records.payable.supplier_payable_id) + field('Amount', records.payable.amount + ' ' + records.payable.currency) + field('State', readableState(records.payable.state)) + field('Verified allocated client funds', verifiedAllocatedFunds(records.booking.booking_id, records.payable.currency).toFixed(2) + ' ' + records.payable.currency) + (records.payable.state === 'DRAFT' ? '<button class="secondary" onclick="approvePayable()">Approve Supplier Payable</button>' : '') + '</div>' : '<div class="card"><h3>Record Supplier Payable</h3><p class="muted">Record the actual supplier obligation. Approval and Supplier Payment remain separate.</p><div class="grid3"><div class="field"><label>Amount</label><input id="payable-amount" data-error-field="amount" type="number" min="0" step="0.01"></div><div class="field"><label>Currency</label><input id="payable-currency" value="PHP"></div><div class="field"><label>Component</label><input id="payable-component" placeholder="Deposit, final balance, penalty, etc."></div></div><button onclick="createPayable()">Create Supplier Payable</button></div>';
+  const payable = records.payable ? '<div class="card"><h3>Supplier Payable</h3>' + field('Payable ID', records.payable.supplier_payable_id) + field('Amount', records.payable.amount + ' ' + records.payable.currency) + field('State', readableState(records.payable.state)) + field('Verified allocated client funds', verifiedAllocatedFunds(records.booking.booking_id, records.payable.currency).toFixed(2) + ' ' + records.payable.currency) + (records.payable.state === 'DRAFT' ? '<button class="secondary" onclick="approvePayable()">Approve Supplier Payable</button>' : '') + '</div>' : '<div class="card"><h3>Record Supplier Payable</h3><p class="muted">Record the actual supplier obligation. Approval and Supplier Payment remain separate.</p><div class="grid3"><div class="field"><label>Amount</label><input id="payable-amount" data-error-field="amount" type="number" min="0" step="0.01"></div><div class="field"><label>Currency</label><input id="payable-currency" value="PHP"></div><div class="field"><label>Component</label><input id="payable-component" placeholder="Deposit, final balance, penalty, etc."></div></div><button class="secondary" onclick="createPayable()">Create Supplier Payable</button></div>';
   const supplierPayment = records.payable ? '<div class="card ' + (records.supplierPayment ? 'good' : 'blocked') + '"><h3>Supplier Payment</h3>' + field('Status', records.supplierPayment ? 'EXECUTED' : 'NOT EXECUTED') + field('Gate', records.supplierPayment ? 'Verified client funds covered the payable' : 'Blocked until sufficient verified client funds cover the payable') + (records.supplierPayment ? '<p class="muted">Payment ID: ' + esc(records.supplierPayment.supplier_payment_id) + '</p>' : '<button class="warning" onclick="paySupplier()">Pay supplier</button>') + '</div>' : '<div class="card blocked"><h3>Supplier Payment</h3><p>NOT EXECUTED — create and approve a Supplier Payable first.</p></div>';
   const correctedProjectionMarkup = projectionMarkup.replace('Client obligations', 'Client payment obligations');
   $('payment-content').innerHTML = financeContext + financeNextAction + obligationSetup + correctedProjectionMarkup + paymentBalanceSummary(records, payments) + '<div class="grid2">' + paymentWithForm + '<div>' + payable + supplierPayment + '</div></div>' + paymentHistory;
@@ -3934,6 +3971,7 @@ function render() {
   }
   activateWorkspaceTab();
   ensureAccessibleLabels();
+  bindSupplierPickersIn(document);
   document.querySelectorAll('.table-wrap:not([tabindex])').forEach((well) => {
     well.setAttribute('tabindex', '0');
     well.setAttribute('role', 'region');

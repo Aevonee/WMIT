@@ -31,11 +31,17 @@
   window.wmitToast = function (kind, title, detail) {
     var root = container();
     while (root.children.length >= MAX_VISIBLE) root.removeChild(root.firstChild);
+    while (root.querySelectorAll('[data-kind="error"]').length >= 2) {
+      var oldestError = root.querySelector('[data-kind="error"]');
+      if (oldestError.parentNode) oldestError.parentNode.removeChild(oldestError);
+    }
 
     var toast = document.createElement('div');
     var isOk = kind === 'ok' || kind === 'success';
     var isError = kind === 'error';
     var isWarn = kind === 'warn' || kind === 'warning';
+    toast.setAttribute('data-kind', isError ? 'error' : isWarn ? 'warn' : 'ok');
+    if (isError) toast.setAttribute('role', 'alert');
     var border = isOk ? 'var(--manifest-green,#177245)' : isError ? 'var(--ensign-red,#9b3434)' : 'var(--stamp-amber,#966308)';
     var icon = isOk ? '✓' : isError ? '✕' : '!';
     toast.tabIndex = -1;
@@ -57,10 +63,10 @@
     toast.appendChild(iconSpan);
     toast.appendChild(textSpan);
     toast.addEventListener('click', function () { dismiss(toast); });
-    toast.setAttribute('title', 'Dismiss');
+    toast.setAttribute('title', isError ? 'Error — click to dismiss' : 'Dismiss');
     root.appendChild(toast);
-    var lifetime = isOk ? 5000 : 9000;
-    setTimeout(function () { dismiss(toast); }, lifetime);
+    var lifetime = isOk ? 5000 : isError ? 0 : 9000;
+    if (lifetime) setTimeout(function () { dismiss(toast); }, lifetime);
     return toast;
   };
 })();
