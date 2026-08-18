@@ -31,7 +31,7 @@ A single structured source of truth behind one whitelisted action dispatcher, wi
 
 - Philippine travel agency; business timezone Asia/Manila; year-based IDs use the business timezone.
 - Hosted on the owner's netcup VPS: Node.js + SQLite server, Caddy for HTTPS, SMTP through the owner's domain mailbox. Nightly verified backups with restore rehearsal run inside the server.
-- Staff-facing console: Operations Workspace (`/operations.html`, 14 workspaces). Public-facing surfaces: per-event expo sign-up form (`/expo.html`), public quotation links (`/q/<token>`). Staff expo console: `/expo-console.html`.
+- Staff-facing console: Operations Workspace (`/operations.html`, 14 workspaces) with a case workspace that consolidates one trip per screen. Public-facing surfaces: per-event expo sign-up form (`/expo.html`, offline-capable at booth kiosks), public quotation links (`/q/<token>`). Staff expo console: `/expo-console.html`. Generated client documents (statement-of-account invoice, travel itinerary) render from recorded data for print/PDF and confirmation-gated email.
 - Session authentication with staff/finance/management/intern access separation; production enforces sign-in.
 - Near-term business driver: the September 4–6 expo — expo lead capture, quote delivery, and follow-up tooling take priority over further architecture work until it ships.
 - The original Google Workspace design (Sheets + Apps Script) is a retained working artifact under `apps-script/`, not a deployment target.
@@ -43,6 +43,10 @@ A single structured source of truth behind one whitelisted action dispatcher, wi
 - Immutable, centrally generated, human-readable IDs for important records; structured data links by ID, never by name alone.
 - Financial values keep supplier cost, client price, fees, payments, receivables, payables, commissions, and margin as separate concepts; the system never silently modifies money, invoices, refunds, or payment statuses.
 - Risk-tiered approvals: low-risk actions proceed; medium-risk require confirmation per policy; high-risk (refunds, financial adjustments, deletion, external bookings, supplier purchases, sensitive documents/communication) always require explicit human confirmation.
+- Client document generation: statement-of-account invoices (payment schedule, payment terms, bank details held in Settings) and day-by-day travel itineraries render from recorded records. Documents are render-only — they never write financial records. Email delivery requires explicit confirmation, is audit-logged, and goes out via SMTP when configured or as a reviewable `.eml` draft otherwise.
+- Staff tooling: client message-template library with Copy/WhatsApp/Viber delivery channels, dashboard follow-up queues, global search across records, and toast feedback.
+- Expo kiosk resilience: the sign-up form captures leads offline at the booth and auto-flushes the queue when connectivity returns.
+- Staff account self-service: password change and account management run over HTTP under the same audit discipline.
 - Every meaningful action records actor, action, record ID, old/new values, result, and error — hash-chained on the hosted server.
 - External integrations are optional and behind adapters; WMIT must not depend on one travel website or mail provider.
 - The system must never claim live availability, current pricing, or confirmed arrangements unless an authorized source returned and verified them; low-confidence extraction is flagged, not silently committed.
@@ -51,13 +55,13 @@ A single structured source of truth behind one whitelisted action dispatcher, wi
 ## Brand Commitments
 
 - Name: **Worldmaster International Travel** (WMIT).
-- Existing brand assets in active use: `app/public/assets/wmit-logo.png` and `app/public/assets/header.png` (the header image appears on client-facing quotation previews).
+- Existing brand assets in active use: `app/public/assets/wmit-logo.png` and `app/public/assets/header.png` (the header image appears on client-facing document previews — quotation, invoice, itinerary).
 
 ## Evidence on Hand
 
 - Client-document templates (text-first drafts pending counsel/owner review): `docs/templates/` — Master Booking Terms, Package-Specific Tour Voucher, internal voucher confirmation checklist.
 - Brand assets: `app/public/assets/wmit-logo.png`, `app/public/assets/header.png`.
-- Documentation: `README.md`, `AGENTS.md`, `docs/deployment-netcup.md`, `docs/operations-mvp.md`, `docs/events.md`, `docs/id-registry.md`.
+- Documentation: `README.md`, `AGENTS.md`, `docs/deployment-netcup.md`, `docs/operations-mvp.md`, `docs/events.md`, `docs/id-registry.md`, `docs/expo-readiness.md` (staging/cutover/expo-day runbook), `docs/staff-cheat-sheets.md` (per-role, print-ready).
 - **Absences future work must respect**: no real client data, testimonials, customer names, real pricing, or performance claims exist in the repository — nothing may be fabricated for demos or marketing surfaces. The expo lead-capture and quotation flows are demonstrated on synthetic data until real expo events run.
 
 ## Product Principles
