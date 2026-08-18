@@ -26,6 +26,24 @@
 
   window.wmitSeedTemplates = seedTemplates;
 
+  // CSV download shared by both workspaces: BOM so Excel reads UTF-8, and
+  // proper quoting for commas, quotes, and newlines in cell values.
+  window.wmitDownloadCsv = function (filename, rows) {
+    var csv = '\uFEFF' + rows.map(function (row) {
+      return row.map(function (cell) {
+        var value = String(cell === undefined || cell === null ? '' : cell);
+        return /[",\n\r]/.test(value) ? '"' + value.replace(/"/g, '""') + '"' : value;
+      }).join(',');
+    }).join('\r\n');
+    var link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(link.href);
+  };
+
   // Returns { key, label, body } list: server-persisted overrides when they
   // exist, seeds otherwise (union on key, override wins).
   window.wmitMessageTemplates = function (persisted) {
@@ -164,9 +182,16 @@
     var closeButton = actionButton('Close', '#56677a');
     if (!e164) { waButton.disabled = true; viberButton.disabled = true; waButton.style.opacity = viberButton.style.opacity = '.5'; waButton.style.cursor = viberButton.style.cursor = 'not-allowed'; }
 
+    var sendNotified = false;
+    function notifySent(channel) {
+      if (sendNotified) return;
+      sendNotified = true;
+      if (typeof opts.onSend === 'function') { try { opts.onSend(channel, select.value); } catch (_) { /* logging is best-effort */ } }
+    }
+
     function copyText() {
       var text = textarea.value;
-      var done = function () { if (window.wmitToast) window.wmitToast('ok', 'Message copied', 'Paste it anywhere.'); overlay.remove(); };
+      var done = function () { notifySent('COPY'); if (window.wmitToast) window.wmitToast('ok', 'Message copied', 'Paste it anywhere.'); overlay.remove(); };
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(text).then(done, function () { fallbackCopy(text); done(); });
       } else { fallbackCopy(text); done(); }
@@ -184,11 +209,11 @@
     closeButton.addEventListener('click', function () { overlay.remove(); });
     waButton.addEventListener('click', function () {
       var links = window.wmitChatLinks(opts.mobile, textarea.value);
-      if (links.whatsapp) { window.open(links.whatsapp, '_blank', 'noopener'); overlay.remove(); }
+      if (links.whatsapp) { notifySent('WHATSAPP'); window.open(links.whatsapp, '_blank', 'noopener'); overlay.remove(); }
     });
     viberButton.addEventListener('click', function () {
       var links = window.wmitChatLinks(opts.mobile, textarea.value);
-      if (links.viber) { window.open(links.viber, '_blank', 'noopener'); }
+      if (links.viber) { notifySent('VIBER'); window.open(links.viber, '_blank', 'noopener'); }
     });
 
     card.appendChild(heading);
