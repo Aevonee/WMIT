@@ -2057,6 +2057,64 @@ function renderQuotation() {
   $('quotation-content').insertAdjacentHTML('afterbegin', '<div class="selection-bar"><button class="secondary" onclick="clearQuotationRecord()">Back to Quotation list</button><strong>' + esc(quote.quotation_id) + '</strong><span>' + esc(readableState(quote.status)) + '</span></div>');
   if (quote.status === 'APPROVED') $('quotation-content').insertAdjacentHTML('beforeend', records.quotationAcceptance ? '<div class="card good"><h3>Client acceptance</h3><p>Accepted by ' + esc(records.quotationAcceptance.accepted_by) + ' on ' + esc(records.quotationAcceptance.accepted_at || 'recorded time') + '.</p></div>' : '<div class="card warn"><h3>Client acceptance required</h3><p>Record the client\'s acceptance of this approved quotation before creating a Booking.</p><div class="grid2"><div class="field"><label>Accepted by</label><input id="quote-accepted-by" placeholder="Client name or contact"></div><div class="field"><label>Acceptance reference</label><input id="quote-acceptance-reference" placeholder="Email, message, or signed reference"></div></div><button onclick="acceptQuotation()">Record Client Acceptance</button></div>');
   renderQuotationEditorAddendum(quote, records, items, draft);
+  const revisionCard = quotationRevisionDiffMarkup(quote);
+  if (revisionCard) $('quotation-content').insertAdjacentHTML('beforeend', revisionCard);
+}
+
+function quotationRevisionDiffMarkup(quote) {
+  const priorId = quote.revision_of_quotation_id;
+  if (!priorId) return '';
+  const prior = latest('Quotation', (item) => item.quotation_id === priorId);
+  if (!prior) return '';
+  const fields = [
+    ['Client price', 'client_total'],
+    ['Supplier cost · internal', 'supplier_cost_total'],
+    ['Destination', 'destination'],
+    ['Travel dates', 'travel_start'],
+    ['Pax count', 'pax_count'],
+    ['Valid until', 'valid_until'],
+    ['Status', 'status']
+  ];
+  const rows = [];
+  fields.forEach((entry) => {
+    const label = entry[0];
+    const key = entry[1];
+    let oldValue = prior[key] === undefined || prior[key] === null ? '' : String(prior[key]);
+    let newValue = quote[key] === undefined || quote[key] === null ? '' : String(quote[key]);
+    if (key === 'travel_start') {
+      oldValue = oldValue && prior.travel_end ? oldValue + ' to ' + prior.travel_end : oldValue;
+      newValue = newValue && quote.travel_end ? newValue + ' to ' + quote.travel_end : newValue;
+    }
+    if (oldValue === newValue) return;
+    rows.push('<tr><td>' + esc(label) + '</td><td>' + esc(oldValue || '—') + '</td><td><strong>' + esc(newValue || '—') + '</strong></td></tr>');
+  });
+  const itemKey = (item) => (item.service_type || '') + '|' + (item.description || '');
+  const priorItems = list('QuotationItem', (item) => item.quotation_id === prior.quotation_id);
+  const currentItems = list('QuotationItem', (item) => item.quotation_id === quote.quotation_id);
+  const priorBy = new Map(priorItems.map((item) => [itemKey(item), item]));
+  const currentBy = new Map(currentItems.map((item) => [itemKey(item), item]));
+  const itemRows = [];
+  currentItems.forEach((item) => {
+    const before = priorBy.get(itemKey(item));
+    if (!before) {
+      itemRows.push('<tr><td>' + esc(item.description || item.service_type) + '</td><td>—</td><td><strong>Added' + (item.unit_selling_price ? ' · ' + esc(item.unit_selling_price + ' ' + (item.currency || quote.currency || '')) : '') + '</strong></td></tr>');
+      return;
+    }
+    if (String(before.unit_selling_price || '') !== String(item.unit_selling_price || '') || String(before.quantity || '') !== String(item.quantity || '')) {
+      itemRows.push('<tr><td>' + esc(item.description || item.service_type) + '</td><td>' + esc((before.quantity || '1') + ' × ' + (before.unit_selling_price || '—')) + '</td><td><strong>' + esc((item.quantity || '1') + ' × ' + (item.unit_selling_price || '—')) + '</strong></td></tr>');
+    }
+  });
+  priorItems.forEach((item) => {
+    if (!currentBy.has(itemKey(item))) {
+      itemRows.push('<tr><td>' + esc(item.description || item.service_type) + '</td><td>' + esc(item.unit_selling_price || '') + '</td><td><strong>Removed</strong></td></tr>');
+    }
+  });
+  const hasChanges = rows.length || itemRows.length;
+  return '<div class="card ' + (hasChanges ? 'warn' : 'good') + '"><h3>Revision changes vs ' + esc(prior.quotation_id) + '</h3>' + (quote.revision_reason ? '<p class="muted">Reason: ' + esc(quote.revision_reason) + '</p>' : '')
+    + (hasChanges
+      ? '<div class="table-wrap"><table><thead><tr><th>' + esc('What changed') + '</th><th>Previous</th><th>Now</th></tr></thead><tbody>' + rows.join('') + itemRows.join('') + '</tbody></table></div>'
+      : '<p class="muted">No field changes against the prior version yet — pricing edits are recorded once saved.</p>')
+    + '</div>';
 }
 
 function quotationItineraryDays(quote) {
@@ -3157,7 +3215,7 @@ function renderPayment() {
   const allocationTargetMarkup = '<div class="allocation-target"><h4>Allocate verified payment</h4><p class="muted">Choose the Client Obligation this payment should satisfy.</p><select id="allocation-obligation"><option value="">Select obligation</option>' + cleanObligationOptions + '</select>' + (cleanObligationOptions ? '' : '<p class="muted">No obligation exists yet for this Booking.</p><button class="secondary" onclick="createObligationFromClientInstruction()">Create from instruction</button>') + '</div>';
   const financeContext = '<div class="selection-bar"><strong>' + esc(records.client && records.client.display_name || records.booking.client_id) + '</strong><span>' + esc(bookingDestination(records.booking)) + '</span><span>' + esc(bookingTravelLabel(records.booking)) + '</span><span>Booking ' + esc(records.booking.booking_id) + '</span><span class="spacer"></span><button class="secondary compact" onclick="previewClientVoucher()">Tour voucher</button><button class="secondary compact" onclick="previewClientInvoice()">Client invoice</button></div>';
   const financeNextAction = '';
-  const projectionMarkup = '<div class="card"><h3>Financial summary</h3>' + field('Finance state', projection && projection.finance && projection.finance.state) + field('Readiness', projection && projection.readiness && projection.readiness.state) + (projection && projection.blockers && projection.blockers.length ? '<p class="muted">' + esc(projection.blockers.map((blocker) => blocker.message).join(' · ')) + '</p>' : '<p class="muted">No current financial blockers.</p>') + '<h4>Client payment obligations</h4><table><thead><tr><th>Purpose</th><th>Amount</th><th>Allocated</th><th>Outstanding</th><th>State</th></tr></thead><tbody>' + obligationRows + '</tbody></table></div>';
+  const projectionMarkup = '<div class="card"><h3>Financial summary</h3>' + field('Finance state', projection && projection.finance && projection.finance.state) + field('Readiness', projection && projection.readiness && projection.readiness.state) + (projection && projection.blockers && projection.blockers.length ? '<p class="muted">' + esc(projection.blockers.map((blocker) => blocker.message).join(' · ')) + '</p>' : '<p class="muted">No current financial blockers.</p>') + '<h4>Client payment obligations</h4><div class="table-wrap"><table><thead><tr><th>Purpose</th><th>Amount</th><th>Allocated</th><th>Outstanding</th><th>State</th></tr></thead><tbody>' + obligationRows + '</tbody></table></div></div>';
   const paymentForm = '<div class="card"><h3>Record Client Payment</h3><p class="muted">Add payment evidence. Verification and allocation are separate.</p><div class="grid3"><div class="field"><label>Amount</label><input id="payment-amount" data-error-field="amount" type="number" min="0" step="0.01"></div><div class="field"><label>Currency</label><input id="payment-currency" value="PHP"></div><div class="field"><label>Payment sent timestamp</label><input id="payment-sent-at" type="datetime-local"></div></div><div class="grid3"><div class="field"><label>Proof/reference</label><input id="payment-proof" data-error-field="proof_document_id or proof_reference" placeholder="Receipt, transfer reference, or proof ID"></div><div class="field"><label>Payment proof file</label><input id="payment-proof-file" type="file"></div><div class="field"><label>Payment method</label><input id="payment-method" placeholder="Bank transfer, cash, card, etc."></div></div><button onclick="recordPayment()">Add payment</button></div>';
   const paymentHistory = payments.length ? '<div class="card"><h3>Payment history</h3><div class="row-actions"><button class="secondary compact" onclick="exportPaymentsCsv()">Export payments CSV</button></div><table><thead><tr><th>Sent at</th><th>Amount</th><th>Verification</th><th>Allocation</th></tr></thead><tbody>' + payments.map((item) => '<tr><td>' + esc(item.actual_sent_at || 'Not recorded') + '</td><td>' + esc(item.amount + ' ' + item.currency) + '</td><td>' + status(readableState(item.payment_state), item.payment_state === 'VERIFIED' ? 'good' : 'warn') + '</td><td>' + esc(paymentAllocations(item.client_payment_id).map((allocation) => allocation.amount + ' ' + allocation.currency).join(', ') || 'Unallocated') + (item.payment_state === 'VERIFIED' ? ' · <button class="secondary compact" onclick="previewPaymentReceipt(\'' + esc(item.client_payment_id) + '\')">Receipt</button>' : '') + '</td></tr>').join('') + '</tbody></table></div>' : '';
   const payment = records.payment ? '<div class="card"><h3>Client Payment</h3><p class="money">' + esc(records.payment.amount) + ' ' + esc(records.payment.currency) + '</p>' + field('Payment sent at', records.payment.actual_sent_at) + field('Proof/reference', records.payment.proof_reference || evidence && evidence.proof_reference) + field('Verification', readableState(records.payment.payment_state)) + (records.payment.payment_state === 'VERIFIED' ? '<p class="muted">Verified by ' + esc(records.payment.verified_by || 'authorized local actor') + '.</p><div class="row-actions"><button class="secondary" onclick="previewPaymentReceipt(\'' + esc(records.payment.client_payment_id) + '\', true)">Issue receipt</button><button class="secondary" onclick="previewPaymentReceipt(\'' + esc(records.payment.client_payment_id) + '\')">View receipt</button></div>' : '<button class="secondary" onclick="verifyPayment()">Verify</button>') + (allocations.length ? '<h4>Client-directed allocation</h4>' + allocations.map((item) => '<div class="event">' + esc(item.amount + ' ' + item.currency) + ' allocated to Booking ' + esc(item.booking_id || 'target') + '</div>').join('') : '<p class="muted">UNALLOCATED / NEEDS ALLOCATION — no client allocation instruction has been recorded.</p>' + (records.payment.payment_state === 'VERIFIED' ? '<div class="grid2"><div class="field"><label>Client-instructed amount for this Booking</label><input id="allocation-amount" type="number" min="0" step="0.01"></div><div class="field"><label>Instruction note</label><input id="allocation-note" placeholder="Client instruction reference"></div></div><button onclick="allocatePayment()">Allocate payment</button>' : '')) + '</div>' : '<div class="card"><h3>Record Client Payment</h3><p class="muted">Add payment evidence. Verification and allocation are separate.</p><div class="grid3"><div class="field"><label>Amount</label><input id="payment-amount" data-error-field="amount" type="number" min="0" step="0.01"></div><div class="field"><label>Currency</label><input id="payment-currency" value="PHP"></div><div class="field"><label>Payment sent timestamp</label><input id="payment-sent-at" type="datetime-local"></div></div><div class="grid2"><div class="field"><label>Proof/reference</label><input id="payment-proof" data-error-field="proof_document_id or proof_reference" placeholder="Receipt, transfer reference, or proof ID"></div><div class="field"><label>Payment method</label><input id="payment-method" placeholder="Bank transfer, cash, card, etc."></div></div><button onclick="recordPayment()">Add payment</button></div>';
