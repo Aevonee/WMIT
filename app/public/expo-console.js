@@ -103,6 +103,30 @@ $('nav-logout').addEventListener('click', async () => {
   window.location.href = 'login.html';
 });
 
+// Booth lock: a tablet left on a table must not stay signed in. Five minutes
+// without a touch signs the session out server-side; the Lock button does it
+// on demand.
+const BOOTH_IDLE_MS = 5 * 60 * 1000;
+let lastBoothActivity = Date.now();
+['click', 'keydown', 'touchstart', 'pointerdown'].forEach((name) => {
+  document.addEventListener(name, () => { lastBoothActivity = Date.now(); }, { passive: true, capture: true });
+});
+setInterval(() => {
+  if (token() && Date.now() - lastBoothActivity > BOOTH_IDLE_MS) {
+    try { fetch('/api/auth/logout', { method: 'POST', headers: authHeaders() }); } catch (_) { /* best effort */ }
+    sessionStorage.removeItem('wmit_session');
+    window.location.href = 'login.html?next=expo-console.html&reason=idle';
+  }
+}, 15000);
+
+const lockButton = document.createElement('button');
+lockButton.className = 'secondary';
+lockButton.id = 'nav-lock';
+lockButton.textContent = 'Lock';
+lockButton.title = 'Sign out now — use before leaving the booth tablet unattended';
+$('nav-logout').parentNode.insertBefore(lockButton, $('nav-logout'));
+lockButton.addEventListener('click', () => $('nav-logout').click());
+
 // ------------------------------------------------------------- dashboard
 
 async function loadDashboard() {
@@ -174,13 +198,31 @@ async function loadLeads() {
   leadsCache = await api('/api/expo/leads' + scopeQuery(query ? 'q=' + encodeURIComponent(query) : ''));
   const rows = leadsCache.map((lead) => '<tr><td class="muted">' + esc(lead.expo_lead_id.slice(-8)) + '</td><td><b>' + esc(lead.name) + '</b>' + (lead.needs_mobile ? ' <span class="needs-mobile">NEEDS MOBILE</span>' : '') + (lead.email ? '<br><span class="muted">' + esc(lead.email) + '</span>' : '') + '</td><td>' + esc(lead.mobile || '—') + '</td><td>' + esc(lead.destination) + '</td><td>' + esc(lead.travel_month) + '</td><td>' + esc(leadBrief(lead)) + '</td><td>' + pill(lead.status) + '</td><td class="muted">' + esc(lead.source) + '</td>' +
     '<td class="row-actions"><select data-status="' + esc(lead.expo_lead_id) + '">' + ['NEW', 'CONTACTED', 'QUOTED', 'ACCEPTED', 'BOOKED', 'LOST', 'UNREACHABLE'].map((status) => '<option ' + (status === lead.status ? 'selected' : '') + '>' + status + '</option>').join('') + '</select> ' +
-    '<button class="secondary compact" data-msg-lead="' + esc(lead.expo_lead_id) + '"' + (lead.mobile ? '' : ' title="No mobile number yet"') + '>Message</button>' +
+    '<button class="secondary compact" data-msg-lead="' + esc(lead.expo_lead_id) + '"' + (lead.mobile ? '' : ' title="No mobile number yet"') + '>Message</button> ' +
+    (lead.converted_client_id
+      ? '<span class="muted" title="Client ' + esc(lead.converted_client_id) + ' · Inquiry ' + esc(lead.converted_inquiry_id || '') + '">Converted</span>'
+      : '<button class="secondary compact" data-convert="' + esc(lead.expo_lead_id) + '" title="Create the Client and Inquiry records in the main workspace">Convert</button> ') +
     (lead.needs_mobile ? ' <button class="secondary compact" data-attach="' + esc(lead.expo_lead_id) + '">Add mobile</button>' : '') + '</td></tr>').join('');
-  $('lead-content').innerHTML = tableWrap(rows, '<th>ID</th><th>Name</th><th>Mobile</th><th>Destination</th><th>Month</th><th>Trip brief</th><th>Status</th><th>Source</th><th>Set status</th>', 'No leads yet — share the sign-up form or import badges.');
+  $('lead-content').innerHTML = '<div class="row-actions" style="margin-bottom:8px"><button class="secondary compact" id="export-leads-csv">Export leads CSV</button></div>' + tableWrap(rows, '<th>ID</th><th>Name</th><th>Mobile</th><th>Destination</th><th>Month</th><th>Trip brief</th><th>Status</th><th>Source</th><th>Set status</th>', 'No leads yet — share the sign-up form or import badges.');
+  $('export-leads-csv').addEventListener('click', () => {
+    const csvRows = [['Lead ID', 'Name', 'Mobile', 'Email', 'Destination', 'Travel month', 'Pax', 'Status', 'Source', 'Expo', 'Converted client', 'Notes']];
+    leadsCache.forEach((lead) => {
+      csvRows.push([lead.expo_lead_id, lead.name, lead.mobile || '', lead.email || '', lead.destination, lead.travel_month, lead.pax_count || '', lead.status, lead.source, lead.expo_tag || '', lead.converted_client_id || '', lead.notes || '']);
+    });
+    window.wmitDownloadCsv('expo-leads-' + new Date().toISOString().slice(0, 10) + '.csv', csvRows);
+  });
   $('lead-content').querySelectorAll('[data-status]').forEach((select) => {
     select.addEventListener('change', guard(async () => {
       await api('/api/expo/leads/update', { method: 'POST', body: JSON.stringify({ expo_lead_id: select.dataset.status, status: select.value }) });
       notify('Lead marked ' + select.value + '.');
+      await loadLeads();
+    }));
+  });
+  $('lead-content').querySelectorAll('[data-convert]').forEach((button) => {
+    button.addEventListener('click', guard(async () => {
+      if (!window.confirm('Create the client and inquiry records in the main workspace from this lead? The lead brief (destination, travel month, pax, notes) carries over — no re-typing.')) return;
+      const result = await api('/api/expo/leads/convert', { method: 'POST', body: JSON.stringify({ expo_lead_id: button.dataset.convert }) });
+      notify(result.already_converted ? 'Already converted — ' + result.client_id : 'Converted: client ' + result.client_id + ' and inquiry ' + result.inquiry_id + ' created. Continue in Operations → Inquiries.');
       await loadLeads();
     }));
   });

@@ -461,6 +461,39 @@ class ExpoService {
     }
   }
 
+  convertLead(input, actor) {
+    try {
+      const value = input || {};
+      const lead = this.runtime.get('ExpoLead', requireValue(value.expo_lead_id, 'expo_lead_id'));
+      if (lead.converted_client_id) {
+        return ok({ client_id: lead.converted_client_id, inquiry_id: lead.converted_inquiry_id, expo_lead_id: lead.expo_lead_id, already_converted: true }, { action: 'EXPO_CONVERT_LEAD', idempotent: true });
+      }
+      const clientResult = this.runtime.createClient({
+        display_name: lead.name,
+        client_type: 'Individual',
+        primary_phone: lead.mobile || undefined,
+        primary_email: lead.email || undefined,
+        notes: 'Captured at expo (' + (lead.expo_tag || 'EXPO') + ')' + (lead.notes ? '. Lead notes: ' + lead.notes : '')
+      }, this.ctx(actor || this.actor));
+      if (!clientResult.ok) return clientResult;
+      const requirements = { destination: lead.destination };
+      if (lead.travel_month) requirements.travel_month = lead.travel_month;
+      if (lead.duration_days) requirements.duration_days = lead.duration_days;
+      if (lead.adults !== null && lead.adults !== undefined) requirements.adults = lead.adults;
+      if (lead.children !== null && lead.children !== undefined) requirements.children = lead.children;
+      const inquiryResult = this.runtime.createInquiry({ client_id: clientResult.data.client_id, requirements }, this.ctx(actor || this.actor));
+      if (!inquiryResult.ok) return inquiryResult;
+      const updated = this.runtime.updateRecord('ExpoLead', lead.expo_lead_id, {
+        converted_client_id: clientResult.data.client_id,
+        converted_inquiry_id: inquiryResult.data.inquiry_id
+      }, this.ctx(actor || this.actor));
+      if (!updated.ok) return updated;
+      return ok({ client_id: clientResult.data.client_id, inquiry_id: inquiryResult.data.inquiry_id, expo_lead_id: lead.expo_lead_id, already_converted: false }, { action: 'EXPO_CONVERT_LEAD' });
+    } catch (error) {
+      return fail(error);
+    }
+  }
+
   // ---------------------------------------------------------- follow-ups
 
   ensureFollowUpTasksForLead(lead, actor) {
