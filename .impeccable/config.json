@@ -1,0 +1,28 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "design-system-font-size",
+        "value": "32px",
+        "createdAt": "2026-08-18T19:28:46.374Z"
+      },
+      {
+        "rule": "design-system-font-size",
+        "value": "44px",
+        "createdAt": "2026-08-18T19:28:46.432Z"
+      },
+      {
+        "rule": "design-system-radius",
+        "value": "14px",
+        "createdAt": "2026-08-18T19:28:46.484Z"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "#ffd98a",
+        "createdAt": "2026-08-18T19:28:46.536Z"
+      }
+    ]
+  }
+}

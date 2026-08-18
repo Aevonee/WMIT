@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live — WMIT Expo</title>
+<link rel="stylesheet" href="/events-base.css">
+<style>
+  :root { --harbor-navy:#14334f; --mist:#dbe8f4; --manifest-green:#177245; --passage-blue:#3679b6; --paper:#fff; --sea-fog:#607085; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:'IBM Plex Sans',Inter,system-ui,sans-serif; background:var(--harbor-navy); color:#fff; min-height:100vh; display:flex; flex-direction:column; }
+  header { display:flex; align-items:baseline; justify-content:space-between; padding:22px 34px 14px; }
+  header h1 { margin:0; font-size:clamp(20px,2.6vw,32px); font-weight:800; letter-spacing:.04em; }
+  header .status-line { color:var(--mist); font-size:clamp(12px,1.2vw,15px); }
+  main { flex:1; display:grid; grid-template-columns:repeat(3,1fr); gap:18px; padding:10px 34px 26px; align-content:center; }
+  .metric { background:rgba(255,255,255,.07); border:1px solid rgba(219,232,244,.25); border-radius:14px; padding:clamp(16px,2.4vh,30px) clamp(18px,2vw,30px); display:flex; flex-direction:column; justify-content:center; min-height:16vh; }
+  .metric small { color:var(--mist); font-size:clamp(12px,1.3vw,17px); font-weight:700; text-transform:uppercase; letter-spacing:.09em; }
+  .metric strong { font-size:clamp(44px,6.2vw,96px); font-weight:800; line-height:1.05; margin-top:6px; font-variant-numeric:tabular-nums; }
+  .metric.emphasis { background:rgba(23,114,69,.28); border-color:rgba(219,232,244,.35); }
+  footer { padding:12px 34px 20px; color:var(--sea-fog); font-size:13px; display:flex; justify-content:space-between; }
+  footer a { color:var(--mist); }
+  .stale { color:#ffd98a; }
+  @media (max-width:820px){ main { grid-template-columns:repeat(2,1fr); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>WORLDMASTER · EXPO LIVE</h1>
+  <div class="status-line" id="event-name">Loading…</div>
+</header>
+<main id="metrics"></main>
+<footer>
+  <span id="updated">Waiting for first refresh…</span>
+  <span><a href="/expo-console.html">Open the expo console</a> · sign in once on this device, then project this page</span>
+</footer>
+<script>
+(function () {
+  var timers = [];
+  function token() { return sessionStorage.getItem('wmit_session'); }
+  function authHeaders() { var h = { 'Content-Type': 'application/json' }; var t = token(); if (t) h.Authorization = 'Bearer ' + t; return h; }
+
+  function fmtMoney(value) {
+    var n = Number(value || 0);
+    return n.toLocaleString('en-PH', { maximumFractionDigits: 0 });
+  }
+
+  function render(data) {
+    var funnel = data.funnel || {};
+    document.getElementById('event-name').textContent = (data.expo && data.expo.name ? data.expo.name : 'Expo') + (data.expo && data.expo.tag ? ' · ' + data.expo.tag : '');
+    var cards = [
+      { label: 'Leads captured', value: funnel.leads },
+      { label: 'Contacted', value: funnel.contacted },
+      { label: 'Quotes sent', value: funnel.quotes_sent },
+      { label: 'Accepted', value: funnel.accepted },
+      { label: 'Booked', value: funnel.booked, emphasis: true },
+      { label: 'Revenue · PHP', value: fmtMoney(data.revenue && data.revenue.php_total), emphasis: true }
+    ];
+    document.getElementById('metrics').innerHTML = cards.map(function (card) {
+      return '<div class="metric' + (card.emphasis ? ' emphasis' : '') + '"><small>' + card.label + '</small><strong>' + (card.value === undefined || card.value === null ? '—' : card.value) + '</strong></div>';
+    }).join('');
+  }
+
+  function stamp(ok) {
+    var el = document.getElementById('updated');
+    var now = new Date().toLocaleTimeString('en-PH', { hour12: false });
+    el.textContent = ok ? 'Updated ' + now : 'Connection lost — retrying · last try ' + now;
+    el.className = ok ? '' : 'stale';
+  }
+
+  async function refresh() {
+    try {
+      var params = new URLSearchParams(location.search);
+      var query = params.get('expo') ? '?expo=' + encodeURIComponent(params.get('expo')) : '';
+      var response = await fetch('/api/expo/dashboard' + query, { headers: authHeaders() });
+      if (response.status === 401) { sessionStorage.removeItem('wmit_session'); window.location.href = 'login.html?next=expo-live.html'; return; }
+      var body = await response.json();
+      if (!body.ok) throw new Error('dashboard unavailable');
+      render(body.data);
+      stamp(true);
+    } catch (_) { stamp(false); }
+  }
+
+  refresh();
+  timers.push(setInterval(refresh, 30000));
+})();
+</script>
+</body>
+</html>
