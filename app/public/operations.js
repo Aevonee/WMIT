@@ -1043,7 +1043,13 @@ function caseCommandMarkup(records, projection) {
   const blockerMarkup = blockers.length ? '<ul>' + blockers.slice(0, 4).map((item) => '<li>' + esc(item.message) + '</li>').join('') + '</ul>' : '<p class="muted">No current blockers.</p>';
   const services = Array.isArray(projection.services) ? projection.services : [];
   const serviceSummary = services.length ? '<div class="case-command-services"><b>Services</b><div class="table-wrap"><table><thead><tr><th>Service</th><th>Supplier fulfillment</th><th>Readiness</th></tr></thead><tbody>' + services.map((service) => '<tr><td>' + esc(service.description) + '</td><td>' + esc(readableState(service.fulfillment && service.fulfillment.state)) + '</td><td>' + status(readableState(service.readiness && service.readiness.state), service.readiness && service.readiness.state === 'READY' ? 'good' : 'warn') + '</td></tr>').join('') + '</tbody></table></div></div>' : '';
-  return '<div class="case-command"><div class="case-command-main"><div class="eyebrow">Case command center</div><div class="case-command-state">' + esc(stateLine || projection.currentStage) + '</div><div class="case-command-next"><span>NEXT ACTION</span><strong>' + esc(next.label || 'Review case') + '</strong><p>' + esc(next.reason || '') + '</p><button onclick="openNextAction(\'' + esc(next.code || '') + '\')">Open</button></div></div><div class="case-command-side"><div><b>Blockers</b>' + blockerMarkup + '</div>' + (deadline ? '<div class="case-deadline"><b>Next deadline</b><br>' + esc(deadline.label) + '<br>' + esc(readableTimestamp(deadline.at)) + (deadline.overdue ? ' · OVERDUE' : '') + '</div>' : '') + '<div class="muted">Responsible: ' + esc(projection.responsibleActor && (projection.responsibleActor.actorId || projection.responsibleActor.role) || 'Derived from case state') + '</div></div>' + serviceSummary + '</div>';
+  const finance = projection.finance || {};
+  const balanceLine = finance.outstanding !== undefined && finance.outstanding !== null
+    ? '<div class="case-deadline"><b>Outstanding balance</b><br>' + esc(formatMoney(finance.outstanding, finance.currency)) + (finance.verifiedReceived !== undefined ? '<br><span class="muted">Verified received: ' + esc(formatMoney(finance.verifiedReceived, finance.currency)) + '</span>' : '') + '</div>'
+    : '';
+  const quotation = records.quotation;
+  const priceLine = quotation && quotation.client_total ? '<div class="case-deadline"><b>Quoted price</b><br>' + esc(formatMoney(quotation.client_total, quotation.currency)) + '</div>' : '';
+  return '<div class="case-command"><div class="case-command-main"><div class="eyebrow">Case command center</div><div class="case-command-state">' + esc(stateLine || projection.currentStage) + '</div><div class="case-command-next"><span>NEXT ACTION</span><strong>' + esc(next.label || 'Review case') + '</strong><p>' + esc(next.reason || '') + '</p><button onclick="openNextAction(\'' + esc(next.code || '') + '\')">Open</button></div></div><div class="case-command-side"><div><b>Blockers</b>' + blockerMarkup + '</div>' + (priceLine || '') + (deadline ? '<div class="case-deadline"><b>Next deadline</b><br>' + esc(deadline.label) + '<br>' + esc(readableTimestamp(deadline.at)) + (deadline.overdue ? ' · OVERDUE' : '') + '</div>' : '') + (balanceLine || '') + '<div class="muted">Responsible: ' + esc(projection.responsibleActor && (projection.responsibleActor.actorId || projection.responsibleActor.role) || 'Derived from case state') + '</div></div>' + serviceSummary + '</div>';
 }
 
 function renderHeader() {
@@ -1062,9 +1068,7 @@ function renderHeader() {
     return;
   }
   const requirements = records.inquiry.current_requirements || {};
-  const projection = projectionForCase(records);
-  const next = projection && projection.nextAction && projection.nextAction.label || nextAction(records);
-  target.innerHTML = '<div><div class="eyebrow">Current case · LOCAL SYNTHETIC TEST DATA</div><h2>' + esc((records.client && records.client.display_name) || 'Client') + ' · ' + esc(requirements.destination || 'Destination pending') + '</h2><div class="case-meta"><span>' + esc(requirements.travel_start || requirements.travel_month || requirements.travel_year || 'Travel timing not recorded') + (requirements.travel_end ? ' – ' + esc(requirements.travel_end) : '') + '</span><span>' + esc(requirements.pax_count || '—') + ' travelers</span><span>Inquiry ' + esc(records.inquiry.inquiry_id) + '</span></div><p class="muted">Current next action: <b>' + esc(next) + '</b></p></div><div class="card warn"><b>Next action</b><div>' + esc(next) + '</div><div class="row-actions"><button class="secondary" onclick="openInquiries()">Switch Inquiry</button>' + (records.client && records.client.primary_phone ? '<button class="secondary" onclick="openClientMessageComposer()">Message client</button>' : '') + '</div></div>';
+  target.innerHTML = '<div><div class="eyebrow">Current case · LOCAL SYNTHETIC TEST DATA</div><h2>' + esc((records.client && records.client.display_name) || 'Client') + ' · ' + esc(requirements.destination || 'Destination pending') + '</h2><div class="case-meta"><span>' + esc(requirements.travel_start || requirements.travel_month || requirements.travel_year || 'Travel timing not recorded') + (requirements.travel_end ? ' – ' + esc(requirements.travel_end) : '') + '</span><span>' + esc(requirements.pax_count || '—') + ' travelers</span><span>Inquiry ' + esc(records.inquiry.inquiry_id) + '</span></div></div><div class="row-actions"><button class="secondary" onclick="openInquiries()">Switch Inquiry</button>' + (records.client && records.client.primary_phone ? '<button class="secondary" onclick="openClientMessageComposer()">Message client</button>' : '') + '</div>';
 }
 
 function openClientMessageComposer() {
@@ -1351,6 +1355,12 @@ function operationalMoney(value, currency) {
   return (Number.isFinite(amount) ? amount.toFixed(2) : String(value)) + ' ' + (currency || 'PHP');
 }
 
+function formatMoney(value, currency) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return String(value === undefined || value === null || value === '' ? '0.00' : value) + ' ' + (currency || 'PHP');
+  return amount.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + (currency || 'PHP');
+}
+
 function deadlineDisplay(deadline) {
   if (!deadline || !deadline.at) return 'No deadline recorded';
   const timestamp = Date.parse(deadline.at);
@@ -1577,7 +1587,7 @@ function renderSelectedInquiry(records, requirements) {
   const participants = records.booking ? list('BookingParticipant', (item) => item.booking_id === records.booking.booking_id) : [];
   const people = participants.map((participant) => { const person = latest('Person', (item) => item.person_id === participant.person_id); return '<tr><td>' + esc(person && (person.display_name || person.name) || participant.person_id) + '</td><td>' + esc(participant.role || participant.roles || 'Role not recorded') + '</td></tr>'; }).join('');
   const historyMarkup = requirementChangeSummary(inquiry) + (changes.length ? '<details class="secondary-details"><summary>Requirement History (' + changes.length + ' changes)</summary><div class="timeline">' + changes.map((entry) => '<div class="timeline-item"><strong>' + esc(entry.type || 'Requirement event') + '</strong><div class="muted">' + esc(entry.at || 'Time not recorded') + '</div>' + requirementTable(entry.value || {}) + '</div>').join('') + '</div></details>' : '');
-  return '<div class="card good"><div class="panel-head"><div><h3>Current Inquiry ' + status(readableState(inquiry.state), 'info') + '</h3><p class="muted">All case-specific workspaces refer to this Inquiry.</p></div><button class="secondary" onclick="openInquiries()">Back to Inquiry list</button></div>' + field('Client', records.client && records.client.display_name || inquiry.client_id) + field('Current travel request', inquiryTravelLabel(requirements)) + field('Current destination', requirements.destination) + field('Travelers', travelerCompositionLabel(requirements)) + '<h3>Current requirements</h3>' + requirementTable(requirements) + inquiryEditForm(inquiry) + historyMarkup + '<details class="secondary-details"><summary>People and Roles</summary>' + (people ? '<table><thead><tr><th>Person</th><th>Role</th></tr></thead><tbody>' + people + '</tbody></table>' : '<p class="muted">No Booking participant roles have been recorded yet.</p>') + '</details></div>';
+  return '<div class="card good"><div class="panel-head"><div><h3>Current Inquiry ' + status(readableState(inquiry.state), 'info') + '</h3><p class="muted">All case-specific workspaces refer to this Inquiry.</p></div><button class="secondary" onclick="openInquiries()">Back to Inquiry list</button></div><h3>Current requirements</h3>' + requirementTable(requirements) + inquiryEditForm(inquiry) + historyMarkup + '<details class="secondary-details"><summary>People and Roles</summary>' + (people ? '<table><thead><tr><th>Person</th><th>Role</th></tr></thead><tbody>' + people + '</tbody></table>' : '<p class="muted">No Booking participant roles have been recorded yet.</p>') + '</details></div>';
 }
 
 function renderInquiry() {
