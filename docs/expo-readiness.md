@@ -99,6 +99,15 @@ Work through this before the doors open on September 4:
       phone hotspot takes over; the queue drains on reconnect.
 - [ ] Decide **who ends the event** after September 6 (Events tab → end) —
       closing the form keeps all history readable.
+- [ ] Golden-quote acceptance test done — WMIT's pricing reproduced the
+      prices actually charged on real past quotes
+      ([golden-quote-acceptance.md](golden-quote-acceptance.md), ~15 min).
+- [ ] Counsel review of the booking terms and voucher templates scheduled
+      (or completed) — documents issued at the expo carry this wording
+      ([counsel-review-package.md](counsel-review-package.md)).
+- [ ] Email deliverability verified — SPF/DKIM/DMARC set and a test quote
+      email scores well on mail-tester
+      ([email-deliverability.md](email-deliverability.md)).
 
 ## Option — home-PC hosting via Cloudflare Tunnel (stopgap)
 

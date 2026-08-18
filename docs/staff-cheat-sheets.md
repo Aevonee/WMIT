@@ -50,7 +50,12 @@ the text, then **Copy / Open WhatsApp / Open Viber**.
 | Day 1/3/7 follow-ups | Events console → Follow-ups (overdue first) |
 | Send a quote | Events console → Quotes: pick packages → create → Message or Email quote |
 | Record a client payment | Operations → Finance (case selected) |
+| Issue a payment receipt | Operations → Finance (case selected) → Issue receipt — after the payment is verified; receipt numbers are sequential and permanent |
+| Print client documents | Case buttons: Quotation tab → Preview itinerary · Finance tab → Client invoice / Tour voucher · Print (browser print → PDF) |
+| Email a client document | Open the document → Email → confirm the address — every send is audit-logged |
 | Add a supplier | Operations → Suppliers → Add supplier |
+| Convert an expo lead to a real case | Events console → Leads → Convert — creates the Client + Inquiry with the lead's brief; continue in Operations |
+| Export data (suppliers, payments, expo leads) | The Export CSV buttons on each list — opens in Excel |
 | Change my password | Top-right → Change password |
 
 **Escalate to the admin/manager when:** a quotation needs approval, a
@@ -67,6 +72,8 @@ means exactly that.
 | Create staff accounts, reset passwords | Operations → Settings → WMIT accounts |
 | Edit message templates | Operations → Settings → Message templates |
 | Quotation/payment defaults | Operations → Settings |
+| Review the activity log | Operations → Settings → Activity log — who changed what, with a chain-verified badge |
+| Check backups and system health | Operations → Settings → System health — last successful backup, heartbeat, audit chain |
 | End an expo event | Events console → Events |
 
 **Rules that protect you:** you cannot disable your own account or remove

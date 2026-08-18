@@ -6,6 +6,20 @@ Do not retry a write repeatedly until the result is known. First check the audit
 
 ## Common situations
 
+### Staff member forgot their password
+
+An admin resets it from the workspace: Settings → WMIT accounts →
+reset-password. If no admin can sign in (or the admin password itself is
+lost), reset from the server with:
+
+```text
+npm run admin:reset -- <username>
+```
+
+Stop the server first, run the command, note the printed one-time password
+(never stored anywhere), restart the server, and have the staff member change
+it on first sign-in.
+
 ### WMIT folder already exists
 
 The initializer should reuse an exact unique match. If multiple matches are found, stop and ask the owner to select the correct folder. Do not create another root.

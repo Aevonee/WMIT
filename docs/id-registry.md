@@ -65,6 +65,7 @@ database itself.
 | ExpoPackageTemplate | `EXPO_PACKAGE` | yes |
 | ExpoQuote | `EXPO_QUOTE` | yes |
 | ExpoEvent | `EXPO_EVENT` | yes |
+| Receipt | `RECEIPT` | yes |
 | AuditEvent | `AUDIT_EVENT` | yes |
 
 ## Other identifiers
@@ -78,6 +79,7 @@ database itself.
 | Voucher QR links (planned) | `/v/VOUCHER-YYYY-NNNNNN?sig=…` | signature derived from the record |
 
 The authoritative source of these prefixes is `ENTITY_DEFS` in
-`src/phase1/runtime.js`. The Apps Script port keeps a parallel list in
-`apps-script/WmitSheetServices.gs` (`PREFIXES`); keep both in sync if entities
-are ever added.
+`src/phase1/runtime.js`. The Apps Script artifact retains its Phase 1–2
+entity subset in `apps-script/WmitSheetServices.gs` (`PREFIXES`); entities
+added to the hosted runtime after the Apps Script freeze (expo tooling,
+Receipt, and later additions) are hosted-only and are not ported there.
