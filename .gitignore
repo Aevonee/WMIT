@@ -64,3 +64,6 @@ src/plugins/impeccable-live.client.ts
 .omo/run-continuation/
 .omo/notepads/
 .claude/settings.local.json
+
+.mvp.stdout.log
+.mvp.stderr.log

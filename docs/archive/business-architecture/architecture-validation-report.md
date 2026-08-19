@@ -8,7 +8,7 @@ Status: validation report only. No implementation, schema, test, configuration, 
 
 ## Scope and review basis
 
-This review compares the ten documents under `docs/business-architecture/` with one another and with the current local prototype documentation and relevant source code.
+This review compares the ten documents under `docs/archive/business-architecture/` with one another and with the current local prototype documentation and relevant source code.
 
 The business-architecture documents are treated as proposals requiring validation. The prototype is treated as implementation evidence only.
 

@@ -32,7 +32,7 @@ This review is read-only with respect to the application. Only this document, th
 Reviewed:
 
 - `baseline-v1.1.md`, `BASELINE-HANDOFF.md`, `prototype-redesign-plan.md`;
-- the other documents under `docs/business-architecture/`, including the tariff, financial, state, permissions, validation, gap, and implementation documents;
+- the other documents under `docs/archive/business-architecture/`, including the tariff, financial, state, permissions, validation, gap, and implementation documents;
 - `src/models/schema.js`, repositories, services, lifecycle and validation;
 - application workflows, quotation calculations, payment conversion, document intelligence, configuration, Apps Script boundaries, HTTP routes, UI, and tests;
 - the repository test suite: **68 passing, 0 failing** on 2026-08-13.
