@@ -128,9 +128,6 @@
       });
     }
     var orderedItems = (items || []).slice().sort(function (a, b) { return (a.line_order || 0) - (b.line_order || 0); });
-    var clientItems = [];
-    var packageIndex = -1;
-    var packageAmountMinor = 0;
     var publicItem = function (item) {
       return {
         service_type: item.service_type,
@@ -150,27 +147,9 @@
         notes: item.client_notes || undefined
       };
     };
-    orderedItems.forEach(function (item) {
-      if (item.service_type === 'Flight') {
-        clientItems.push(publicItem(item));
-        return;
-      }
-      if (packageIndex < 0) {
-        packageIndex = clientItems.length;
-        clientItems.push(null);
-      }
-      packageAmountMinor = addSafe(packageAmountMinor, lineMinor({ quantity: item.quantity, unit_selling_price: item.unit_selling_price || 0 }, 'unit_selling_price'));
-    });
-    if (packageIndex >= 0) {
-      clientItems[packageIndex] = {
-        service_type: 'Tour Package',
-        description: 'Tour Package',
-        quantity: 1,
-        unit_price: decimal(packageAmountMinor),
-        amount: decimal(packageAmountMinor),
-        currency: quotation.currency
-      };
-    }
+    // Client-safe whitelist: publicItem projects selling prices only; internal
+    // cost and supplier data must never reach the client preview.
+    var clientItems = orderedItems.map(publicItem);
     return {
       brand: { name: 'World Master International Travel', short_name: 'WMIT', logo_asset: 'header.png' },
       contact: contact ? { name: contact.contact_value, type: contact.contact_type } : null,

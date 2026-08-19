@@ -33,7 +33,9 @@ test('Phase 1 quotation workspace supports manual draft editing and safe client 
   assert.equal(saved.ok, true);
   const preview = runtime.getClientQuotationPreview(quotation.quotation_id);
   assert.equal(preview.ok, true);
-  assert.equal(preview.data.items[0].service_type, 'Tour Package');
+  assert.equal(preview.data.items.length, 1);
+  assert.equal(preview.data.items[0].service_type, 'Hotel');
+  assert.equal(preview.data.items[0].description, 'Client-facing hotel stay');
   assert.equal(preview.data.items[0].amount, 10000);
   assert.equal(preview.data.quotation.itinerary_days[0].city, 'Bangkok');
   assert.equal(preview.data.quotation.client_notes, 'Please bring a valid passport.');

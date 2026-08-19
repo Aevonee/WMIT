@@ -28,9 +28,12 @@ test('manual quotation editor calculates multiple items and keeps client preview
   assert.equal(editor.data.totals.client_total, 11500);
   const preview = app.getClientQuotationPreview('QUOTATION-2026-000040');
   assert.equal(preview.ok, true);
-  assert.equal(preview.data.items.length, 1);
-  assert.equal(preview.data.items[0].service_type, 'Tour Package');
-  assert.equal(preview.data.items[0].amount, 11500);
+  assert.equal(preview.data.items.length, 2);
+  assert.equal(preview.data.items[0].service_type, 'Hotel');
+  assert.equal(preview.data.items[0].description, 'Synthetic hotel');
+  assert.equal(preview.data.items[0].amount, 10000);
+  assert.equal(preview.data.items[1].service_type, 'Transfer');
+  assert.equal(preview.data.items[1].amount, 1500);
   assert.equal(preview.data.brand.name, 'World Master International Travel');
   assert.equal(preview.data.brand.logo_asset, 'header.png');
   assert.equal(preview.data.quotation.client_total, 11500);
