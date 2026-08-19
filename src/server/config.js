@@ -41,8 +41,19 @@ function loadConfig(overrides) {
   const env = String(read('WMIT_ENV', 'development')).toLowerCase();
   if (!['development', 'staging', 'production'].includes(env)) throw new Error('WMIT_ENV must be development, staging, or production.');
   const dataDir = path.resolve(read('WMIT_DATA_DIR', path.join(process.cwd(), 'data')));
-  const port = Number(read('WMIT_PORT', 3000));
+  // Passenger (Plesk Node.js) passes its listen endpoint as PORT — a TCP port
+  // number or a unix-socket path. WMIT_PORT wins; socket paths ignore host.
+  const portValue = String(read('WMIT_PORT', process.env.PORT || 3000)).trim();
+  const portNumeric = /^\d+$/.test(portValue) ? Number(portValue) : null;
+  const port = portNumeric !== null ? portNumeric : portValue;
   const enforceSessions = String(read('WMIT_ENFORCE_SESSIONS', env === 'development' ? 'false' : 'true')).toLowerCase() === 'true';
+  const baseUrl = read('WMIT_BASE_URL', 'http://127.0.0.1:' + (portNumeric !== null ? portNumeric : 3000));
+  // A loopback base URL in production means emailed links (expo quotes,
+  // client documents) point at the server machine itself — clients cannot
+  // open them. Fail loudly at boot instead of silently sending dead links.
+  if (env === 'production' && /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?(\/.*)?$/.test(baseUrl)) {
+    console.warn('WMIT: WMIT_BASE_URL is a loopback address (' + baseUrl + ') in production — emailed quote and document links will not work for clients. Set WMIT_BASE_URL to the public https URL.');
+  }
 
   return {
     env,
@@ -50,7 +61,7 @@ function loadConfig(overrides) {
     isStaging: env === 'staging',
     port,
     host: read('WMIT_HOST', env === 'production' || env === 'staging' ? '0.0.0.0' : '127.0.0.1'),
-    baseUrl: read('WMIT_BASE_URL', 'http://127.0.0.1:' + port),
+    baseUrl: read('WMIT_BASE_URL', 'http://127.0.0.1:' + (portNumeric !== null ? portNumeric : 3000)),
     timezone: read('WMIT_TIMEZONE', 'Asia/Manila'),
     dataDir,
     dbPath: path.resolve(read('WMIT_DB_PATH', path.join(dataDir, 'wmit-' + env + '.sqlite3'))),
