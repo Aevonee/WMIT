@@ -508,7 +508,7 @@ function projectionForCase(records) {
 
 function currentTab() {
   const value = String(window.location.hash || '#dashboard').slice(1).split('/')[0];
-  return ['dashboard', 'case', 'inquiry', 'clients', 'tariffs', 'quotation', 'booking', 'finance', 'monitoring', 'settings', 'suppliers', 'subagents', 'operations', 'departures'].includes(value) ? value : 'dashboard';
+  return ['dashboard', 'case', 'inquiry', 'clients', 'tariffs', 'quotation', 'booking', 'finance', 'monitoring', 'settings', 'suppliers', 'subagents', 'operations', 'departures', 'documents', 'interns'].includes(value) ? value : 'dashboard';
 }
 
 function clearCaseWorkspaceSelections() {
@@ -613,11 +613,12 @@ function dashboardQueuesMarkup() {
     });
   });
 
-  list('Task', (task) => task.state === 'OPEN' && task.due_at && String(task.due_at).slice(0, 10) < todayIso).forEach((task) => {
+  list('Task', (task) => !['COMPLETED', 'CANCELLED'].includes(task.state) && task.due_at && String(task.due_at).slice(0, 10) <= todayIso).forEach((task) => {
     const inquiryId = task.related_type === 'Inquiry' ? task.related_id : null;
+    const due = String(task.due_at).slice(0, 10);
     rows.push({
-      group: 'Overdue follow-ups',
-      label: task.title + ' — due ' + String(task.due_at).slice(0, 10),
+      group: due < todayIso ? 'Overdue follow-ups' : 'Due today',
+      label: task.title + ' — due ' + due,
       action: inquiryId ? "openCaseAt('operations', '" + inquiryId + "')" : "window.location.hash='operations'",
       actionLabel: 'Open'
     });
@@ -637,7 +638,7 @@ function dashboardQueuesMarkup() {
   }
 
   if (!rows.length) return '<div class="card good"><h3>All clear</h3><p class="muted">Nothing needs your attention right now. New quotes, due payments, and follow-ups appear here.</p></div>';
-  const groupOrder = ['Payments overdue', 'Quotes awaiting approval', 'Payments due within 7 days', 'Overdue follow-ups', 'Leads needing mobile'];
+  const groupOrder = ['Payments overdue', 'Quotes awaiting approval', 'Quotes expired — follow up or requote', 'Quotes expiring within 7 days', 'Payments due within 7 days', 'Overdue follow-ups', 'Due today', 'Leads needing mobile'];
   const groups = groupOrder.map((name) => ({ name: name, rows: rows.filter((row) => row.group === name) })).filter((group) => group.rows.length);
   return '<div class="panel"><div class="panel-head"><div><h3>What needs you now</h3><p class="muted">Every row opens the case it belongs to.</p></div></div>' +
     groups.map((group) => '<div style="margin-bottom:12px"><div class="eyebrow">' + esc(group.name) + ' (' + group.rows.length + ')</div>' +
@@ -1053,7 +1054,7 @@ function caseCommandMarkup(records, projection) {
 }
 
 function renderHeader() {
-  const directoryTabs = ['dashboard', 'clients', 'suppliers', 'subagents', 'tariffs', 'operations', 'settings'];
+  const directoryTabs = ['dashboard', 'clients', 'suppliers', 'subagents', 'tariffs', 'operations', 'documents', 'interns', 'settings'];
   const records = caseRecords();
   const target = $('case-header');
   if (!target) return;
@@ -1584,7 +1585,7 @@ function renderSelectedInquiry(records, requirements) {
   const inquiry = records.inquiry;
   const history = inquiry.history || [];
   const changes = history.filter((entry) => entry.type && entry.type !== 'ORIGINAL');
-  const participants = records.booking ? list('BookingParticipant', (item) => item.booking_id === records.booking.booking_id) : [];
+  const participants = records.booking ? list('BookingParticipant', (item) => item.booking_id === records.booking.booking_id && item.state !== 'CANCELLED') : [];
   const people = participants.map((participant) => { const person = latest('Person', (item) => item.person_id === participant.person_id); return '<tr><td>' + esc(person && (person.display_name || person.name) || participant.person_id) + '</td><td>' + esc(participant.role || participant.roles || 'Role not recorded') + '</td></tr>'; }).join('');
   const historyMarkup = requirementChangeSummary(inquiry) + (changes.length ? '<details class="secondary-details"><summary>Requirement History (' + changes.length + ' changes)</summary><div class="timeline">' + changes.map((entry) => '<div class="timeline-item"><strong>' + esc(entry.type || 'Requirement event') + '</strong><div class="muted">' + esc(entry.at || 'Time not recorded') + '</div>' + requirementTable(entry.value || {}) + '</div>').join('') + '</div></details>' : '');
   return '<div class="card good"><div class="panel-head"><div><h3>Current Inquiry ' + status(readableState(inquiry.state), 'info') + '</h3><p class="muted">All case-specific workspaces refer to this Inquiry.</p></div><button class="secondary" onclick="openInquiries()">Back to Inquiry list</button></div><h3>Current requirements</h3>' + requirementTable(requirements) + inquiryEditForm(inquiry) + historyMarkup + '<details class="secondary-details"><summary>People and Roles</summary>' + (people ? '<table><thead><tr><th>Person</th><th>Role</th></tr></thead><tbody>' + people + '</tbody></table>' : '<p class="muted">No Booking participant roles have been recorded yet.</p>') + '</details></div>';
@@ -1615,6 +1616,8 @@ function renderInquiry() {
     bindClientPicker('inq-client-search', 'inq-client');
   }
   upgradeRequirementControls(records.inquiry ? 'edit-inq-' : 'inq-', records.inquiry ? requirements : {});
+  linkTravelDatePickers('inq-start', 'inq-end');
+  linkTravelDatePickers('edit-inq-start', 'edit-inq-end');
 }
 
 async function createInquiry() {
@@ -2106,6 +2109,7 @@ function renderQuotation() {
   renderQuotationEditorAddendum(quote, records, items, draft);
   const revisionCard = quotationRevisionDiffMarkup(quote);
   if (revisionCard) $('quotation-content').insertAdjacentHTML('beforeend', revisionCard);
+  linkTravelDatePickers('quote-travel-start', 'quote-travel-end');
 }
 
 function quotationRevisionDiffMarkup(quote) {
@@ -2210,6 +2214,32 @@ function flightDurationLabel(departureTime, arrivalTime) {
   return Math.floor(minutes / 60) + 'h' + (minutes % 60 ? ' ' + (minutes % 60) + 'm' : '');
 }
 
+function flightArrivesNextDay(departureTime, arrivalTime) {
+  if (!departureTime || !arrivalTime) return false;
+  const parse = (value) => { const parts = String(value).split(':').map(Number); return parts.length >= 2 && parts.every(Number.isFinite) ? parts[0] * 60 + parts[1] : null; };
+  const departure = parse(departureTime);
+  const arrival = parse(arrivalTime);
+  return departure !== null && arrival !== null && arrival < departure;
+}
+
+function nextDayArrivalBadge(departureTime, arrivalTime) {
+  return flightArrivesNextDay(departureTime, arrivalTime) ? ' <span class="arrive-next-day" title="Arrives the next day">(+1)</span>' : '';
+}
+
+function linkTravelDatePickers(startId, endId) {
+  const start = $(startId);
+  const end = $(endId);
+  if (!start || !end || start.dataset.rangeLinked === 'true') return;
+  start.dataset.rangeLinked = 'true';
+  const sync = () => {
+    if (!start.value) return;
+    end.min = start.value;
+    if (!end.value || end.value < start.value) end.value = start.value;
+  };
+  start.addEventListener('change', sync);
+  sync();
+}
+
 function layoverDetailsMarkup(prefix, item, disabled) {
   const value = (key) => esc(item && item[key] || '');
   return '<div class="grid3"><div class="field"><label>Layover airport</label><input id="' + prefix + 'layover-airport" value="' + value('layover_airport') + '" placeholder="e.g. HKG"' + disabled + '></div><div class="field"><label>Layover duration (hours)</label><input id="' + prefix + 'layover-duration-hours" type="number" min="0" step="0.1" value="' + value('layover_duration_hours') + '"' + disabled + '></div><div class="field"><label>Layover notes</label><input id="' + prefix + 'layover-notes" value="' + value('layover_notes') + '" placeholder="Optional"' + disabled + '></div></div>';
@@ -2231,11 +2261,12 @@ function quotationFlightDetailsMarkup(quote, draft) {
   const flights = storedFlights.length ? storedFlights : (draft ? [{}] : []);
   const disabled = draft ? '' : ' disabled';
   const cards = flights.map((flight, index) => {
-    const date = flight.flight_date || flight.service_start || (index === 0 ? quote.travel_start : '') || '';
+    const date = flight.flight_date || flight.service_start || quote.travel_start || '';
     const actions = draft ? '<div class="row-actions"><button class="secondary compact" onclick="saveQuotationFlights()">Save flight details</button>' + (flights.length > 1 ? '<button class="danger compact" onclick="removeQuotationFlight(' + index + ')">Remove flight</button>' : '') + '</div>' : '';
     const segmentType = String(flight.segment_type || 'FLIGHT').toUpperCase() === 'LAYOVER' ? 'LAYOVER' : 'FLIGHT';
     const detailMarkup = segmentType === 'LAYOVER' ? layoverDetailsMarkup('qflight-' + index + '-', flight, disabled) : flightDetailsMarkup('qflight-' + index + '-', flight, disabled, false);
-    return '<div class="card flight-detail-card" data-flight-index="' + index + '" data-segment-type="' + segmentType + '"><div class="panel-head"><div><h4>' + (segmentType === 'LAYOVER' ? 'Layover ' : 'Flight ') + (index + 1) + '</h4><p class="muted">' + (segmentType === 'LAYOVER' ? 'Record a connection between flights.' : 'Flight information appears in the client quotation when recorded.') + '</p></div><span class="muted">' + esc(date || 'Date not recorded') + '</span></div><div class="field"><label>' + (segmentType === 'LAYOVER' ? 'Layover date' : 'Flight date') + '</label><input id="qflight-' + index + '-date" type="date" value="' + esc(date) + '"' + disabled + '></div>' + detailMarkup + actions + '</div>';
+    const durationHint = segmentType === 'FLIGHT' && flight.departure_time && flight.arrival_time ? flightDurationLabel(flight.departure_time, flight.arrival_time) + nextDayArrivalBadge(flight.departure_time, flight.arrival_time) : '';
+    return '<div class="card flight-detail-card" data-flight-index="' + index + '" data-segment-type="' + segmentType + '"><div class="panel-head"><div><h4>' + (segmentType === 'LAYOVER' ? 'Layover ' : 'Flight ') + (index + 1) + '</h4><p class="muted">' + (segmentType === 'LAYOVER' ? 'Record a connection between flights.' : 'Flight information appears in the client quotation when recorded.') + '</p></div><span class="muted">' + esc(date || 'Date not recorded') + (durationHint ? ' · ' + durationHint : '') + '</span></div><div class="field"><label>' + (segmentType === 'LAYOVER' ? 'Layover date' : 'Flight date') + '</label><input id="qflight-' + index + '-date" type="date" value="' + esc(date) + '"' + disabled + '></div>' + detailMarkup + actions + '</div>';
   }).join('');
   const add = draft ? '<div class="row-actions"><button class="secondary" onclick="addQuotationFlight()">+ Add flight</button><button class="secondary" onclick="addQuotationLayover()">+ Add layover</button></div>' : '';
   const empty = !cards ? '<p class="muted">No flight details recorded.</p>' : '';
@@ -2254,7 +2285,7 @@ function addClientFlightDetailsSection(preview) {
   const quotationFlights = preview.quotation && Array.isArray(preview.quotation.flight_details) ? preview.quotation.flight_details : [];
   const flightItems = quotationFlights.length ? quotationFlights : (preview.items || []).filter((item) => item.service_type === 'Flight');
   if (!flightItems.length) return;
-  const flightRows = flightItems.map((item) => '<tr><td>' + esc(item.description || 'Flight') + '</td><td>' + esc(item.airline || 'Not recorded') + '</td><td>' + esc(item.flight_number || 'Not recorded') + '</td><td>' + esc(item.departure_airport || '—') + ' → ' + esc(item.arrival_airport || '—') + '</td><td>' + esc(item.departure_time || '—') + ' → ' + esc(item.arrival_time || '—') + '</td></tr>').join('');
+  const flightRows = flightItems.map((item) => '<tr><td>' + esc(item.description || 'Flight') + '</td><td>' + esc(item.airline || 'Not recorded') + '</td><td>' + esc(item.flight_number || 'Not recorded') + '</td><td>' + esc(item.departure_airport || '—') + ' → ' + esc(item.arrival_airport || '—') + '</td><td>' + esc(item.departure_time || '—') + ' → ' + esc(item.arrival_time || '—') + nextDayArrivalBadge(item.departure_time, item.arrival_time) + '</td></tr>').join('');
   target.insertAdjacentHTML('beforebegin', '<section class="preview-section client-flight-details"><h3>Flight details</h3><div class="table-wrap"><table><thead><tr><th>Service</th><th>Airline</th><th>Flight</th><th>Route</th><th>Schedule</th></tr></thead><tbody>' + flightRows + '</tbody></table></div></section>');
 }
 
@@ -2270,9 +2301,9 @@ function formatClientFlightDetails(preview) {
     const layover = String(item.segment_type || 'FLIGHT').toUpperCase() === 'LAYOVER';
     const baggage = layover ? '-' : [item.checkin_baggage_kg ? 'Checked ' + item.checkin_baggage_kg + ' kg' : '', item.hand_carry_baggage_kg ? 'Hand carry ' + item.hand_carry_baggage_kg + ' kg' : ''].filter(Boolean).join(' / ') || 'Not recorded';
     const route = layover ? item.layover_airport || 'Not recorded' : (item.departure_airport || '-') + ' → ' + (item.arrival_airport || '-');
-    const schedule = item.departure_time || item.arrival_time ? (item.departure_time || '-') + ' → ' + (item.arrival_time || '-') : '-';
+    const schedule = item.departure_time || item.arrival_time ? esc(item.departure_time || '-') + ' → ' + esc(item.arrival_time || '-') + nextDayArrivalBadge(item.departure_time, item.arrival_time) : '-';
     const duration = layover ? (item.layover_duration_hours ? item.layover_duration_hours + 'h' : 'Not recorded') : flightDurationLabel(item.departure_time, item.arrival_time);
-    return '<tr><td>' + esc(layover ? 'Layover' : item.airline || 'Not recorded') + '</td><td>' + esc(layover ? '-' : item.flight_number || 'Not recorded') + '</td><td>' + esc(route) + '</td><td>' + esc(schedule) + '</td><td>' + esc(duration) + '</td><td>' + esc(baggage) + '</td></tr>';
+    return '<tr><td>' + esc(layover ? 'Layover' : item.airline || 'Not recorded') + '</td><td>' + esc(layover ? '-' : item.flight_number || 'Not recorded') + '</td><td>' + esc(route) + '</td><td>' + schedule + '</td><td>' + esc(duration) + '</td><td>' + esc(baggage) + '</td></tr>';
   }).join('');
 }
 
@@ -2322,7 +2353,7 @@ function clientQuotationPreviewMarkup(preview) {
   const q = preview.quotation || {};
   const days = q.itinerary_days || [];
   const itinerary = days.length ? '<section class="preview-section"><h3>Itinerary</h3>' + days.map((day) => '<div class="preview-day"><strong>Day ' + esc(day.day) + (day.date ? ' · ' + esc(day.date) : '') + ' — ' + esc(day.title || day.city || 'Travel day') + '</strong>' + (day.city ? '<div>' + esc(day.city) + '</div>' : '') + (day.activities ? '<p>' + esc(day.activities) + '</p>' : '') + (day.meals ? '<div><strong>Meals:</strong> ' + esc(day.meals) + '</div>' : '') + (day.overnight ? '<div><strong>Overnight:</strong> ' + esc(day.overnight) + '</div>' : '') + (day.notes ? '<div class="muted">' + esc(day.notes) + '</div>' : '') + '</div>').join('') + '</section>' : '';
-  const rows = (preview.items || []).map((item) => { const flight = item.service_type === 'Flight' ? [item.airline, item.flight_number, item.departure_airport && item.arrival_airport ? item.departure_airport + ' → ' + item.arrival_airport : item.departure_airport || item.arrival_airport, item.departure_time && item.arrival_time ? item.departure_time + '–' + item.arrival_time : item.departure_time || item.arrival_time].filter(Boolean).join(' · ') : ''; const dates = q.travel_start ? q.travel_start + (q.travel_end ? ' – ' + q.travel_end : '') : ''; return '<tr><td>' + esc(item.service_type || 'Service') + '</td><td>' + esc(item.description || '') + (flight ? '<div class="muted">' + esc(flight) + '</div>' : '') + '</td><td>' + esc(dates) + '</td><td>' + esc(item.quantity) + '</td><td class="money">' + esc(item.amount) + ' ' + esc(item.currency || q.currency || '') + '</td></tr>'; }).join('');
+  const rows = (preview.items || []).map((item) => { const flight = item.service_type === 'Flight' ? [item.airline, item.flight_number, item.departure_airport && item.arrival_airport ? item.departure_airport + ' → ' + item.arrival_airport : item.departure_airport || item.arrival_airport, item.departure_time && item.arrival_time ? item.departure_time + '–' + item.arrival_time : item.departure_time || item.arrival_time].filter(Boolean).join(' · ') : ''; const dates = q.travel_start ? q.travel_start + (q.travel_end ? ' – ' + q.travel_end : '') : ''; return '<tr><td>' + esc(item.service_type || 'Service') + '</td><td>' + esc(item.description || '') + (flight ? '<div class="muted">' + esc(flight) + nextDayArrivalBadge(item.departure_time, item.arrival_time) + '</div>' : '') + '</td><td>' + esc(dates) + '</td><td>' + esc(item.quantity) + '</td><td class="money">' + esc(item.amount) + ' ' + esc(item.currency || q.currency || '') + '</td></tr>'; }).join('');
   return '<article id="quotation-preview" class="client-preview"><div class="preview-actions"><span class="eyebrow">Client-facing preview</span><button class="secondary" onclick="printQuotation()">Print</button></div><header class="quote-header"><img class="quote-brand-image" src="/assets/header.png" alt="World Master International Travel"><div class="quote-label">QUOTATION</div></header><div class="quote-meta"><div><strong>Prepared for</strong><br>' + esc(preview.client && preview.client.name || 'Client') + '</div><div><strong>Destination</strong><br>' + esc(q.destination || '—') + '</div><div><strong>Travel dates</strong><br>' + esc(q.travel_start || '—') + ' to ' + esc(q.travel_end || '—') + '<br>' + esc(q.pax_count || '—') + ' passenger(s)</div><div><strong>Quotation date</strong><br>' + esc(q.quotation_date || '—') + '<br>Valid until ' + esc(q.valid_until || '—') + '</div></div>' + itinerary + '<section class="preview-section"><h3>Travel services</h3><div class="table-wrap"><table><thead><tr><th>Service</th><th>Description</th><th>Dates</th><th>Qty</th><th>Amount</th></tr></thead><tbody>' + (rows || '<tr><td colspan="5">No services recorded.</td></tr>') + '</tbody></table></div><div class="preview-total"><div>Discount <span>-' + esc(q.discount_total || 0) + ' ' + esc(q.currency || '') + '</span></div><div>Fees and taxes <span>' + esc(Number(q.fees_total || 0) + Number(q.tax_total || 0)) + ' ' + esc(q.currency || '') + '</span></div><div class="grand-total">Total <span>' + esc(q.client_total || 0) + ' ' + esc(q.currency || '') + '</span></div></div></section><div class="quote-columns"><div><h3>Inclusions</h3><p>' + esc(q.inclusions || 'As listed above.') + '</p></div><div><h3>Exclusions</h3><p>' + esc(q.exclusions || 'Not specified.') + '</p></div></div><section class="quote-terms"><h3>Payment terms and notes</h3><p>' + esc(q.payment_terms || 'Payment terms to be confirmed.') + '</p><p>' + esc(q.client_notes || '') + '</p></section><footer class="quote-footer">World Master International Travel<br>Philippines | Please contact WMIT for questions about this quotation.</footer></article>';
 }
 
@@ -2626,7 +2657,41 @@ async function emailClientDocument() {
 }
 
 function clientDocActionsMarkup() {
-  return '<div class="preview-actions" style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:14px"><button class="secondary compact" onclick="closeClientDocumentSheet()">Close</button><button class="secondary compact" onclick="emailClientDocument()">Email</button><button class="secondary compact" onclick="printClientDocument()">Print</button></div>';
+  return '<div class="preview-actions" style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:14px"><button class="secondary compact" onclick="closeClientDocumentSheet()">Close</button><button class="secondary compact" onclick="downloadClientDocumentPdf()">Download PDF</button><button class="secondary compact" onclick="emailClientDocument()">Email</button><button class="secondary compact" onclick="printClientDocument()">Print</button></div>';
+}
+
+async function downloadClientDocumentPdf() {
+  if (!clientDocumentSheet) return;
+  const kind = clientDocumentSheet.kind;
+  const data = clientDocumentSheet.data;
+  try {
+    const payload = kind === 'invoice'
+      ? { kind: 'invoice', booking_id: data.invoice && data.invoice.booking_id }
+      : kind === 'itinerary'
+        ? { kind: 'itinerary', quotation_id: data.itinerary && data.itinerary.quotation_id }
+        : kind === 'receipt'
+          ? { kind: 'receipt', client_payment_id: data.receipt && data.receipt.client_payment_id, receipt_id: data.receipt && data.receipt.receipt_id }
+          : { kind: 'voucher', booking_id: data.booking && data.booking.booking_id };
+    const response = await wmitGuard401(await fetch('/api/documents/pdf', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, wmitAuthHeaders()), body: JSON.stringify(payload) }));
+    if (!response.ok) {
+      const result = await response.json().catch(function () { return { ok: false, error: { message: 'The PDF could not be generated.' } }; });
+      return showMessage('✕ Download PDF — NOT EXECUTED', result.error && result.error.message || 'The PDF could not be generated.', 'error');
+    }
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const nameMatch = disposition.match(/filename="([^"]+)"/);
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = nameMatch ? nameMatch[1] : 'wmit-document.pdf';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    showMessage('✓ PDF downloaded', 'Saved as ' + link.download + '.', 'ok');
+  } catch (error) {
+    showMessage('✕ Download PDF — NOT EXECUTED', error.message, 'error');
+  }
 }
 
 function clientDocHeader(labelText) {
@@ -2821,6 +2886,7 @@ function bookingMonitoringMarkup(records, projection) {
 function agencyBookingControls(records) {
   if (!records.booking) return '';
   const item = records.bookingItem;
+  const ticketingApplies = item && ['Flight', 'Tour Package', 'Ticket'].includes(item.service_type);
   const holds = item ? list('AvailabilityHold', (hold) => hold.booking_item_id === item.booking_item_id) : [];
   const ticketing = item ? latest('TicketingRecord', (record) => record.booking_item_id === item.booking_item_id) : null;
   const voucher = item ? latest('Voucher', (record) => record.booking_item_id === item.booking_item_id) : null;
@@ -2828,7 +2894,7 @@ function agencyBookingControls(records) {
   const reconciliation = latest('Reconciliation', (record) => record.booking_id === records.booking.booking_id);
   const amendment = records.amendment && records.amendment.state === 'REACCEPTANCE_REQUIRED' ? '<div class="card warn"><h3>Client re-acceptance required</h3><p>This amendment changed the commercial foundation of the Booking.</p><div class="grid2"><div class="field"><label>Accepted by</label><input id="amend-accepted-by" placeholder="Client name or contact"></div><div class="field"><label>Acceptance reference</label><input id="amend-acceptance-reference" placeholder="Email, message, or signed reference"></div></div><button onclick="acceptAmendment()">Record Amendment Acceptance</button></div>' : '';
   const holdSummary = holds.length ? holds.map((hold) => '<div class="event">' + esc(readableState(hold.state)) + ' · expires ' + esc(hold.expires_at || 'not recorded') + (hold.supplier_reference ? ' · ref ' + esc(hold.supplier_reference) : '') + '</div>').join('') : '<p class="muted">No availability hold recorded.</p>';
-  const fulfillment = item ? '<div class="card"><h3>Booking-item fulfillment</h3><p class="muted">Each service can be held, confirmed, ticketed, or vouchered independently.</p>' + field('Service', item.description || item.service_type || item.booking_item_id) + field('Fulfillment state', readableState(item.fulfillment_state || 'NOT_REQUESTED')) + '<h4>Availability hold</h4>' + holdSummary + '<div class="grid2"><div class="field"><label>Hold expires</label><input id="hold-expires" type="datetime-local"></div><div class="field"><label>Supplier reference</label><input id="hold-reference" placeholder="Supplier hold/reference"></div></div><button class="secondary" onclick="createAvailabilityHold()">Record availability hold</button>' + '<h4>Ticketing / PNR</h4>' + (ticketing ? '<div class="event">' + esc(readableState(ticketing.status)) + ' · PNR ' + esc(ticketing.pnr || 'not recorded') + (ticketing.ticket_number ? ' · ticket ' + esc(ticketing.ticket_number) : '') + '</div>' : '<p class="muted">No ticketing record.</p>') + '<div class="grid3"><div class="field"><label>Status</label><select id="ticketing-status"><option value="HELD">Held / PNR created</option><option value="TICKETED">Ticketed</option><option value="VOID">Void</option><option value="REFUNDED">Refunded</option></select></div><div class="field"><label>PNR / locator</label><input id="ticketing-pnr" placeholder="Required for held or ticketed air"></div><div class="field"><label>Ticket number</label><input id="ticketing-number" placeholder="Required when ticketed"></div></div><div class="field"><label>Ticketing deadline</label><input id="ticketing-deadline" type="datetime-local"></div><button class="secondary" onclick="recordTicketing()">Record ticketing state</button>' + '<h4>Voucher</h4>' + (voucher ? '<div class="event">Issued · ' + esc(voucher.voucher_number) + '</div>' : '<div class="grid2"><div class="field"><label>Voucher number</label><input id="voucher-number" placeholder="Supplier voucher number"></div><div class="field"><label>Voucher notes</label><input id="voucher-notes" placeholder="Optional notes"></div></div><button class="secondary" onclick="issueVoucher()">Issue voucher</button>') + '</div>' : '<div class="card warn"><h3>Booking-item fulfillment</h3><p>Create a Booking Item before recording holds, PNRs, tickets, or vouchers.</p></div>';
+  const fulfillment = item ? '<div class="card"><h3>Booking-item fulfillment</h3><p class="muted">Each service can be held, confirmed, ticketed, or vouchered independently.</p>' + field('Service', item.description || item.service_type || item.booking_item_id) + field('Fulfillment state', readableState(item.fulfillment_state || 'NOT_REQUESTED')) + '<h4>Availability hold</h4>' + holdSummary + '<div class="grid2"><div class="field"><label>Hold expires</label><input id="hold-expires" type="datetime-local"></div><div class="field"><label>Supplier reference</label><input id="hold-reference" placeholder="Supplier hold/reference"></div></div><button class="secondary" onclick="createAvailabilityHold()">Record availability hold</button>' + (ticketingApplies ? '<h4>Ticketing / PNR</h4>' + (ticketing ? '<div class="event">' + esc(readableState(ticketing.status)) + ' · PNR ' + esc(ticketing.pnr || 'not recorded') + (ticketing.ticket_number ? ' · ticket ' + esc(ticketing.ticket_number) : '') + '</div>' : '<p class="muted">No ticketing record.</p>') + '<div class="grid3"><div class="field"><label>Status</label><select id="ticketing-status"><option value="HELD">Held / PNR created</option><option value="TICKETED">Ticketed</option><option value="VOID">Void</option><option value="REFUNDED">Refunded</option></select></div><div class="field"><label>PNR / locator</label><input id="ticketing-pnr" placeholder="Required for held or ticketed air"></div><div class="field"><label>Ticket number</label><input id="ticketing-number" placeholder="Required when ticketed"></div></div><div class="field"><label>Ticketing deadline</label><input id="ticketing-deadline" type="datetime-local"></div><button class="secondary" onclick="recordTicketing()">Record ticketing state</button>' : '') + '<h4>Voucher</h4>' + (voucher ? '<div class="event">Issued · ' + esc(voucher.voucher_number) + '</div>' : '<div class="grid2"><div class="field"><label>Voucher number</label><input id="voucher-number" placeholder="Supplier voucher number"></div><div class="field"><label>Voucher notes</label><input id="voucher-notes" placeholder="Optional notes"></div></div><button class="secondary" onclick="issueVoucher()">Issue voucher</button>') + '</div>' : '<div class="card warn"><h3>Booking-item fulfillment</h3><p>Create a Booking Item before recording holds, PNRs, tickets, or vouchers.</p></div>';
   const scheduleRows = schedules.length ? schedules.map((schedule) => '<tr><td>' + esc(schedule.sequence) + '</td><td>' + esc(readableState(schedule.purpose)) + '</td><td>' + esc(schedule.amount + ' ' + schedule.currency) + '</td><td>' + esc(schedule.due_at) + '</td><td>' + status(readableState(schedule.state), schedule.state === 'PAID' ? 'good' : 'info') + '</td></tr>').join('') : '<tr><td colspan="5">No payment schedule items recorded.</td></tr>';
   const finance = '<div class="card"><h3>Client payment schedule</h3><p class="muted">Payment purpose is recorded on each payment; this schedule records amounts and due dates the agency expects.</p><table><thead><tr><th>#</th><th>Purpose</th><th>Amount</th><th>Due</th><th>State</th></tr></thead><tbody>' + scheduleRows + '</tbody></table><div class="grid3"><div class="field"><label>Sequence</label><input id="schedule-sequence" type="number" min="1" value="1"></div><div class="field"><label>Purpose</label><select id="schedule-purpose"><option value="DOWN_PAYMENT">Down payment</option><option value="INSTALLMENT">Installment</option><option value="FINAL_BALANCE">Final balance</option><option value="FULL_PAYMENT">Full payment</option></select></div><div class="field"><label>Amount</label><input id="schedule-amount" type="number" min="0" step="0.01"></div></div><div class="grid2"><div class="field"><label>Currency</label><input id="schedule-currency" value="PHP"></div><div class="field"><label>Due date</label><input id="schedule-due" type="datetime-local"></div></div><button class="secondary" onclick="createPaymentScheduleItem()">Add payment schedule item</button></div>';
   const roomingEntries = list('RoomingListEntry', (entry) => entry.booking_id === records.booking.booking_id);
@@ -2866,25 +2932,34 @@ function bookingLeadPaxName(booking) {
 function renderBooking() {
   const records = caseRecords();
   const selectedBookingId = selectedWorkspaceId('booking');
+  const bookingListSection = records.inquiry
+    ? '<details class="secondary-details"><summary>All bookings (' + list('Booking').length + ')</summary>' + bookingListMarkup() + '</details>'
+    : bookingListMarkup();
   if (!selectedBookingId) {
-    const next = records.booking ? '<div class="card good"><h3>Booking record exists</h3><p>This quotation already has a Booking with a selected lead passenger.</p><button onclick="openBookingRecord(\'' + esc(records.booking.booking_id) + '\')">Open Booking</button></div>' : records.quotation && records.quotation.status === 'APPROVED' && !records.quotationAcceptance ? '<div class="card warn"><h3>Client acceptance required</h3><p>Record acceptance in the Quotation workspace before creating a Booking.</p><button class="secondary" onclick="openQuotationRecord(\'' + esc(records.quotation.quotation_id) + '\')">Open Quotation</button></div>' : records.quotation && records.quotation.status === 'APPROVED' ? '<div class="card"><h3>Booking record ready</h3><p>The approved quotation can become an operational Booking record. Select the lead passenger before creating it.</p><div class="field"><label>Lead passenger name</label><input id="booking-lead-pax" placeholder="Full name of lead passenger" required></div><button onclick="createBooking()">Create Booking Record</button></div>' : '<div class="empty">Select a Booking to open its detail.</div>';
-    $('booking-content').innerHTML = bookingListMarkup() + next;
+    const next = records.booking ? '<div class="card good"><h3>Booking record exists</h3><p>This quotation already has a Booking with a selected lead passenger.</p><button onclick="openBookingRecord(\'' + esc(records.booking.booking_id) + '\')">Open Booking</button></div>' : records.quotation && records.quotation.status === 'APPROVED' && !records.quotationAcceptance ? '<div class="card warn"><h3>Client acceptance required</h3><p>Record acceptance in the Quotation workspace before creating a Booking.</p><button class="secondary" onclick="openQuotationRecord(\'' + esc(records.quotation.quotation_id) + '\')">Open Quotation</button></div>' : records.quotation && records.quotation.status === 'APPROVED' ? '<div class="card"><h3>Booking record ready</h3><p>The approved quotation can become an operational Booking record. Select the lead passenger before creating it.</p><div class="field"><label>Lead passenger name</label><input id="booking-lead-pax" placeholder="Start typing — existing people appear" list="participant-name-options" required>' + personNameOptionsMarkup() + '</div><p class="muted">Choosing an existing person reuses their record; a new name creates one.</p><button onclick="createBooking()">Create Booking Record</button></div>' : '<div class="empty">Select a Booking to open its detail.</div>';
+    $('booking-content').innerHTML = bookingListSection + next;
     return;
   }
   if (!records.booking || records.booking.booking_id !== selectedBookingId) {
     clearWorkspaceId('booking');
-    $('booking-content').innerHTML = bookingListMarkup() + '<div class="empty">That Booking is no longer available.</div>';
+    $('booking-content').innerHTML = bookingListSection + '<div class="empty">That Booking is no longer available.</div>';
     return;
   }
-  const participants = list('BookingParticipant', (item) => item.booking_id === records.booking.booking_id);
-  const participantRows = participants.map((participant) => { const person = latest('Person', (item) => item.person_id === participant.person_id); return '<tr><td>' + esc(person && (person.display_name || person.name) || participant.person_id) + '</td><td>' + esc(participant.role || participant.roles || 'Not recorded') + '</td></tr>'; }).join('');
+  const participants = list('BookingParticipant', (item) => item.booking_id === records.booking.booking_id && item.state !== 'CANCELLED');
+  const participantRows = participants.map((participant) => {
+    const person = latest('Person', (item) => item.person_id === participant.person_id);
+    const currentRole = participant.role || (Array.isArray(participant.roles) && participant.roles[0]) || 'TRAVELER';
+    const isLead = currentRole === 'LEAD_PAX';
+    const pid = esc(participant.booking_participant_id);
+    return '<tr><td>' + esc(person && (person.display_name || person.name) || participant.person_id) + (isLead ? ' <span class="status good">Lead pax</span>' : '') + '</td><td><select id="participant-role-' + pid + '" aria-label="Role for ' + esc(person && (person.display_name || person.name) || participant.person_id) + '">' + ['LEAD_PAX', 'COORDINATOR', 'PAYER', 'TRAVELER', 'COMMUNICATOR'].map((role) => '<option value="' + role + '"' + (role === currentRole ? ' selected' : '') + '>' + participantRoleLabel(role) + '</option>').join('') + '</select></td><td class="row-actions"><button class="secondary compact" onclick="saveParticipantRole(\'' + pid + '\')">Save</button>' + (isLead ? '' : '<button class="danger compact" onclick="removeParticipantRole(\'' + pid + '\')">Remove</button>') + '</td></tr>';
+  }).join('');
   const amendment = records.amendment;
   const refund = records.refund;
   const bookingCost = records.booking.current_supplier_cost || records.quotation && records.quotation.supplier_cost_total;
   const bookingPrice = records.booking.current_price || records.quotation && records.quotation.client_total;
   const bookingCurrency = records.quotation && records.quotation.currency || records.booking.currency || 'PHP';
   const bookingItemCount = list('BookingItem', (item) => item.booking_id === records.booking.booking_id).length;
-  $('booking-content').innerHTML = bookingListMarkup() + '<div class="grid2"><div class="card"><h3>Booking record ' + status('EXISTS', 'info') + '</h3>' + field('Booking ID', records.booking.booking_id) + field('Client', records.client && records.client.display_name) + field('Destination', bookingDestination(records.booking)) + field('Travel', bookingTravelLabel(records.booking)) + field('Supplier cost · internal', bookingCost ? bookingCost + ' ' + bookingCurrency : 'Not recorded') + field('Client selling price', bookingPrice ? bookingPrice + ' ' + bookingCurrency : 'Not recorded') + field('Booking record state', records.booking.record_state) + field('Client commitment', records.booking.commitment_state) + field('Client decision', records.booking.client_decision_state) + '<div class="row-actions">' + (records.booking.commitment_state === 'PENDING' ? '<button onclick="confirmCommitment()">Confirm commitment</button>' : '') + '</div></div><div class="card"><h3>Supplier fulfillment</h3>' + (!records.supplierBooking ? '<p>Reservation: ' + status('Not requested', 'info') + '</p>' + (bookingItemCount ? '<button onclick="requestReservation()">Request supplier</button>' : '<p class="muted">This booking has no services yet — copy them from the approved quotation, assign a supplier to each, then request fulfillment.</p><button onclick="copyBookingItemsFromQuotation()">Copy services from the quotation</button>') : field('Supplier reservation', readableState(records.supplierBooking.reservation_state)) + field('Supplier', readableSupplierName(records.supplierBooking.supplier_id)) + field('Supplier reference', records.supplierBooking.supplier_reference || 'Not recorded') + field('Supplier confirmation', records.supplierBooking.confirmation_state || 'Not recorded') + field('Client payment', records.payment ? readableState(records.payment.payment_state) : 'Not recorded') + field('Supplier Payment', records.supplierPayment ? 'Executed' : 'Separate gate — not executed') + (records.supplierBooking.reservation_state !== 'CONFIRMED' ? '<div class="row-actions"><button onclick="confirmServiceSupplier(\'' + esc(records.supplierBooking.supplier_booking_id) + '\')">Confirm supplier reservation</button></div>' : '')) + '</div></div><div class="card"><h3>People and roles</h3>' + (participantRows ? '<table><thead><tr><th>Person</th><th>Role</th></tr></thead><tbody>' + participantRows + '</tbody></table>' : '<p class="muted">No Booking participants recorded.</p>') + '<div class="grid2"><div class="field"><label>Person name</label><input id="participant-name" placeholder="Existing or new person"></div><div class="field"><label>Role</label><select id="participant-role"><option value="COORDINATOR">Coordinator</option><option value="PAYER">Payer</option><option value="TRAVELER">Traveler</option><option value="COMMUNICATOR">Communicating contact</option></select></div></div><button class="secondary" onclick="addParticipantRole()">Record person and role</button></div><div class="card"><h3>Amend Booking</h3><p class="muted">Amendments preserve before/after history. If price or supplier cost changes, the Booking enters the existing re-acceptance state.</p><div class="grid3"><div class="field"><label>New travel start</label><input id="amend-start" type="date" value="' + esc(records.booking.travel_start || '') + '"></div><div class="field"><label>New travel end</label><input id="amend-end" type="date" value="' + esc(records.booking.travel_end || '') + '"></div><div class="field"><label>New product</label><input id="amend-product" value="' + esc(records.booking.product || '') + '"></div><div class="field"><label>New client price</label><input id="amend-price" type="number" min="0" step="0.01" value=""></div><div class="field"><label>New supplier cost</label><input id="amend-cost" type="number" min="0" step="0.01" value=""></div><div class="field"><label>Reason</label><input id="amend-reason" placeholder="Required reason"></div></div><button class="secondary" onclick="amendBooking()">Record Amendment</button>' + (amendment ? '<h4>Latest amendment</h4><table><thead><tr><th></th><th>Before</th><th>After</th></tr></thead><tbody><tr><th>Price</th><td>' + esc(amendment.before_snapshot && amendment.before_snapshot.current_price) + '</td><td>' + esc(amendment.after_snapshot && amendment.after_snapshot.current_price) + '</td></tr><tr><th>Supplier cost</th><td>' + esc(amendment.before_snapshot && amendment.before_snapshot.current_supplier_cost) + '</td><td>' + esc(amendment.after_snapshot && amendment.after_snapshot.current_supplier_cost) + '</td></tr><tr><th>State</th><td colspan="2">' + esc(readableState(amendment.state)) + '</td></tr></tbody></table>' : '') + '</div><div class="card"><h3>Cancellation / refund adjustment</h3><p class="muted">Cancellation does not automatically refund. Record a draft request with the applicable terms and outcome.</p><div class="grid3"><div class="field"><label>Amount</label><input id="refund-amount" type="number" min="0" step="0.01"></div><div class="field"><label>Currency</label><input id="refund-currency" value="PHP"></div><div class="field"><label>Reason / supplier terms</label><input id="refund-reason" placeholder="Record terms or reason"></div></div><button class="warning" onclick="requestRefund()">Create Refund / Adjustment Draft</button>' + (refund ? '<p>Latest request: ' + status(readableState(refund.state), 'warn') + ' · ' + esc(refund.refund_adjustment_id) + '</p><button class="danger" onclick="executeRefund()">Attempt Authorized Execution</button>' : '') + '</div>';
+  $('booking-content').innerHTML = bookingListSection + '<div class="grid2"><div class="card"><h3>Booking record ' + status('EXISTS', 'info') + '</h3>' + field('Booking ID', records.booking.booking_id) + field('Client', records.client && records.client.display_name) + field('Destination', bookingDestination(records.booking)) + field('Travel', bookingTravelLabel(records.booking)) + field('Supplier cost · internal', bookingCost ? bookingCost + ' ' + bookingCurrency : 'Not recorded') + field('Client selling price', bookingPrice ? bookingPrice + ' ' + bookingCurrency : 'Not recorded') + field('Booking record state', records.booking.record_state) + field('Client commitment', records.booking.commitment_state) + field('Client decision', records.booking.client_decision_state) + '<div class="row-actions">' + (records.booking.commitment_state === 'PENDING' ? '<button onclick="confirmCommitment()">Confirm commitment</button>' : '') + '</div></div><div class="card"><h3>Supplier fulfillment</h3>' + (!records.supplierBooking ? '<p>Reservation: ' + status('Not requested', 'info') + '</p>' + (bookingItemCount ? '<button onclick="requestReservation()">Request supplier</button>' : '<p class="muted">This booking has no services yet — copy them from the approved quotation, assign a supplier to each, then request fulfillment.</p><button onclick="copyBookingItemsFromQuotation()">Copy services from the quotation</button>') : field('Supplier reservation', readableState(records.supplierBooking.reservation_state)) + field('Supplier', readableSupplierName(records.supplierBooking.supplier_id)) + field('Supplier reference', records.supplierBooking.supplier_reference || 'Not recorded') + field('Supplier confirmation', records.supplierBooking.confirmation_state || 'Not recorded') + field('Client payment', records.payment ? readableState(records.payment.payment_state) : 'Not recorded') + field('Supplier Payment', records.supplierPayment ? 'Executed' : 'Separate gate — not executed') + (records.supplierBooking.reservation_state !== 'CONFIRMED' ? '<div class="row-actions"><button onclick="confirmServiceSupplier(\'' + esc(records.supplierBooking.supplier_booking_id) + '\')">Confirm supplier reservation</button></div>' : '')) + '</div></div><div class="card"><h3>People and roles</h3>' + (participantRows ? '<div class="table-wrap"><table><thead><tr><th>Person</th><th>Role</th><th></th></tr></thead><tbody>' + participantRows + '</tbody></table></div>' : '<p class="muted">No Booking participants recorded.</p>') + '<div class="grid2"><div class="field"><label>Person name</label><input id="participant-name" placeholder="Existing or new person" list="participant-name-options">' + personNameOptionsMarkup() + '</div><div class="field"><label>Role</label><select id="participant-role"><option value="COORDINATOR">Coordinator</option><option value="PAYER">Payer</option><option value="TRAVELER">Traveler</option><option value="COMMUNICATOR">Communicating contact</option><option value="LEAD_PAX">Lead passenger</option></select></div></div><button class="secondary" onclick="addParticipantRole()">Record person and role</button><p class="muted">A Booking keeps exactly one lead passenger. To move the lead role: change the current lead to another role and save, then assign Lead passenger to the new person.</p></div><div class="card"><h3>Amend Booking</h3><p class="muted">Amendments preserve before/after history. If price or supplier cost changes, the Booking enters the existing re-acceptance state.</p><div class="grid3"><div class="field"><label>New travel start</label><input id="amend-start" type="date" value="' + esc(records.booking.travel_start || '') + '"></div><div class="field"><label>New travel end</label><input id="amend-end" type="date" value="' + esc(records.booking.travel_end || '') + '"></div><div class="field"><label>New product</label><input id="amend-product" value="' + esc(records.booking.product || '') + '"></div><div class="field"><label>New client price</label><input id="amend-price" type="number" min="0" step="0.01" value=""></div><div class="field"><label>New supplier cost</label><input id="amend-cost" type="number" min="0" step="0.01" value=""></div><div class="field"><label>Reason</label><input id="amend-reason" placeholder="Required reason"></div></div><button class="secondary" onclick="amendBooking()">Record Amendment</button>' + (amendment ? '<h4>Latest amendment</h4><table><thead><tr><th></th><th>Before</th><th>After</th></tr></thead><tbody><tr><th>Price</th><td>' + esc(amendment.before_snapshot && amendment.before_snapshot.current_price) + '</td><td>' + esc(amendment.after_snapshot && amendment.after_snapshot.current_price) + '</td></tr><tr><th>Supplier cost</th><td>' + esc(amendment.before_snapshot && amendment.before_snapshot.current_supplier_cost) + '</td><td>' + esc(amendment.after_snapshot && amendment.after_snapshot.current_supplier_cost) + '</td></tr><tr><th>State</th><td colspan="2">' + esc(readableState(amendment.state)) + '</td></tr></tbody></table>' : '') + '</div><div class="card"><h3>Cancellation / refund adjustment</h3><p class="muted">Cancellation does not automatically refund. Record a draft request with the applicable terms and outcome.</p><div class="grid3"><div class="field"><label>Amount</label><input id="refund-amount" type="number" min="0" step="0.01"></div><div class="field"><label>Currency</label><input id="refund-currency" value="PHP"></div><div class="field"><label>Reason / supplier terms</label><input id="refund-reason" placeholder="Record terms or reason"></div></div><button class="warning" onclick="requestRefund()">Create Refund / Adjustment Draft</button>' + (refund ? '<p>Latest request: ' + status(readableState(refund.state), 'warn') + ' · ' + esc(refund.refund_adjustment_id) + '</p><button class="danger" onclick="executeRefund()">Attempt Authorized Execution</button>' : '') + '</div>';
   const projection = projectionForCase(records);
   const serviceRows = projection && Array.isArray(projection.services) ? projection.services.map((service) => '<tr><td><strong>' + esc(service.description) + '</strong><br><span class="muted">' + esc(service.serviceType) + '</span></td><td>' + esc(readableState(service.fulfillment && service.fulfillment.state)) + '</td><td>' + esc(service.fulfillment && service.fulfillment.supplierReference || 'Not recorded') + '</td><td>' + esc(readableState(service.documents && service.documents.state)) + '</td><td>' + esc(readableState(service.tasks && service.tasks.state)) + '</td><td>' + status(readableState(service.readiness && service.readiness.state), service.readiness && service.readiness.state === 'READY' ? 'good' : 'warn') + (service.fulfillment && service.fulfillment.supplierBookingId && service.fulfillment.state !== 'CONFIRMED' ? ' <button class="secondary" onclick="confirmServiceSupplier(\'' + esc(service.fulfillment.supplierBookingId) + '\',\'' + esc(service.bookingItemId) + '\')">Confirm</button>' : '') + '</td></tr>').join('') : '';
   $('booking-content').insertAdjacentHTML('afterbegin', '<div class="selection-bar"><button class="secondary" onclick="clearBookingRecord()">Back to Booking list</button><strong>' + esc(records.booking.booking_id) + '</strong><span>' + esc(bookingDestination(records.booking)) + '</span><span>Lead pax: ' + esc(bookingLeadPaxName(records.booking)) + '</span></div>');
@@ -2913,7 +2988,7 @@ async function createBooking() {
   if (!records.quotation || records.quotation.status !== 'APPROVED') return failLocal('Approve the quotation before creating a Booking record.');
   const leadPaxName = $('booking-lead-pax') && $('booking-lead-pax').value.trim();
   if (!leadPaxName) return failLocal('Select or enter the lead passenger before creating the Booking.', 'booking-lead-pax');
-  const leadPax = await api('createPerson', { display_name: leadPaxName, name: leadPaxName, status: 'ACTIVE', idempotency_key: 'LEAD-PAX:' + records.quotation.quotation_id + ':' + encodeURIComponent(leadPaxName) }, 'LOCAL_STAFF');
+  const leadPax = findPersonByName(leadPaxName) || await api('createPerson', { display_name: leadPaxName, name: leadPaxName, status: 'ACTIVE', idempotency_key: 'LEAD-PAX:' + records.quotation.quotation_id + ':' + encodeURIComponent(leadPaxName) }, 'LOCAL_STAFF');
   if (!leadPax) return;
   const booking = await api('createBooking', { quotation_id: records.quotation.quotation_id, client_id: records.quotation.client_id, inquiry_id: records.inquiry.inquiry_id, lead_pax_person_id: leadPax.person_id, travel_start: records.inquiry.current_requirements.travel_start, travel_end: records.inquiry.current_requirements.travel_end }, 'LOCAL_STAFF');
   if (!booking) return;
@@ -2943,6 +3018,7 @@ async function assignBookingItemSupplier(bookingItemId) {
 async function recordTicketing() {
   const records = caseRecords();
   if (!records.bookingItem) return failLocal('Create a Booking Item first.');
+  if (!$('ticketing-status')) return failLocal('Ticketing and PNR apply to flight, tour package, and ticket services only.');
   const statusValue = $('ticketing-status').value;
   if (['HELD', 'TICKETED'].includes(statusValue) && !$('ticketing-pnr').value.trim()) return failLocal('PNR/locator is required for a held or ticketed air service.', 'ticketing-pnr');
   if (statusValue === 'TICKETED' && !$('ticketing-number').value.trim()) return failLocal('Ticket number is required when the service is ticketed.', 'ticketing-number');
@@ -2995,7 +3071,7 @@ function enhanceRoomingControls(records) {
       personField.className = 'field';
       personField.innerHTML = '<label for="' + personId + '">Traveler</label><select id="' + personId + '"><option value="">Select traveler</option></select>';
     }
-    const people = list('BookingParticipant', (participant) => participant.booking_id === records.booking.booking_id).map((participant) => {
+    const people = list('BookingParticipant', (participant) => participant.booking_id === records.booking.booking_id && participant.state !== 'CANCELLED').map((participant) => {
       const person = latest('Person', (item) => item.person_id === participant.person_id);
       return { id: participant.person_id, name: person && (person.display_name || person.name) || participant.person_id };
     }).filter((person, index, all) => all.findIndex((item) => item.id === person.id) === index);
@@ -3081,12 +3157,39 @@ async function confirmServiceSupplier(supplierBookingId, bookingItemId) {
   await api(bookingItemId ? 'confirmSupplierBookingItem' : 'updateSupplierBooking', { supplier_booking_id: supplierBookingId, booking_item_id: bookingItemId || undefined, reservation_state: 'CONFIRMED', supplier_reference: reference.trim() || undefined, confirmation_date: new Date().toISOString() }, 'LOCAL_STAFF');
 }
 
+function participantRoleLabel(role) {
+  return { LEAD_PAX: 'Lead passenger', COORDINATOR: 'Coordinator', PAYER: 'Payer', TRAVELER: 'Traveler', COMMUNICATOR: 'Communicating contact' }[role] || role;
+}
+
+function personNameOptionsMarkup() {
+  const names = [];
+  list('Person').forEach((person) => { const name = String(person.display_name || person.name || '').trim(); if (name) names.push(name); });
+  return '<datalist id="participant-name-options">' + names.map((name) => '<option value="' + esc(name) + '">').join('') + '</datalist>';
+}
+
+function findPersonByName(name) {
+  const needle = String(name || '').trim().toLowerCase();
+  if (!needle) return null;
+  return list('Person').find((person) => String(person.display_name || person.name || '').trim().toLowerCase() === needle) || null;
+}
+
+async function saveParticipantRole(participantId) {
+  const select = $('participant-role-' + participantId);
+  if (!select) return failLocal('Open the Booking again before saving this role.');
+  await api('updateBookingParticipant', { booking_participant_id: participantId, role: select.value }, 'LOCAL_STAFF');
+}
+
+async function removeParticipantRole(participantId) {
+  if (!window.confirm('Remove this person from the Booking?')) return;
+  await api('removeBookingParticipant', { booking_participant_id: participantId }, 'LOCAL_STAFF');
+}
+
 async function addParticipantRole() {
   const records = caseRecords();
   const name = $('participant-name').value.trim();
   if (!records.booking) return failLocal('Create a Booking record first.');
   if (!name) return failLocal('Enter the person name before recording a role.');
-  const person = await api('createPerson', { display_name: name, name, status: 'ACTIVE' }, 'LOCAL_STAFF');
+  const person = findPersonByName(name) || await api('createPerson', { display_name: name, name, status: 'ACTIVE' }, 'LOCAL_STAFF');
   if (person) await api('createBookingParticipant', { booking_id: records.booking.booking_id, person_id: person.person_id, role: $('participant-role').value }, 'LOCAL_STAFF');
 }
 
@@ -3557,6 +3660,19 @@ async function createSupplierFromForm() {
   openSupplierRecord(supplier.supplier_id);
 }
 
+function supplierBookingsMarkup(supplier) {
+  const supplierBookings = list('SupplierBooking', (item) => item.supplier_id === supplier.supplier_id);
+  if (!supplierBookings.length) return '';
+  const rows = supplierBookings.map((supplierBooking) => {
+    const booking = latest('Booking', (item) => item.booking_id === supplierBooking.booking_id);
+    const client = booking && latest('Client', (item) => item.client_id === booking.client_id);
+    const state = supplierBooking.reservation_state || 'REQUESTED';
+    const confirm = state !== 'CONFIRMED' ? ' <button class="secondary compact" onclick="confirmServiceSupplier(\'' + esc(supplierBooking.supplier_booking_id) + '\')">Mark confirmed</button>' : '';
+    return '<tr><td>' + (booking ? '<button class="secondary compact" onclick="openBookingRecord(\'' + esc(booking.booking_id) + '\')">' + esc(booking.booking_id) + '</button>' : esc(supplierBooking.booking_id || '—')) + '</td><td>' + esc(client && client.display_name || (booking && booking.client_id) || '—') + '</td><td>' + status(readableState(state), state === 'CONFIRMED' ? 'good' : 'warn') + confirm + '</td><td>' + esc(supplierBooking.supplier_reference || '—') + '</td></tr>';
+  }).join('');
+  return '<details class="secondary-details" open><summary>Supplier bookings (' + supplierBookings.length + ')</summary><div class="table-wrap"><table><thead><tr><th>Booking</th><th>Client</th><th>Fulfillment</th><th>Supplier reference</th></tr></thead><tbody>' + rows + '</tbody></table></div><p class="muted">A held reservation becomes confirmed once the supplier confirms. Mark confirmed records that confirmation (with optional supplier reference).</p></details>';
+}
+
 function renderSuppliers() {
   const suppliers = list('Supplier');
   const selectedId = selectedWorkspaceId('supplier');
@@ -3569,7 +3685,7 @@ function renderSuppliers() {
     const contacts = list('SupplierContact', (item) => item.supplier_id === supplier.supplier_id);
     const tariffs = list('TariffSource', (item) => item.supplier_id === supplier.supplier_id);
     const documents = list('Document', (item) => item.supplier_id === supplier.supplier_id || item.source_name === supplier.display_name);
-    $('suppliers-content').innerHTML = '<div class="selection-bar"><button class="secondary" onclick="clearSupplierRecord()">Back to Supplier list</button><strong>' + esc(supplier.display_name || supplier.legal_name || supplier.supplier_id) + '</strong><button class="danger" style="margin-left:auto" onclick="deleteSupplierRecord(\'' + esc(supplier.supplier_id) + '\')">Delete supplier</button></div><article class="card"><h3>' + esc(supplier.display_name || supplier.legal_name || supplier.supplier_id) + '</h3>' + field('Status', supplier.status) + field('Capabilities', supplier.capabilities) + '<details class="secondary-details" open><summary>Contacts</summary>' + (contacts.length ? contacts.map((contact) => '<div class="event"><strong>' + esc(contact.name || contact.contact_name || 'Contact') + '</strong> · ' + esc(contact.contact_type || contact.purpose || 'Operational contact') + '<br>' + esc(contact.email || 'Email not recorded') + ' · ' + esc(contact.phone || contact.whatsapp || 'Phone not recorded') + '</div>').join('') : '<p class="muted">Not recorded</p>') + '</details><details class="secondary-details"><summary>Terms and procedures</summary>' + field('Payment terms', supplier.payment_terms) + field('Booking procedure', supplier.booking_procedure) + field('Cancellation terms', supplier.cancellation_terms) + field('Operational notes', supplier.notes) + '</details><details class="secondary-details"><summary>Tariffs and files (' + tariffs.length + ' tariffs · ' + documents.length + ' files)</summary>' + (tariffs.length ? tariffs.map((tariff) => '<div class="event"><button class="secondary compact" onclick="openTariffRecord(\'' + esc(tariff.tariff_source_id) + '\')">Open tariff</button> ' + esc(tariff.original_source && tariff.original_source.file_name || tariff.file_name || tariff.tariff_source_id) + '</div>').join('') : '<p class="muted">Not recorded</p>') + (documents.length ? documents.map((document) => '<div class="event">' + esc(document.file_name || document.document_type || 'Supplier document') + '</div>').join('') : '') + '</details><details class="secondary-details"><summary>Technical details</summary><p class="muted">Supplier ID: ' + esc(supplier.supplier_id) + '</p></details></article>' + supplierEditFormMarkup(supplier);
+    $('suppliers-content').innerHTML = '<div class="selection-bar"><button class="secondary" onclick="clearSupplierRecord()">Back to Supplier list</button><strong>' + esc(supplier.display_name || supplier.legal_name || supplier.supplier_id) + '</strong><button class="danger" style="margin-left:auto" onclick="deleteSupplierRecord(\'' + esc(supplier.supplier_id) + '\')">Delete supplier</button></div><article class="card"><h3>' + esc(supplier.display_name || supplier.legal_name || supplier.supplier_id) + '</h3>' + field('Status', supplier.status) + field('Capabilities', supplier.capabilities) + '<details class="secondary-details" open><summary>Contacts</summary>' + (contacts.length ? contacts.map((contact) => '<div class="event"><strong>' + esc(contact.name || contact.contact_name || 'Contact') + '</strong> · ' + esc(contact.contact_type || contact.purpose || 'Operational contact') + '<br>' + esc(contact.email || 'Email not recorded') + ' · ' + esc(contact.phone || contact.whatsapp || 'Phone not recorded') + '</div>').join('') : '<p class="muted">Not recorded</p>') + '</details><details class="secondary-details"><summary>Terms and procedures</summary>' + field('Payment terms', supplier.payment_terms) + field('Booking procedure', supplier.booking_procedure) + field('Cancellation terms', supplier.cancellation_terms) + field('Operational notes', supplier.notes) + '</details><details class="secondary-details"><summary>Tariffs and files (' + tariffs.length + ' tariffs · ' + documents.length + ' files)</summary>' + (tariffs.length ? tariffs.map((tariff) => '<div class="event"><button class="secondary compact" onclick="openTariffRecord(\'' + esc(tariff.tariff_source_id) + '\')">Open tariff</button> ' + esc(tariff.original_source && tariff.original_source.file_name || tariff.file_name || tariff.tariff_source_id) + '</div>').join('') : '<p class="muted">Not recorded</p>') + (documents.length ? documents.map((document) => '<div class="event">' + esc(document.file_name || document.document_type || 'Supplier document') + '</div>').join('') : '') + '</details>' + supplierBookingsMarkup(supplier) + '<details class="secondary-details"><summary>Technical details</summary><p class="muted">Supplier ID: ' + esc(supplier.supplier_id) + '</p></details></article>' + supplierEditFormMarkup(supplier);
     return;
   }
   const countries = Array.from(new Set(suppliers.map((supplier) => supplier.country).filter(Boolean))).sort((a, b) => a.localeCompare(b));
@@ -3946,6 +4062,141 @@ function renderCasePlaceholder() {
   ['options-content', 'quotation-content', 'booking-content', 'payment-content'].forEach((id) => { if ($(id)) $(id).innerHTML = text; });
 }
 
+async function ingestFetch(path, options) {
+  const response = await wmitGuard401(await fetch(path, Object.assign({ headers: Object.assign({ 'Content-Type': 'application/json' }, wmitAuthHeaders()) }, options)));
+  return response.json();
+}
+
+async function ingestRegisterDocument() {
+  const text = String(document.getElementById('ingest-text').value || '').trim();
+  const filename = String(document.getElementById('ingest-filename').value || '').trim();
+  if (!text) return showMessage('✕ Register document — NOT EXECUTED', 'Paste the document text first.', 'error');
+  const result = await ingestFetch('/api/documents/ingest/register', { method: 'POST', body: JSON.stringify({ source: 'PASTE_TEXT', text: text, filename: filename || null }) });
+  if (!result.ok) return showMessage('✕ Register document — NOT EXECUTED', result.error.message, 'error');
+  showMessage(result.meta && result.meta.idempotent ? '✓ Document already registered' : '✓ Document registered', (result.data && result.data.document_id) || '', 'ok');
+  await refreshState();
+}
+
+async function ingestAction(path, documentId) {
+  const result = await ingestFetch(path, { method: 'POST', body: JSON.stringify({ document_id: documentId }) });
+  if (!result.ok) return showMessage('✕ Document action — NOT EXECUTED', result.error.message, 'error');
+  showMessage('✓ Done', (result.data && result.data.document_id) || documentId, 'ok');
+  await refreshState();
+}
+
+async function ingestReview(documentId, decision) {
+  let note = '';
+  if (decision === 'REJECT') {
+    note = String(window.prompt('Why is this document rejected? (required feedback)') || '').trim();
+    if (!note) return;
+  }
+  const matches = await ingestFetch('/api/documents/ingest/match?document_id=' + encodeURIComponent(documentId));
+  const chosen = [];
+  if (matches.ok && matches.data && matches.data.match && matches.data.match.status === 'MATCH') {
+    const suggestion = matches.data.match.suggestions[0];
+    if (suggestion && window.confirm('Link this document to ' + (suggestion.entityType || '') + ' ' + (suggestion.entityId || '') + '?')) {
+      chosen.push({ entity_type: suggestion.entityType, entity_id: suggestion.entityId });
+    }
+  }
+  const result = await ingestFetch('/api/documents/ingest/review', { method: 'POST', body: JSON.stringify({ document_id: documentId, decision: decision, note: note, chosen_matches: chosen }) });
+  if (!result.ok) return showMessage('✕ Review — NOT EXECUTED', result.error.message, 'error');
+  showMessage(decision === 'APPROVE' ? '✓ Document matched' : '✓ Document archived', (result.data && result.data.document_id) || documentId, 'ok');
+  await refreshState();
+}
+
+function renderDocumentsIngest() {
+  const container = document.getElementById('documents-content');
+  if (!container) return;
+  const docs = list('Document', () => true).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  const rows = docs.map(function (doc) {
+    const type = doc.classification && doc.classification.document_type;
+    const confidence = doc.classification && doc.classification.confidence;
+    return '<div class="event" style="display:flex;justify-content:space-between;gap:10px;align-items:center"><span style="min-width:0;word-wrap:break-word"><b>' + esc(doc.document_id) + '</b> · ' + esc(doc.status) + (type ? ' · ' + esc(type) + (confidence ? ' (' + Number(confidence * 100).toFixed(0) + '%)' : '') : '') + (doc.filename ? ' · ' + esc(doc.filename) : '') + '</span><span style="flex:none;display:flex;gap:6px">' +
+      (doc.status === 'RECEIVED' ? '<button class="secondary compact" onclick="ingestAction(\'/api/documents/ingest/classify\', \'' + esc(doc.document_id) + '\')">Classify</button>' : '') +
+      ((doc.status === 'CLASSIFIED' || doc.status === 'NEEDS_REVIEW') && !doc.extraction ? '<button class="secondary compact" onclick="ingestAction(\'/api/documents/ingest/extract\', \'' + esc(doc.document_id) + '\')">Extract</button>' : '') +
+      ((doc.status === 'CLASSIFIED' || doc.status === 'NEEDS_REVIEW') && doc.extraction ? '<button class="secondary compact" onclick="ingestReview(\'' + esc(doc.document_id) + '\', \'APPROVE\')">Approve</button><button class="secondary compact" onclick="ingestReview(\'' + esc(doc.document_id) + '\', \'REJECT\')">Reject</button>' : '') +
+      '</span></div>';
+  }).join('');
+  container.innerHTML =
+    '<div class="card"><h3>Register a document</h3><p class="muted">Paste the document text (email body, quotation, invoice). PDF uploads without text extraction are not supported on this server - paste the text instead.</p>' +
+    '<div class="field"><label>Filename (optional)</label><input id="ingest-filename" placeholder="quotation-email.txt"></div>' +
+    '<div class="field"><label>Document text *</label><textarea id="ingest-text" rows="6" placeholder="Paste the full document text here"></textarea></div>' +
+    '<button onclick="ingestRegisterDocument()">Register document</button></div>' +
+    '<div class="card"><h3>Review queue (' + docs.length + ')</h3>' + (rows || '<p class="muted">No documents registered yet.</p>') + '</div>';
+}
+
+function renderInterns() {
+  const container = document.getElementById('interns-content');
+  if (!container) return;
+  const interns = list('Intern', () => true);
+  const tasks = list('InternTask', () => true).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  const internOptions = interns.map(function (intern) { return '<option value="' + esc(intern.intern_id) + '">' + esc(intern.name) + (intern.status === 'Inactive' ? ' (inactive)' : '') + '</option>'; }).join('');
+  const taskRows = tasks.map(function (task) {
+    const intern = interns.find(function (item) { return item.intern_id === task.intern_id; });
+    return '<div class="event" style="display:flex;justify-content:space-between;gap:10px;align-items:center"><span style="min-width:0;word-wrap:break-word"><b>' + esc(task.title) + '</b> · ' + esc(intern ? intern.name : task.intern_id) + ' · ' + esc(String(task.state).toLowerCase()) + (task.due_at ? ' · due ' + esc(String(task.due_at).slice(0, 10)) : '') + (task.review_decision === 'REJECTED' ? ' · last review: rejected' : '') + '</span><span style="flex:none;display:flex;gap:6px">' +
+      (task.state === 'SUBMITTED' ? '<button class="secondary compact" onclick="reviewInternTask(\'' + esc(task.intern_task_id) + '\', \'APPROVED\')">Approve</button><button class="secondary compact" onclick="reviewInternTask(\'' + esc(task.intern_task_id) + '\', \'REJECTED\')">Reject</button>' : '') +
+      '</span></div>';
+  }).join('');
+  const internRows = interns.map(function (intern) {
+    return '<div class="event"><b>' + esc(intern.name) + '</b> · ' + esc(intern.school || '') + ' · ' + esc(String(intern.status).toLowerCase()) + (intern.supervisor_username ? ' · supervisor ' + esc(intern.supervisor_username) : '') + (intern.username ? ' · account ' + esc(intern.username) : '') + ' · ' + esc(String(intern.period_start || '').slice(0, 10)) + ' to ' + esc(String(intern.period_end || '').slice(0, 10)) + '</div>';
+  }).join('');
+  container.innerHTML =
+    '<div class="card"><h3>Add intern</h3><div class="grid3">' +
+    '<div class="field"><label>Name *</label><input id="intern-name"></div>' +
+    '<div class="field"><label>School *</label><input id="intern-school"></div>' +
+    '<div class="field"><label>Email *</label><input id="intern-email" type="email"></div>' +
+    '<div class="field"><label>Phone</label><input id="intern-phone"></div>' +
+    '<div class="field"><label>WMIT username</label><input id="intern-username" placeholder="For task submission"></div>' +
+    '<div class="field"><label>Supervisor username *</label><input id="intern-supervisor"></div>' +
+    '<div class="field"><label>Period start *</label><input id="intern-start" type="date"></div>' +
+    '<div class="field"><label>Period end *</label><input id="intern-end" type="date"></div>' +
+    '</div><button onclick="createInternRecord()">Save intern</button></div>' +
+    '<div class="card"><h3>Assign intern task</h3><div class="grid3">' +
+    '<div class="field"><label>Intern *</label><select id="intern-task-intern">' + internOptions + '</select></div>' +
+    '<div class="field"><label>Title *</label><input id="intern-task-title"></div>' +
+    '<div class="field"><label>Due date</label><input id="intern-task-due" type="date"></div>' +
+    '</div><div class="field"><label>Instructions *</label><textarea id="intern-task-instructions" rows="2"></textarea></div>' +
+    '<button class="secondary" onclick="assignInternTaskRecord()">Assign task</button></div>' +
+    '<div class="card"><h3>Interns (' + interns.length + ')</h3>' + (internRows || '<p class="muted">No interns yet.</p>') + '</div>' +
+    '<div class="card"><h3>Tasks (' + tasks.length + ')</h3><p class="muted">Interns submit their own tasks from their account; supervisors approve or reject here. Rejection requires feedback and reopens the task.</p>' + (taskRows || '<p class="muted">No intern tasks yet.</p>') + '</div>';
+}
+
+async function createInternRecord() {
+  const result = await api('createIntern', {
+    name: document.getElementById('intern-name').value,
+    school: document.getElementById('intern-school').value,
+    email: document.getElementById('intern-email').value,
+    phone: document.getElementById('intern-phone').value,
+    username: document.getElementById('intern-username').value,
+    supervisor_username: document.getElementById('intern-supervisor').value,
+    period_start: document.getElementById('intern-start').value,
+    period_end: document.getElementById('intern-end').value
+  });
+  if (result && result.ok) showMessage('✓ Intern saved', (result.data && result.data.intern_id) || '', 'ok');
+}
+
+async function assignInternTaskRecord() {
+  const result = await api('assignInternTask', {
+    intern_id: document.getElementById('intern-task-intern').value,
+    title: document.getElementById('intern-task-title').value,
+    instructions: document.getElementById('intern-task-instructions').value,
+    due_at: document.getElementById('intern-task-due').value || null
+  });
+  if (result && result.ok) showMessage('✓ Task assigned', (result.data && result.data.intern_task_id) || '', 'ok');
+}
+
+async function reviewInternTask(taskId, decision) {
+  let feedback = '';
+  if (decision === 'REJECTED') {
+    feedback = String(window.prompt('Rejection feedback (required - the intern sees this):') || '').trim();
+    if (!feedback) return;
+  } else {
+    feedback = String(window.prompt('Approval note (optional):') || '').trim();
+  }
+  const result = await api('reviewInternTask', { intern_task_id: taskId, decision: decision, review_feedback: feedback || null });
+  if (result && result.ok) showMessage(decision === 'APPROVED' ? '✓ Task approved' : '✓ Task reopened with feedback', '', 'ok');
+}
+
 const workspaceRenderers = {
   dashboard: renderDashboard,
   case: renderCaseWorkspace,
@@ -3955,6 +4206,8 @@ const workspaceRenderers = {
   finance: renderPayment,
   monitoring: renderMonitoring,
   departures: renderDepartures,
+  documents: renderDocumentsIngest,
+  interns: renderInterns,
   clients: renderClients,
   suppliers: renderSuppliers,
   subagents: renderSubAgents,
