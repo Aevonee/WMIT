@@ -66,6 +66,8 @@ database itself.
 | ExpoQuote | `EXPO_QUOTE` | yes |
 | ExpoEvent | `EXPO_EVENT` | yes |
 | Receipt | `RECEIPT` | yes |
+| Intern | `INTERN` | yes |
+| InternTask | `INTERN_TASK` | yes |
 | AuditEvent | `AUDIT_EVENT` | yes |
 
 ## Other identifiers

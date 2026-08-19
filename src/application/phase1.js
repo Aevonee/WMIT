@@ -7,7 +7,7 @@ const { createPhase1Runtime, ACTIONS } = require('../phase1/runtime');
 const { projectCase, projectCases } = require('../phase1/case-projection');
 
 const LOCAL_AUTH = {
-  LOCAL_STAFF: [ACTIONS.SELECT_OPTION, ACTIONS.RESERVE_SUPPLIER, ACTIONS.ALLOCATE_PAYMENT, ACTIONS.EDIT_DRAFT_PRICING, ACTIONS.REVISE_QUOTATION, ACTIONS.ACCEPT_QUOTATION, ACTIONS.RECORD_TICKETING, ACTIONS.ISSUE_VOUCHER],
+  LOCAL_STAFF: [ACTIONS.SELECT_OPTION, ACTIONS.RESERVE_SUPPLIER, ACTIONS.ALLOCATE_PAYMENT, ACTIONS.EDIT_DRAFT_PRICING, ACTIONS.REVISE_QUOTATION, ACTIONS.ACCEPT_QUOTATION, ACTIONS.RECORD_TICKETING, ACTIONS.ISSUE_VOUCHER, ACTIONS.ASSIGN_INTERN_TASK, ACTIONS.REVIEW_INTERN_TASK],
   LOCAL_MANAGER: [ACTIONS.VERIFY_PAYMENT, ACTIONS.APPROVE_QUOTATION, ACTIONS.APPROVE_PAYABLE, ACTIONS.SUPPLIER_PAYMENT, ACTIONS.CONFIRM_COMMITMENT, ACTIONS.REFUND, ACTIONS.PRICE_OVERRIDE, ACTIONS.CLIENT_ACCEPT_AMENDMENT, ACTIONS.RECONCILE_BOOKING, ACTIONS.CONFIGURE_SETTINGS, ACTIONS.DELETE_TARIFF, ACTIONS.DELETE_SUPPLIER]
 };
 
@@ -24,7 +24,7 @@ const RUNTIME_ACTION_WHITELIST = new Set([
   'createQuotationItem', 'updateQuotationItem', 'removeQuotationItem', 'reorderQuotationItems',
   'createBooking', 'createBookingItemsFromAcceptedSnapshot', 'confirmCommitment',
   'createBookingItem', 'updateBookingItem', 'createAvailabilityHold', 'updateAvailabilityHold',
-  'recordTicketing', 'issueVoucher', 'createRoomingListEntry', 'createBookingParticipant',
+  'recordTicketing', 'issueVoucher', 'createRoomingListEntry', 'createBookingParticipant', 'updateBookingParticipant', 'removeBookingParticipant',
   'createSupplierBooking', 'updateSupplierBooking', 'confirmSupplierBookingItem',
   'createClientObligation', 'createBookingPaymentObligations', 'updateSettings',
   'createClientInvoice', 'createPaymentScheduleItem',
@@ -32,7 +32,8 @@ const RUNTIME_ACTION_WHITELIST = new Set([
   'createSupplierPayable', 'approveSupplierPayable', 'executeSupplierPayment', 'issueReceipt',
   'requestRefund', 'executeRefund', 'amendBooking', 'acceptAmendment', 'reconcileBooking',
   'createDocument', 'createTask', 'updateTask', 'createCommunication',
-  'createDeparture', 'addDepartureMembership', 'createDepartureReadinessIssue', 'updateDepartureReadinessIssue'
+  'createDeparture', 'addDepartureMembership', 'createDepartureReadinessIssue', 'updateDepartureReadinessIssue',
+  'createIntern', 'updateIntern', 'listInterns', 'assignInternTask', 'submitInternTask', 'reviewInternTask'
 ]);
 
 function createPhase1Application(options) {
@@ -217,6 +218,7 @@ function createPhase1Application(options) {
     if (name === 'updateSupplier') return runtime.updateSupplier(body && body.supplier_id, body && (body.changes || body), { actor: actor || 'LOCAL_STAFF', correlationId: (body && body.correlation_id) || null });
     if (name === 'updateSubAgent') return runtime.updateSubAgent(body && body.sub_agent_id, body && (body.changes || body), { actor: actor || 'LOCAL_STAFF', correlationId: (body && body.correlation_id) || null });
     if (name === 'updateInquiry') return runtime.updateInquiry(body && body.inquiry_id, { requirements: body && (body.requirements || body.current_requirements) }, { actor: actor || 'LOCAL_STAFF', correlationId: (body && body.correlation_id) || null });
+    if (name === 'updateIntern') return runtime.updateIntern(body && body.intern_id, body && (body.changes || body), { actor: actor || 'LOCAL_STAFF', correlationId: (body && body.correlation_id) || null });
     if (!RUNTIME_ACTION_WHITELIST.has(name) || typeof runtime[name] !== 'function') return { ok: false, error: { code: 'UNKNOWN_ACTION', message: 'Unknown Phase 1 action.' } };
     return runtime[name](body || {}, { actor: actor || 'LOCAL_STAFF', correlationId: (body && body.correlation_id) || null });
   };
@@ -285,6 +287,8 @@ function createPhase1Application(options) {
     issueVoucher: (input, actor) => call('issueVoucher', input, actor),
     createRoomingListEntry: (input, actor) => call('createRoomingListEntry', input, actor),
     createBookingParticipant: (input, actor) => call('createBookingParticipant', input, actor),
+    updateBookingParticipant: (input, actor) => call('updateBookingParticipant', input, actor),
+    removeBookingParticipant: (input, actor) => call('removeBookingParticipant', input, actor),
     createSupplierBooking: (input, actor) => call('createSupplierBooking', input, actor),
     updateSupplierBooking: (input, actor) => call('updateSupplierBooking', input, actor),
     confirmSupplierBookingItem: (input, actor) => call('confirmSupplierBookingItem', input, actor),
@@ -311,7 +315,13 @@ function createPhase1Application(options) {
     createDeparture: (input, actor) => call('createDeparture', input, actor),
     addDepartureMembership: (input, actor) => call('addDepartureMembership', input, actor),
     createDepartureReadinessIssue: (input, actor) => call('createDepartureReadinessIssue', input, actor),
-    updateDepartureReadinessIssue: (input, actor) => call('updateDepartureReadinessIssue', input, actor)
+    updateDepartureReadinessIssue: (input, actor) => call('updateDepartureReadinessIssue', input, actor),
+    createIntern: (input, actor) => call('createIntern', input, actor),
+    updateIntern: (input, actor) => call('updateIntern', input, actor),
+    listInterns: (input, actor) => call('listInterns', input, actor),
+    assignInternTask: (input, actor) => call('assignInternTask', input, actor),
+    submitInternTask: (input, actor) => call('submitInternTask', input, actor),
+    reviewInternTask: (input, actor) => call('reviewInternTask', input, actor)
   };
 }
 

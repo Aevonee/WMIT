@@ -40,6 +40,7 @@ const ENTITY_DEFS = {
   Departure: ['DEPARTURE', true], DepartureMembership: ['DEPARTURE_MEMBERSHIP', true], DepartureReadinessIssue: ['DEPARTURE_ISSUE', true],
   ExpoLead: ['EXPO_LEAD', true], ExpoPackageTemplate: ['EXPO_PACKAGE', true], ExpoQuote: ['EXPO_QUOTE', true],
   ExpoEvent: ['EXPO_EVENT', true], Receipt: ['RECEIPT', true],
+  Intern: ['INTERN', true], InternTask: ['INTERN_TASK', true],
   AuditEvent: ['AUDIT_EVENT', true]
 };
 
@@ -51,7 +52,8 @@ const ACTIONS = Object.freeze({
   CONFIRM_COMMITMENT: 'CONFIRM_COMMITMENT', REFUND: 'REFUND',
   DELETE_TARIFF: 'DELETE_TARIFF', DELETE_SUPPLIER: 'DELETE_SUPPLIER',
   CLIENT_ACCEPT_AMENDMENT: 'CLIENT_ACCEPT_AMENDMENT', ACCEPT_QUOTATION: 'ACCEPT_QUOTATION',
-  RECORD_TICKETING: 'RECORD_TICKETING', ISSUE_VOUCHER: 'ISSUE_VOUCHER', RECONCILE_BOOKING: 'RECONCILE_BOOKING', CONFIGURE_SETTINGS: 'CONFIGURE_SETTINGS'
+  RECORD_TICKETING: 'RECORD_TICKETING', ISSUE_VOUCHER: 'ISSUE_VOUCHER', RECONCILE_BOOKING: 'RECONCILE_BOOKING', CONFIGURE_SETTINGS: 'CONFIGURE_SETTINGS',
+  ASSIGN_INTERN_TASK: 'ASSIGN_INTERN_TASK', REVIEW_INTERN_TASK: 'REVIEW_INTERN_TASK'
 });
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -68,6 +70,10 @@ const DEFAULT_TARIFF_RATE_UNITS = Object.freeze([
 const REQUIREMENT_STATUS_VALUES = Object.freeze(['REQUIRED', 'PREFERRED', 'UNKNOWN', 'NOT_APPLICABLE']);
 const FIND_MORE_REASON_VALUES = Object.freeze(['CLIENT_REJECTED', 'PRICE_TOO_HIGH', 'HOTEL_NOT_PREFERRED', 'ITINERARY_NOT_SUITABLE', 'SUPPLIER_PREFERENCE', 'NEED_MORE_CHOICES', 'OTHER']);
 const ROOMING_CAPACITY = Object.freeze({ SGL: 1, TWN: 2, DBL: 2, TRP: 3, QUAD: 4 });
+const INTERN_STATUS_VALUES = Object.freeze(['Active', 'Inactive']);
+const INTERN_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Must stay in sync with USERNAME_PATTERN in src/server/auth.js.
+const WMIT_USERNAME_PATTERN = /^[a-z0-9][a-z0-9._-]{2,39}$/;
 
 function ok(data, meta) { return { ok: true, data, meta: meta || {} }; }
 function fail(error) { return errorResult(error); }
@@ -2239,6 +2245,160 @@ class Phase1Runtime {
       if (!['OPEN', 'IN_PROGRESS', 'RESOLVED', 'WAIVED'].includes(state)) throw new WmitError('INVALID_ISSUE_STATE', 'Readiness issue state is not supported.');
       return this.updateRecord('DepartureReadinessIssue', issue.departure_readiness_issue_id, { state, resolution: input.resolution || issue.resolution || null }, context);
     } catch (error) { return fail(error); }
+  }
+
+  internUsernameFromActor(actor) {
+    const value = String(actor || '');
+    if (!value.startsWith('USER:')) return null;
+    const username = value.slice(5).trim().toLowerCase();
+    return username || null;
+  }
+  validateInternProfile(value, currentInternId) {
+    const name = String(value.name || '').trim();
+    requireValue(name, 'name');
+    const school = String(value.school || value.organization || '').trim();
+    requireValue(school, 'school');
+    const email = String(value.email || '').trim();
+    requireValue(email, 'email');
+    if (!INTERN_EMAIL_PATTERN.test(email)) throw new WmitError('INTERN_EMAIL_INVALID', 'The intern email address is not valid.', { field: 'email', email });
+    const supervisorUsername = String(value.supervisor_username || '').trim().toLowerCase();
+    requireValue(supervisorUsername, 'supervisor_username');
+    if (!WMIT_USERNAME_PATTERN.test(supervisorUsername)) throw new WmitError('INTERN_SUPERVISOR_USERNAME_INVALID', 'The supervisor username is not a valid WMIT username.', { field: 'supervisor_username', supervisor_username: supervisorUsername });
+    const status = value.status === undefined || value.status === null || String(value.status).trim() === '' ? 'Active' : String(value.status).trim();
+    if (!INTERN_STATUS_VALUES.includes(status)) throw new WmitError('INTERN_STATUS_INVALID', 'Intern status must be Active or Inactive.', { field: 'status', status, allowed: INTERN_STATUS_VALUES });
+    const periodStart = String(value.period_start || '').trim();
+    requireValue(periodStart, 'period_start');
+    const periodEnd = String(value.period_end || '').trim();
+    requireValue(periodEnd, 'period_end');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(periodStart) || Number.isNaN(Date.parse(periodStart))) throw new WmitError('INTERN_PERIOD_INVALID', 'Intern period start must be a valid date (YYYY-MM-DD).', { field: 'period_start', period_start: periodStart });
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(periodEnd) || Number.isNaN(Date.parse(periodEnd))) throw new WmitError('INTERN_PERIOD_INVALID', 'Intern period end must be a valid date (YYYY-MM-DD).', { field: 'period_end', period_end: periodEnd });
+    if (periodEnd < periodStart) throw new WmitError('INTERN_PERIOD_INVALID', 'Intern period end cannot be before the period start.', { period_start: periodStart, period_end: periodEnd });
+    const username = value.username === undefined || value.username === null || String(value.username).trim() === '' ? null : String(value.username).trim().toLowerCase();
+    if (username && !WMIT_USERNAME_PATTERN.test(username)) throw new WmitError('INTERN_USERNAME_INVALID', 'The intern WMIT username is not a valid username.', { field: 'username', username });
+    if (username) {
+      const usernameClash = this.list('Intern', (intern) => String(intern.username || '').trim().toLowerCase() === username && intern.intern_id !== currentInternId);
+      if (usernameClash.length) throw new WmitError('INTERN_USERNAME_IN_USE', 'Another intern profile is already linked to that WMIT username.', { username, existing_intern_id: usernameClash[0].intern_id });
+    }
+    const duplicate = this.list('Intern', (intern) => intern.intern_id !== currentInternId && String(intern.name || '').trim().toLowerCase() === name.toLowerCase() && String(intern.school || '').trim().toLowerCase() === school.toLowerCase());
+    if (duplicate.length) throw new WmitError('INTERN_DUPLICATE', 'An intern with that name and school combination already exists (' + duplicate[0].intern_id + '). Open the existing record instead of creating a second one.', { name, school, existing_intern_id: duplicate[0].intern_id });
+    return {
+      name, school, email,
+      phone: value.phone === undefined || value.phone === null || String(value.phone).trim() === '' ? null : String(value.phone).trim(),
+      supervisor_username: supervisorUsername, status,
+      period_start: periodStart, period_end: periodEnd, username,
+      notes: value.notes === undefined || value.notes === null || String(value.notes).trim() === '' ? null : String(value.notes)
+    };
+  }
+  createIntern(input, context) {
+    const ctx = this.context(context);
+    try {
+      const profile = this.validateInternProfile(Object.assign({}, input || {}), null);
+      return this.createRecord('Intern', Object.assign({}, input || {}, profile), ctx);
+    } catch (error) {
+      this.auditFailure('CREATE_INTERN', 'Intern', input, ctx, error);
+      return fail(error);
+    }
+  }
+  updateIntern(internId, changes, context) {
+    const ctx = this.context(context);
+    try {
+      const current = this.must('Intern', internId);
+      const applied = Object.assign({}, changes || {});
+      delete applied.intern_id;
+      const profile = this.validateInternProfile(Object.assign({}, current, applied), current.intern_id);
+      return this.updateRecord('Intern', current.intern_id, Object.assign({}, applied, profile), ctx);
+    } catch (error) {
+      this.auditFailure('UPDATE_INTERN', 'Intern', { intern_id: internId }, ctx, error);
+      return fail(error);
+    }
+  }
+  listInterns(input, context) {
+    const value = input || {};
+    const status = value.status === undefined || value.status === null || String(value.status).trim() === '' ? null : String(value.status).trim();
+    if (status && !INTERN_STATUS_VALUES.includes(status)) return fail(new WmitError('INTERN_STATUS_INVALID', 'Intern status must be Active or Inactive.', { field: 'status', status, allowed: INTERN_STATUS_VALUES }));
+    const supervisor = value.supervisor_username === undefined || value.supervisor_username === null || String(value.supervisor_username).trim() === '' ? null : String(value.supervisor_username).trim().toLowerCase();
+    return ok(this.list('Intern', (intern) => (!status || intern.status === status) && (!supervisor || String(intern.supervisor_username || '').trim().toLowerCase() === supervisor)), { action: 'LIST_INTERNS', read_only: true });
+  }
+  assignInternTask(input, context) {
+    const ctx = this.context(context);
+    try {
+      this.requireAuthorization(ACTIONS.ASSIGN_INTERN_TASK, ctx);
+      const value = input || {};
+      const intern = this.must('Intern', requireValue(value.intern_id, 'intern_id'));
+      if (intern.status !== 'Active') throw new WmitError('INTERN_INACTIVE', 'Tasks cannot be assigned to an inactive intern.', { intern_id: intern.intern_id, status: intern.status });
+      const title = String(value.title || '').trim();
+      requireValue(title, 'title');
+      const instructions = String(value.instructions || '').trim();
+      requireValue(instructions, 'instructions');
+      if (value.due_at !== undefined && value.due_at !== null && String(value.due_at).trim() !== '' && Number.isNaN(Date.parse(String(value.due_at)))) throw new WmitError('INTERN_TASK_DUE_AT_INVALID', 'The intern task due date must be a valid date.', { field: 'due_at', due_at: value.due_at });
+      const created = this.createRecord('InternTask', {
+        intern_id: intern.intern_id,
+        title, instructions,
+        due_at: value.due_at === undefined || value.due_at === null || String(value.due_at).trim() === '' ? null : value.due_at,
+        state: 'OPEN',
+        assigned_by: ctx.actor, assigned_at: value.assigned_at || this.now(),
+        submitted_note: null, submitted_at: null, submitted_by: null,
+        review_feedback: null, review_decision: null, reviewed_by: null, reviewed_at: null,
+        rejection_count: 0
+      }, ctx);
+      if (!created.ok) return created;
+      this.audit('ASSIGN_INTERN_TASK', 'InternTask', created.data, ctx, { intern_id: intern.intern_id, title });
+      return ok(created.data, { action: 'ASSIGN_INTERN_TASK' });
+    } catch (error) {
+      this.auditFailure('ASSIGN_INTERN_TASK', 'InternTask', input, ctx, error);
+      return fail(error);
+    }
+  }
+  submitInternTask(input, context) {
+    const ctx = this.context(context);
+    try {
+      const actorUsername = this.internUsernameFromActor(ctx.actor);
+      if (!actorUsername) throw new WmitError('INTERN_ACTOR_INVALID', 'Only a signed-in intern account (USER:username) may submit intern tasks.', { actor: ctx.actor });
+      const value = input || {};
+      const task = this.must('InternTask', requireValue(value.intern_task_id, 'intern_task_id'));
+      const intern = this.must('Intern', task.intern_id);
+      if (String(intern.username || '').trim().toLowerCase() !== actorUsername) throw new WmitError('INTERN_TASK_NOT_OWNED', 'This intern task belongs to a different intern.', { intern_task_id: task.intern_task_id, intern_id: intern.intern_id });
+      if (intern.status !== 'Active') throw new WmitError('INTERN_INACTIVE', 'An inactive intern cannot submit tasks.', { intern_id: intern.intern_id, status: intern.status });
+      if (task.state === 'SUBMITTED') return ok(task, { action: 'IDEMPOTENT_REPLAY', idempotent: true });
+      if (task.state !== 'OPEN') throw new WmitError('INTERN_TASK_STATE_INVALID', 'Only an open intern task can be submitted.', { intern_task_id: task.intern_task_id, current_state: task.state });
+      const updated = this.updateRecord('InternTask', task.intern_task_id, {
+        state: 'SUBMITTED',
+        submitted_note: value.submitted_note === undefined || value.submitted_note === null || String(value.submitted_note).trim() === '' ? null : String(value.submitted_note),
+        submitted_at: this.now(), submitted_by: ctx.actor
+      }, ctx);
+      if (!updated.ok) return updated;
+      this.audit('SUBMIT_INTERN_TASK', 'InternTask', updated.data, ctx, { intern_id: intern.intern_id, from_state: 'OPEN', to_state: 'SUBMITTED' });
+      return ok(updated.data, { action: 'SUBMIT_INTERN_TASK' });
+    } catch (error) {
+      this.auditFailure('SUBMIT_INTERN_TASK', 'InternTask', input, ctx, error);
+      return fail(error);
+    }
+  }
+  reviewInternTask(input, context) {
+    const ctx = this.context(context);
+    try {
+      this.requireAuthorization(ACTIONS.REVIEW_INTERN_TASK, ctx);
+      const value = input || {};
+      const task = this.must('InternTask', requireValue(value.intern_task_id, 'intern_task_id'));
+      const decision = String(value.decision || '').trim().toUpperCase();
+      if (!['APPROVED', 'REJECTED'].includes(decision)) throw new WmitError('INTERN_TASK_DECISION_INVALID', 'Review decision must be APPROVED or REJECTED.', { field: 'decision', decision: value.decision === undefined || value.decision === null ? null : String(value.decision) });
+      const feedback = value.review_feedback === undefined || value.review_feedback === null || String(value.review_feedback).trim() === '' ? null : String(value.review_feedback).trim();
+      if (decision === 'REJECTED' && !feedback) throw new WmitError('INTERN_TASK_FEEDBACK_REQUIRED', 'Rejection feedback is required so the intern knows what to change before resubmitting.', { intern_task_id: task.intern_task_id });
+      if (task.state !== 'SUBMITTED') throw new WmitError('INTERN_TASK_STATE_INVALID', 'Only a submitted intern task can be reviewed.', { intern_task_id: task.intern_task_id, current_state: task.state });
+      const updates = {
+        state: decision === 'APPROVED' ? 'APPROVED' : 'OPEN',
+        review_decision: decision, review_feedback: feedback,
+        reviewed_by: ctx.actor, reviewed_at: this.now()
+      };
+      if (decision === 'REJECTED') updates.rejection_count = Number(task.rejection_count || 0) + 1;
+      const updated = this.updateRecord('InternTask', task.intern_task_id, updates, ctx);
+      if (!updated.ok) return updated;
+      this.audit('REVIEW_INTERN_TASK', 'InternTask', updated.data, ctx, { intern_id: task.intern_id, decision, from_state: task.state, to_state: updates.state });
+      return ok(updated.data, { action: 'REVIEW_INTERN_TASK' });
+    } catch (error) {
+      this.auditFailure('REVIEW_INTERN_TASK', 'InternTask', input, ctx, error);
+      return fail(error);
+    }
   }
   snapshot() { const result = {}; Object.keys(this.repos).forEach((type) => { result[type] = this.repos[type].list(); }); return ok({ entities: result, audit: this.auditLog.list(), configuration: { tariffRateUnits: this.config.tariffRateUnits.slice() } }); }
 }
