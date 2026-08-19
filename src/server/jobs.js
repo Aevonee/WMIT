@@ -128,7 +128,105 @@ function rehearseBackup(backupPath, expectedCounts) {
   }
 }
 
-function buildDigestSummary(db) {
+function readRecords(db, entityType) {
+  try {
+    return db.prepare('SELECT json FROM ' + entityType).all().map((row) => {
+      try { return JSON.parse(row.json); } catch (_) { return null; }
+    }).filter(Boolean);
+  } catch (_) { return []; }
+}
+
+function toMinorUnits(value) {
+  if (typeof value === 'number') return Math.round(value * 100);
+  const match = String(value || '0').match(/^-?\d+(?:\.\d{1,2})?$/);
+  if (!match) return 0;
+  const [whole, fraction] = String(value).split('.');
+  const padded = (fraction || '').padEnd(2, '0');
+  return Number(whole) * 100 + Number(padded || '0') * (whole.startsWith('-') ? -1 : 1);
+}
+
+function fromMinorUnits(minor) {
+  return (Number(minor) / 100).toFixed(2);
+}
+
+function daysBetween(fromIso, toIso) {
+  const from = new Date(fromIso); const to = new Date(toIso);
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return null;
+  return Math.floor((to - from) / (24 * 60 * 60 * 1000));
+}
+
+// Receivables: per obligation, outstanding = obligation amount minus ACTIVE
+// allocations (mirrors the runtime's allocation math). Overdue adds a past
+// due_at. Client names resolved through the Booking → Client link.
+function receivablesSnapshot(db, nowIso) {
+  const obligations = readRecords(db, 'e_ClientObligation');
+  const allocations = readRecords(db, 'e_PaymentAllocation');
+  const bookings = new Map(readRecords(db, 'e_Booking').map((booking) => [booking.booking_id, booking]));
+  const clients = new Map(readRecords(db, 'e_Client').map((client) => [client.client_id, client]));
+  const totals = {};
+  let overdueCount = 0;
+  const overdue = [];
+  for (const obligation of obligations) {
+    const amountMinor = toMinorUnits(obligation.amount || obligation.total_amount || obligation.balance_due);
+    const allocatedMinor = allocations
+      .filter((allocation) => allocation.client_obligation_id === obligation.client_obligation_id && allocation.state === 'ACTIVE')
+      .reduce((sum, allocation) => sum + toMinorUnits(allocation.amount), 0);
+    const outstandingMinor = amountMinor - allocatedMinor;
+    if (outstandingMinor <= 0) continue;
+    const currency = obligation.currency || 'PHP';
+    totals[currency] = (totals[currency] || 0) + outstandingMinor;
+    if (obligation.due_at && String(obligation.due_at) < nowIso) {
+      overdueCount += 1;
+      const booking = bookings.get(obligation.booking_id);
+      const client = booking ? clients.get(booking.client_id) : null;
+      overdue.push({
+        client_obligation_id: obligation.client_obligation_id,
+        booking_id: obligation.booking_id,
+        client_name: client ? (client.display_name || client.name || '') : '',
+        amount_outstanding: fromMinorUnits(outstandingMinor),
+        currency,
+        days_overdue: daysBetween(obligation.due_at, nowIso)
+      });
+    }
+  }
+  overdue.sort((a, b) => (b.days_overdue || 0) - (a.days_overdue || 0));
+  return { outstanding_total_by_currency: totals, overdue_count: overdueCount, top_overdue: overdue.slice(0, 3) };
+}
+
+function pendingVerificationSnapshot(db) {
+  return readRecords(db, 'e_ClientPayment')
+    .filter((payment) => payment.payment_state === 'PENDING_VERIFICATION')
+    .slice(0, 5)
+    .map((payment) => ({ client_payment_id: payment.client_payment_id, booking_id: payment.booking_id || null, amount: payment.amount, currency: payment.currency || null }));
+}
+
+function upcomingTripsSnapshot(db, nowIso, withinDays) {
+  const horizon = new Date(new Date(nowIso).getTime() + withinDays * 24 * 60 * 60 * 1000).toISOString();
+  const clients = new Map(readRecords(db, 'e_Client').map((client) => [client.client_id, client]));
+  return readRecords(db, 'e_Booking')
+    .filter((booking) => booking.travel_start && String(booking.travel_start) >= nowIso.slice(0, 10) && String(booking.travel_start) <= horizon.slice(0, 10))
+    .sort((a, b) => String(a.travel_start).localeCompare(String(b.travel_start)))
+    .slice(0, 10)
+    .map((booking) => {
+      const client = clients.get(booking.client_id);
+      return { booking_id: booking.booking_id, client_name: client ? (client.display_name || client.name || '') : '', destination: booking.destination || null, travel_start: booking.travel_start, status: booking.status || booking.state || null };
+    });
+}
+
+function expoFunnelSnapshot(db, nowIso) {
+  const since = new Date(new Date(nowIso).getTime() - 24 * 60 * 60 * 1000).toISOString();
+  const leads = readRecords(db, 'e_ExpoLead');
+  const quotes = readRecords(db, 'e_ExpoQuote');
+  return {
+    leads_last_24h: leads.filter((lead) => String(lead.created_at) >= since).length,
+    quotations_awaiting_acceptance: quotes.filter((quote) => quote.status === 'SENT' && !quote.accepted_at && !quote.declined_at).length,
+    acceptances_last_24h: quotes.filter((quote) => quote.accepted_at && String(quote.accepted_at) >= since).length
+  };
+}
+
+function buildDigestSummary(db, options) {
+  const opts = options || {};
+  const nowIso = opts.now || new Date().toISOString();
   const counts = entityCounts(db);
   const openTasks = (() => {
     try {
@@ -145,9 +243,55 @@ function buildDigestSummary(db) {
     entity_counts: counts,
     open_tasks: openTasks,
     payments_pending_verification: pendingPayments,
+    payments_pending_verification_detail: pendingVerificationSnapshot(db),
     draft_quotations: draftQuotations,
+    receivables: receivablesSnapshot(db, nowIso),
+    upcoming_trips_14d: upcomingTripsSnapshot(db, nowIso, 14),
+    expo_funnel: expoFunnelSnapshot(db, nowIso),
     heartbeat: latestHeartbeat(db)
   };
+}
+
+function renderDigestEmail(summary, baseUrl) {
+  const lines = [];
+  lines.push('WMIT daily digest — ' + new Date().toISOString().slice(0, 10));
+  lines.push('');
+  lines.push('== Needs your action ==');
+  const pending = summary.payments_pending_verification_detail || [];
+  if (summary.payments_pending_verification) {
+    lines.push('Payments awaiting verification: ' + summary.payments_pending_verification);
+    pending.forEach((payment) => lines.push('  - ' + payment.client_payment_id + (payment.booking_id ? ' (' + payment.booking_id + ')' : '') + ': ' + payment.amount + ' ' + (payment.currency || '')));
+  } else {
+    lines.push('Payments awaiting verification: none');
+  }
+  if (summary.receivables.overdue_count) {
+    lines.push('Overdue receivables: ' + summary.receivables.overdue_count);
+    summary.receivables.top_overdue.forEach((item) => lines.push('  - ' + (item.client_name || item.booking_id) + ' ' + item.booking_id + ': ' + item.amount_outstanding + ' ' + item.currency + ' — ' + (item.days_overdue === null ? '?' : item.days_overdue) + ' days overdue'));
+  } else {
+    lines.push('Overdue receivables: none');
+  }
+  lines.push('Open tasks: ' + summary.open_tasks);
+  lines.push('');
+  lines.push('== Money watch ==');
+  const totals = Object.entries(summary.receivables.outstanding_total_by_currency || {});
+  if (totals.length) totals.forEach(([currency, minor]) => lines.push('Outstanding receivables ' + currency + ': ' + fromMinorUnits(minor)));
+  else lines.push('Outstanding receivables: none');
+  lines.push('Draft quotations: ' + summary.draft_quotations);
+  lines.push('');
+  lines.push('== Trips in the next 14 days ==');
+  const trips = summary.upcoming_trips_14d || [];
+  if (trips.length) trips.forEach((trip) => lines.push('  - ' + trip.travel_start + ' ' + (trip.client_name || trip.booking_id) + (trip.destination ? ' → ' + trip.destination : '') + ' (' + trip.booking_id + ')'));
+  else lines.push('none');
+  lines.push('');
+  lines.push('== Expo funnel (24h) ==');
+  lines.push('Leads captured: ' + summary.expo_funnel.leads_last_24h);
+  lines.push('Quotes awaiting acceptance: ' + summary.expo_funnel.quotations_awaiting_acceptance);
+  lines.push('Acceptances: ' + summary.expo_funnel.acceptances_last_24h);
+  lines.push('');
+  lines.push('Heartbeat: ' + (summary.heartbeat ? summary.heartbeat.status + ' at ' + summary.heartbeat.checked_at : 'not yet run'));
+  lines.push('');
+  lines.push('Sign in to the WMIT workspace' + (baseUrl ? ': ' + baseUrl : '.') + ' to act on these items.');
+  return lines.join('\r\n');
 }
 
 function registerJobs(scheduler, options) {
@@ -167,19 +311,9 @@ function registerJobs(scheduler, options) {
     if (!mailer || !config.digestTo || !config.smtpConfigured()) {
       return { skipped: true, reason: mailer && config.digestTo ? 'SMTP_NOT_CONFIGURED' : 'DIGEST_RECIPIENT_NOT_CONFIGURED', summary };
     }
-    const lines = [
-      'WMIT daily digest — ' + new Date().toISOString().slice(0, 10),
-      '',
-      'Open tasks: ' + summary.open_tasks,
-      'Payments awaiting verification: ' + summary.payments_pending_verification,
-      'Draft quotations: ' + summary.draft_quotations,
-      'Heartbeat: ' + (summary.heartbeat ? summary.heartbeat.status + ' at ' + summary.heartbeat.checked_at : 'not yet run'),
-      '',
-      'Sign in to the WMIT workspace to act on these items.'
-    ];
-    const sent = await mailer.send({ to: config.digestTo, subject: 'WMIT daily digest', text: lines.join('\r\n') });
+    const sent = await mailer.send({ to: config.digestTo, subject: 'WMIT daily digest', text: renderDigestEmail(summary, config.baseUrl) });
     return { sent: sent.sent, mode: sent.mode || null, summary };
   });
 }
 
-module.exports = { ensureSystemTables, recordJobRun, lastSuccessfulRun, runHeartbeat, latestHeartbeat, createBackup, pruneBackups, rehearseBackup, buildDigestSummary, registerJobs, entityCounts, auditChainValid, integrityCheck };
+module.exports = { ensureSystemTables, recordJobRun, lastSuccessfulRun, runHeartbeat, latestHeartbeat, createBackup, pruneBackups, rehearseBackup, buildDigestSummary, renderDigestEmail, registerJobs, entityCounts, auditChainValid, integrityCheck };

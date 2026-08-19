@@ -90,17 +90,64 @@ test('backups are created, pruned, and rehearsed — and corrupt backups fail cl
   db.close();
 });
 
-test('the digest summary counts open work and the mailer degrades to .eml without SMTP', async () => {
+test('the digest morning brief reports receivables, pending payments, trips, and the expo funnel', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wmit-digest-'));
   const db = buildDb(dir);
+  const now = '2026-08-19T00:00:00.000Z';
   const tasks = new SqliteRepository(db, 'Task', 'task_id');
   tasks.insert({ task_id: 'TASK-2026-000001', state: 'OPEN', description: 'Follow up' });
   tasks.insert({ task_id: 'TASK-2026-000002', state: 'COMPLETED', description: 'Done' });
-  const payments = new SqliteRepository(db, 'ClientPayment', 'client_payment_id');
-  payments.insert({ client_payment_id: 'CLIENT_PAYMENT-2026-000001', payment_state: 'PENDING_VERIFICATION' });
-  const summary = buildDigestSummary(db);
+  new SqliteRepository(db, 'Client', 'client_id').insert({ client_id: 'CLIENT-000001', display_name: 'Del Cruz Juan' });
+  new SqliteRepository(db, 'Booking', 'booking_id').insert({ booking_id: 'BOOKING-2026-000001', client_id: 'CLIENT-000001', destination: 'Bangkok', travel_start: '2026-08-29', status: 'Confirmed' });
+  const obligations = new SqliteRepository(db, 'ClientObligation', 'client_obligation_id');
+  obligations.insert({ client_obligation_id: 'CO-2026-000001', booking_id: 'BOOKING-2026-000001', currency: 'PHP', amount: '10000.00', due_at: '2026-08-10T09:00:00.000Z' });
+  obligations.insert({ client_obligation_id: 'CO-2026-000002', booking_id: 'BOOKING-2026-000001', currency: 'PHP', amount: '5000.00', due_at: '2026-09-01T09:00:00.000Z' });
+  new SqliteRepository(db, 'PaymentAllocation', 'payment_allocation_id').insert({ payment_allocation_id: 'PA-2026-000001', client_obligation_id: 'CO-2026-000001', state: 'ACTIVE', amount: '4000.00' });
+  new SqliteRepository(db, 'ClientPayment', 'client_payment_id').insert({ client_payment_id: 'CLIENT_PAYMENT-2026-000001', booking_id: 'BOOKING-2026-000001', payment_state: 'PENDING_VERIFICATION', amount: '6000.00', currency: 'PHP' });
+  new SqliteRepository(db, 'ExpoLead', 'expo_lead_id').insert({ expo_lead_id: 'EXPO_LEAD-2026-000001', status: 'NEW', created_at: '2026-08-18T12:00:00.000Z' });
+  const quotes = new SqliteRepository(db, 'ExpoQuote', 'expo_quote_id');
+  quotes.insert({ expo_quote_id: 'EXPO_QUOTE-2026-000001', expo_tag: 'EXPO-2026', status: 'SENT', accepted_at: null, declined_at: null, created_at: '2026-08-18T10:00:00.000Z' });
+  quotes.insert({ expo_quote_id: 'EXPO_QUOTE-2026-000002', expo_tag: 'EXPO-2026', status: 'ACCEPTED', accepted_at: '2026-08-18T20:00:00.000Z', declined_at: null, created_at: '2026-08-18T10:00:00.000Z' });
+
+  const summary = buildDigestSummary(db, { now });
   assert.equal(summary.open_tasks, 1);
   assert.equal(summary.payments_pending_verification, 1);
+  assert.equal(summary.payments_pending_verification_detail[0].client_payment_id, 'CLIENT_PAYMENT-2026-000001');
+  // CO-1: 10000 - 4000 allocated = 6000 outstanding; 2026-08-10T09:00Z → 2026-08-19T00:00Z = 8.625 → 8 days overdue. CO-2: 5000 outstanding, not yet due.
+  assert.equal(summary.receivables.outstanding_total_by_currency.PHP, 1100000);
+  assert.equal(summary.receivables.overdue_count, 1);
+  assert.equal(summary.receivables.top_overdue[0].client_name, 'Del Cruz Juan');
+  assert.equal(summary.receivables.top_overdue[0].amount_outstanding, '6000.00');
+  assert.equal(summary.receivables.top_overdue[0].days_overdue, 8);
+  assert.equal(summary.upcoming_trips_14d.length, 1);
+  assert.equal(summary.upcoming_trips_14d[0].booking_id, 'BOOKING-2026-000001');
+  assert.equal(summary.upcoming_trips_14d[0].travel_start, '2026-08-29');
+  assert.equal(summary.expo_funnel.leads_last_24h, 1);
+  assert.equal(summary.expo_funnel.quotations_awaiting_acceptance, 1);
+  assert.equal(summary.expo_funnel.acceptances_last_24h, 1);
+
+  const email = require('../../src/server/jobs').renderDigestEmail(summary, 'https://app.example.ph');
+  assert.match(email, /Del Cruz Juan BOOKING-2026-000001: 6000\.00 PHP — 8 days overdue/);
+  assert.match(email, /Outstanding receivables PHP: 11000\.00/);
+  assert.match(email, /CLIENT_PAYMENT-2026-000001/);
+  assert.match(email, /2026-08-29 Del Cruz Juan → Bangkok/);
+  assert.match(email, /Leads captured: 1/);
+  assert.match(email, /Sign in to the WMIT workspace: https:\/\/app\.example\.ph/);
+  db.close();
+});
+
+test('the digest renders empty sections as none and the mailer degrades to .eml without SMTP', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wmit-digest-empty-'));
+  const db = buildDb(dir);
+  const summary = buildDigestSummary(db);
+  assert.equal(summary.open_tasks, 0);
+  assert.equal(summary.receivables.overdue_count, 0);
+  assert.equal(summary.upcoming_trips_14d.length, 0);
+  assert.equal(summary.expo_funnel.leads_last_24h, 0);
+  const email = require('../../src/server/jobs').renderDigestEmail(summary, null);
+  assert.match(email, /Payments awaiting verification: none/);
+  assert.match(email, /Overdue receivables: none/);
+  assert.match(email, /Outstanding receivables: none/);
 
   const outbox = path.join(dir, 'outbox');
   const mailer = new Mailer({ smtp: {}, outboxDir: outbox });
