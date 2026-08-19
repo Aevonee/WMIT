@@ -11,6 +11,7 @@ const { Scheduler } = require('./scheduler');
 const { Mailer } = require('./mailer');
 const { ensureSystemTables, recordJobRun, registerJobs, runHeartbeat } = require('./jobs');
 const { ExpoService } = require('../expo/expo-service');
+const { DocumentsIngestionService } = require('../documents/ingestion-service');
 const { createPdfTariffUploadAdapter } = require('../adapters/pdf-tariff-upload-adapter');
 const { createPasteTariffUploadAdapter } = require('../adapters/paste-tariff-upload-adapter');
 const { createPhase1Runtime, ENTITY_DEFS } = require('../phase1/runtime');
@@ -110,6 +111,10 @@ function createHostedServer(options) {
   try { expo.seedPlaceholderTemplates(); } catch (_) { /* seeding is best effort; the console reports template state */ }
   scheduler.register('expo-followups', { intervalMs: 15 * 60 * 1000 }, () => expo.ensureFollowUpTasks());
 
+  // Document ingestion (Phase 6): register, classify, extract, review on
+  // top of the document-intelligence modules and the same runtime audit.
+  const documents = new DocumentsIngestionService({ runtime, config, clock: opts.clock });
+
   if (config.schedulerEnabled && opts.schedulerEnabled !== false) scheduler.start();
   // Record an initial heartbeat so /api/health has data immediately.
   try { runHeartbeat(db); } catch (_) { /* heartbeat failures surface through the endpoint */ }
@@ -119,6 +124,7 @@ function createHostedServer(options) {
     auth,
     enforceSessions: config.enforceSessions,
     expo,
+    documents,
     mailer,
     auditLog,
     health: () => ({

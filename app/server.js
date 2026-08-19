@@ -6,6 +6,7 @@ const path = require('path');
 const zlib = require('zlib');
 const { seedDemoRuntime } = require('../src/application/demo-data');
 const { createPhase1Application } = require('../src/application/phase1');
+const { buildInvoicePdf, buildItineraryPdf, buildReceiptPdf, buildVoucherPdf } = require('../src/documents/client-documents-pdf');
 
 const publicRoot = path.join(__dirname, 'public');
 
@@ -197,6 +198,7 @@ function createMvpServer(options) {
   const enforceSessions = Boolean(options && options.enforceSessions && auth);
   const health = (options && options.health) || null;
   const expo = (options && options.expo) || null;
+  const documents = (options && options.documents) || null;
   const mailer = (options && options.mailer) || null;
   const documentAuditLog = (options && options.auditLog) || null;
   const auditLogReader = documentAuditLog;
@@ -261,7 +263,17 @@ function createMvpServer(options) {
           const session = auth.sessionFor(bearerToken(req));
           if (!session) return json(res, 401, { ok: false, error: { code: 'UNAUTHORIZED', message: 'Sign in to WMIT to use this API.' } });
           if (req.method !== 'GET' && session.role === 'INTERN') {
-            return json(res, 403, { ok: false, error: { code: 'INTERN_WRITE_FORBIDDEN', message: 'Intern accounts are read-only.' } });
+            // Interns are read-only with one exception: submitting their own
+            // intern tasks. The body is parsed here and stashed so the action
+            // handler does not try to re-read the consumed stream; the runtime
+            // still enforces task ownership against USER:<username>.
+            let allowed = false;
+            if (req.method === 'POST' && parsed.pathname === '/api/phase1/action') {
+              const body = await readBody(req);
+              req.wmitBody = body;
+              allowed = body && body.action === 'submitInternTask';
+            }
+            if (!allowed) return json(res, 403, { ok: false, error: { code: 'INTERN_WRITE_FORBIDDEN', message: 'Intern accounts are read-only.' } });
           }
           req.wmitSession = session;
           req.wmitActor = 'USER:' + session.username;
@@ -330,7 +342,76 @@ function createMvpServer(options) {
               documentAuditLog.record({ actor: req.wmitActor || 'LOCAL_STAFF', action: 'EMAIL_DOCUMENT', entity_type: 'Document', entity_id: kind.toUpperCase() + ':' + entityId, result: delivery && delivery.sent ? 'SUCCESS' : 'DRAFT', details: { to: email, kind, mode: delivery && delivery.mode } });
             } catch (_) { /* audit is best effort; delivery already succeeded */ }
           }
-          return json(res, 200, { ok: true, data: { delivery }, meta: { action: 'EMAIL_DOCUMENT' } });
+           return json(res, 200, { ok: true, data: { delivery }, meta: { action: 'EMAIL_DOCUMENT' } });
+        }
+        // Client document PDF download: renders the same preview data the
+        // email path uses into a downloadable PDF (zero dependencies).
+        if (parsed.pathname === '/api/documents/pdf' && req.method === 'POST') {
+          const body = await readBody(req);
+          const kind = String(body.kind || '');
+          let rendered = null;
+          let entityId = '';
+          if (kind === 'invoice') {
+            entityId = String(body.booking_id || '');
+            rendered = phase1 && typeof phase1.action === 'function' ? await Promise.resolve(phase1.action({ action: 'getClientInvoicePreview', input: { booking_id: entityId }, actor: req.wmitActor })) : null;
+          } else if (kind === 'itinerary') {
+            entityId = String(body.quotation_id || '');
+            rendered = phase1 && typeof phase1.action === 'function' ? await Promise.resolve(phase1.action({ action: 'getClientItineraryPreview', input: { quotation_id: entityId }, actor: req.wmitActor })) : null;
+          } else if (kind === 'receipt') {
+            entityId = String(body.receipt_id || body.client_payment_id || '');
+            rendered = phase1 && typeof phase1.action === 'function' ? await Promise.resolve(phase1.action({ action: 'getPaymentReceiptPreview', input: { receipt_id: body.receipt_id, client_payment_id: body.client_payment_id }, actor: req.wmitActor })) : null;
+          } else if (kind === 'voucher') {
+            entityId = String(body.booking_id || '');
+            rendered = phase1 && typeof phase1.action === 'function' ? await Promise.resolve(phase1.action({ action: 'getClientVoucherPreview', input: { booking_id: entityId }, actor: req.wmitActor })) : null;
+          } else {
+            return json(res, 400, { ok: false, error: { code: 'DOCUMENT_KIND_INVALID', message: 'kind must be invoice, itinerary, receipt, or voucher.' } });
+          }
+          if (!rendered || !rendered.ok) return json(res, 400, rendered || { ok: false, error: { code: 'DOCUMENT_UNAVAILABLE', message: 'The document could not be generated.' } });
+          const pdfFor = { invoice: buildInvoicePdf, itinerary: buildItineraryPdf, receipt: buildReceiptPdf, voucher: buildVoucherPdf };
+          const pdfResult = pdfFor[kind](rendered.data);
+          if (!pdfResult.ok) return json(res, 400, { ok: false, error: { code: 'PDF_RENDER_FAILED', message: pdfResult.error.message } });
+          if (documentAuditLog) {
+            try {
+              documentAuditLog.record({ actor: req.wmitActor || 'LOCAL_STAFF', action: 'PDF_DOCUMENT', entity_type: 'Document', entity_id: kind.toUpperCase() + ':' + entityId, result: 'SUCCESS', details: { kind, filename: pdfResult.filename } });
+            } catch (_) { /* audit is best effort */ }
+          }
+          res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="' + pdfResult.filename + '"', 'Cache-Control': 'no-store' });
+          res.end(pdfResult.pdf);
+          return;
+        }
+        // --- Document ingestion (register / classify / extract / review) ----
+        if (parsed.pathname.startsWith('/api/documents/ingest/')) {
+          if (!documents) return json(res, 501, { ok: false, error: { code: 'DOCUMENTS_UNAVAILABLE', message: 'This server runs without the document ingestion service.' } });
+          const sub = parsed.pathname.slice('/api/documents/ingest/'.length);
+          const statusFor = (result) => result.ok ? 200 : (result.error && result.error.code === 'NOT_FOUND' ? 404 : 400);
+          if (req.method === 'POST' && sub === 'register') {
+            const body = await readBody(req);
+            const result = await Promise.resolve(documents.registerDocument(Object.assign({}, body, { uploaded_by: body.uploaded_by || req.wmitActor }), req.wmitActor));
+            return json(res, statusFor(result), result);
+          }
+          if (req.method === 'POST' && sub === 'classify') {
+            const body = await readBody(req);
+            const result = await Promise.resolve(documents.classifyDocument(body.document_id, req.wmitActor));
+            return json(res, statusFor(result), result);
+          }
+          if (req.method === 'POST' && sub === 'extract') {
+            const body = await readBody(req);
+            const result = await Promise.resolve(documents.extractDocument(body.document_id, req.wmitActor));
+            return json(res, statusFor(result), result);
+          }
+          if (req.method === 'GET' && sub === 'queue') {
+            return json(res, 200, documents.queue(Object.fromEntries(parsed.searchParams.entries())));
+          }
+          if (req.method === 'GET' && sub === 'match') {
+            const result = await Promise.resolve(documents.matchSuggestions(parsed.searchParams.get('document_id')));
+            return json(res, statusFor(result), result);
+          }
+          if (req.method === 'POST' && sub === 'review') {
+            const body = await readBody(req);
+            const result = await Promise.resolve(documents.reviewDocument(Object.assign({}, body, { reviewer: body.reviewer || req.wmitActor }), req.wmitActor));
+            return json(res, statusFor(result), result);
+          }
+          return json(res, 404, { ok: false, error: { message: 'Unknown document ingestion endpoint.' } });
         }
         // --- Account self-service and administration -------------------------
         if (parsed.pathname === '/api/auth/password' && req.method === 'POST') {
@@ -455,7 +536,7 @@ function createMvpServer(options) {
         if (req.method === 'GET' && parsed.pathname === '/api/phase1/state') return json(res, 200, await Promise.resolve(phase1.snapshot()));
         if (req.method === 'POST' && parsed.pathname === '/api/phase1/action') {
           if (!actorTokenValid(req)) return json(res, 401, { ok: false, error: { code: 'ACTOR_TOKEN_INVALID', message: 'A valid x-wmit-actor-token header is required for this server.' } });
-          const body = await readBody(req);
+          const body = req.wmitBody || await readBody(req);
           if (req.wmitActor) body.actor = req.wmitActor;
           const result = await Promise.resolve(phase1.action(body));
           return json(res, result.ok ? 200 : 400, result);
@@ -510,8 +591,7 @@ function createMvpServer(options) {
         '/expo-console': '/expo-console.html',
         '/kiosk': '/expo.html',
         '/signup': '/expo.html',
-        '/quote': '/quote.html',
-        '/phase1': '/phase1.html'
+        '/quote': '/quote.html'
       };
       if (req.method === 'GET' && pageAliases[parsed.pathname]) {
         res.writeHead(302, { Location: pageAliases[parsed.pathname], 'Cache-Control': 'no-store' });
