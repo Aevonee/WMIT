@@ -1376,7 +1376,7 @@ class Phase1Runtime {
       const existing = this.list('Booking', (booking) => booking.quotation_id === quote.quotation_id);
       if (existing.length) {
         const booking = existing[0];
-        const existingLead = this.list('BookingParticipant', (participant) => participant.booking_id === booking.booking_id && (participant.role === 'LEAD_PAX' || (Array.isArray(participant.roles) && participant.roles.includes('LEAD_PAX'))));
+        const existingLead = this.list('BookingParticipant', (participant) => participant.booking_id === booking.booking_id && participant.state !== 'CANCELLED' && (participant.role === 'LEAD_PAX' || (Array.isArray(participant.roles) && participant.roles.includes('LEAD_PAX'))));
         if (existingLead.length && !input.lead_pax_person_id) return ok(booking, { action: 'IDEMPOTENT_REPLAY', idempotent: true, existing: true, message: 'Booking already exists for this quotation.' });
         const leadPaxPersonId = requireValue(input.lead_pax_person_id, 'lead_pax_person_id');
         this.must('Person', leadPaxPersonId);
@@ -1696,13 +1696,37 @@ class Phase1Runtime {
       this.must('Booking', input.booking_id); this.must('Person', input.person_id);
       const roles = Array.isArray(input.roles) ? input.roles : (input.role ? [input.role] : []);
       if (roles.includes('LEAD_PAX')) {
-        const existingLead = this.list('BookingParticipant', (participant) => participant.booking_id === input.booking_id && (participant.role === 'LEAD_PAX' || (Array.isArray(participant.roles) && participant.roles.includes('LEAD_PAX'))));
+        const existingLead = this.list('BookingParticipant', (participant) => participant.booking_id === input.booking_id && participant.state !== 'CANCELLED' && (participant.role === 'LEAD_PAX' || (Array.isArray(participant.roles) && participant.roles.includes('LEAD_PAX'))));
         if (existingLead.length) {
           if (existingLead[0].person_id === input.person_id) return ok(existingLead[0], { action: 'IDEMPOTENT_REPLAY', idempotent: true });
           throw new WmitError('LEAD_PAX_ALREADY_ASSIGNED', 'A Booking can have only one lead passenger.', { booking_id: input.booking_id, existing_person_id: existingLead[0].person_id });
         }
       }
       return this.createRecord('BookingParticipant', input, context);
+    } catch (error) { return fail(error); }
+  }
+  updateBookingParticipant(input, context) {
+    try {
+      const participant = this.must('BookingParticipant', input.booking_participant_id);
+      const roles = Array.isArray(input.roles) ? input.roles : (input.role ? [input.role] : []);
+      const currentlyLead = participant.role === 'LEAD_PAX' || (Array.isArray(participant.roles) && participant.roles.includes('LEAD_PAX'));
+      if (roles.includes('LEAD_PAX') && !currentlyLead) {
+        const existingLead = this.list('BookingParticipant', (record) => record.booking_id === participant.booking_id && record.booking_participant_id !== participant.booking_participant_id && record.state !== 'CANCELLED' && (record.role === 'LEAD_PAX' || (Array.isArray(record.roles) && record.roles.includes('LEAD_PAX'))));
+        if (existingLead.length) throw new WmitError('LEAD_PAX_ALREADY_ASSIGNED', 'A Booking can have only one lead passenger. Change the current lead passenger to another role first.', { booking_id: participant.booking_id, existing_person_id: existingLead[0].person_id });
+      }
+      const changes = {};
+      if (roles.length) { changes.role = roles[0]; changes.roles = roles; }
+      if (input.notes !== undefined) changes.notes = input.notes;
+      if (!Object.keys(changes).length) throw new WmitError('PARTICIPANT_CHANGE_REQUIRED', 'Provide a role or notes to update.');
+      return this.updateRecord('BookingParticipant', participant.booking_participant_id, changes, context);
+    } catch (error) { return fail(error); }
+  }
+  removeBookingParticipant(input, context) {
+    try {
+      const participant = this.must('BookingParticipant', input.booking_participant_id);
+      const isLead = participant.role === 'LEAD_PAX' || (Array.isArray(participant.roles) && participant.roles.includes('LEAD_PAX'));
+      if (isLead) throw new WmitError('LEAD_PAX_REQUIRED', 'A Booking must keep its lead passenger. Give another person the lead role before removing this one.', { booking_id: participant.booking_id });
+      return this.updateRecord('BookingParticipant', participant.booking_participant_id, { state: 'CANCELLED' }, context);
     } catch (error) { return fail(error); }
   }
   createSupplierBooking(input, context) {
