@@ -23,6 +23,17 @@ Phase 2A/2B and the historical Phase 3A/3B prototypes are implemented locally. P
 | 12 | Interns | Restricted intern profiles, tasks, training, review, reporting |
 | 13 | Travel search | Evaluate and implement appropriate authorized sources or adapters |
 
+## Implementation status (August 2026)
+
+Phases 6, 7 (client PDFs), 9, 12, and 13 have initial implementations on the hosted server:
+
+- **Phase 6 (document ingestion):** `src/documents/ingestion-service.js` + Documents tab — paste-text register, classify, extract with confidence flags, human review, match suggestions. PDF text extraction degrades cleanly on webhosting (see [documents.md](documents.md)).
+- **Phase 7/9 (client document PDFs):** `src/documents/pdf-writer.js` (zero-dependency PDF 1.4 writer) + `client-documents-pdf.js` renderers — invoice/statement, itinerary, receipt, voucher; downloadable from the client-document sheet; audit-logged.
+- **Phase 12 (interns):** INTERN/INTERN_TASK entities, supervisor review loop, intern HTTP carve-out (interns may only submit their own tasks), Interns tab (see [interns.md](interns.md)).
+- **Phase 13 (travel search):** provider boundary + manual-quote provider, honest `live:false` results, verification workflow (see [travel-search.md](travel-search.md)).
+
+The daily digest is now a morning brief (receivables, pending payments, departures, expo funnel). Phases 8 and 10 remain as built; Phase 11 (expo) ships September 4-6.
+
 ## Phase 3C attendance integration
 
 Planned component only — not implemented:
