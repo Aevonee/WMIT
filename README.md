@@ -4,7 +4,7 @@ WMIT is the AI-assisted operating system for Worldmaster International Travel, a
 
 ## Current status
 
-The deployment target is the **hosted WMIT server**: Node.js + SQLite with session authentication, a hash-chained audit log, scheduled verified backups, and an SMTP mailer. It runs on the owner's netcup VPS behind Caddy (see [docs/deployment-netcup.md](docs/deployment-netcup.md)); development and tests run anywhere Node 22+ is installed, including your local machine.
+The deployment target is the **hosted WMIT server**: Node.js + SQLite with session authentication, a hash-chained audit log, scheduled verified backups, and an SMTP mailer. It runs on the owner's netcup Webhosting 4000 through Plesk's Node.js support (see [docs/deployment-webhosting.md](docs/deployment-webhosting.md)); the VPS guide ([docs/deployment-netcup.md](docs/deployment-netcup.md)) is the root-access alternative. Development and tests run anywhere Node 22.13+ is installed, including your local machine.
 
 The repository also contains the local synthetic WMIT vertical slice (Phase 1–2 operational model, document-intelligence prototypes, six-case regression) and the retained Google Apps Script artifact under `apps-script/`. No business data exists in the repository; `data/` (databases, backups, outbox) is gitignored.
 

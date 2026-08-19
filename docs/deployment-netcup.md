@@ -4,9 +4,11 @@ This guide puts the WMIT hosted server on a netcup VPS with HTTPS, automatic
 nightly backups, and mail through your netcup domain mailbox.
 
 **Important:** netcup *Webhosting* plans (including Webhosting 4000) are PHP
-shared hosting and cannot run WMIT. Keep Webhosting 4000 for your website and
-mailboxes; run WMIT on a netcup **VPS** (the smallest plan is enough) and point
-a subdomain such as `app.yourdomain.ph` at it.
+shared hosting — but WMIT also runs there through Plesk's Node.js support
+(Passenger). The app has zero npm dependencies (SQLite is Node 22's built-in
+`node:sqlite`), so nothing needs to compile. That path has its own guide:
+[docs/deployment-webhosting.md](docs/deployment-webhosting.md). This VPS guide
+remains the alternative with full root control and PDF-extraction tooling.
 
 ## What you need
 
