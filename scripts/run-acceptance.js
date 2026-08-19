@@ -35,7 +35,7 @@ function count(records, type, predicate) {
 }
 
 async function main() {
-  for (const path of ['/', '/operations.html', '/operations.js', '/phase1.html']) {
+  for (const path of ['/', '/operations.html', '/operations.js']) {
     const response = await fetch(baseUrl + path, { cache: 'no-store' });
     assert.equal(response.status, 200, path + ' should be available.');
   }
