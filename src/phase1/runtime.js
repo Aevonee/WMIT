@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('crypto');
 const { IdGenerator } = require('../ids/id-generator');
 const { InMemoryRepository } = require('../repositories/memory-repository');
 const { InMemoryAuditLog } = require('../logging/audit-log');
@@ -7,6 +8,12 @@ const { WmitError, errorResult } = require('../core/errors');
 const { toMinorUnits, fromMinorUnits } = require('../core/money');
 const quotationEditor = require('../application/quotation-editor');
 const caseProjection = require('./case-projection');
+const todayOverview = require('./today-overview');
+const departureReadiness = require('./departure-readiness');
+const reminderDrafts = require('./reminder-drafts');
+const accountantExport = require('./accountant-export');
+const commissionRules = require('./commission-rules');
+const privacy = require('../privacy/privacy');
 
 const DEFAULT_BANK_DETAILS = [
   'Peso Account: 0126-9800-0261 — World Master International Travel (Swift: BNORPHMM · Branch: Fairview Terraces)',
@@ -41,6 +48,7 @@ const ENTITY_DEFS = {
   ExpoLead: ['EXPO_LEAD', true], ExpoPackageTemplate: ['EXPO_PACKAGE', true], ExpoQuote: ['EXPO_QUOTE', true],
   ExpoEvent: ['EXPO_EVENT', true], Receipt: ['RECEIPT', true],
   Intern: ['INTERN', true], InternTask: ['INTERN_TASK', true],
+  Commission: ['COMMISSION', true],
   AuditEvent: ['AUDIT_EVENT', true]
 };
 
@@ -53,7 +61,10 @@ const ACTIONS = Object.freeze({
   DELETE_TARIFF: 'DELETE_TARIFF', DELETE_SUPPLIER: 'DELETE_SUPPLIER',
   CLIENT_ACCEPT_AMENDMENT: 'CLIENT_ACCEPT_AMENDMENT', ACCEPT_QUOTATION: 'ACCEPT_QUOTATION',
   RECORD_TICKETING: 'RECORD_TICKETING', ISSUE_VOUCHER: 'ISSUE_VOUCHER', RECONCILE_BOOKING: 'RECONCILE_BOOKING', CONFIGURE_SETTINGS: 'CONFIGURE_SETTINGS',
-  ASSIGN_INTERN_TASK: 'ASSIGN_INTERN_TASK', REVIEW_INTERN_TASK: 'REVIEW_INTERN_TASK'
+  ASSIGN_INTERN_TASK: 'ASSIGN_INTERN_TASK', REVIEW_INTERN_TASK: 'REVIEW_INTERN_TASK',
+  COMMISSION_APPROVE: 'COMMISSION_APPROVE', COMMISSION_PAY: 'COMMISSION_PAY',
+  COMMISSION_RULES: 'COMMISSION_RULES',
+  DATA_ERASE: 'DATA_ERASE'
 });
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -71,6 +82,13 @@ const REQUIREMENT_STATUS_VALUES = Object.freeze(['REQUIRED', 'PREFERRED', 'UNKNO
 const FIND_MORE_REASON_VALUES = Object.freeze(['CLIENT_REJECTED', 'PRICE_TOO_HIGH', 'HOTEL_NOT_PREFERRED', 'ITINERARY_NOT_SUITABLE', 'SUPPLIER_PREFERENCE', 'NEED_MORE_CHOICES', 'OTHER']);
 const ROOMING_CAPACITY = Object.freeze({ SGL: 1, TWN: 2, DBL: 2, TRP: 3, QUAD: 4 });
 const INTERN_STATUS_VALUES = Object.freeze(['Active', 'Inactive']);
+const COMMISSION_STATUS_VALUES = Object.freeze(['DRAFT', 'APPROVED', 'PAID']);
+const COMMISSION_BASIS_VALUES = Object.freeze(['FLAT', 'PERCENT']);
+const PACKAGE_STATUS_VALUES = Object.freeze(['DRAFT', 'CONFIRMED', 'ARCHIVED']);
+const PACKAGE_SOURCE_VALUES = Object.freeze(['MANUAL', 'FLYER_IMPORT']);
+const PACKAGE_PAX_BASIS_VALUES = Object.freeze(['PER_PERSON', 'PER_GROUP']);
+const FLYER_MIME_PATTERN = /^(image\/(png|jpeg|jpg|webp)|application\/pdf)$/i;
+const FLYER_UPLOAD_LIMIT_BYTES = 700 * 1024;
 const INTERN_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // Must stay in sync with USERNAME_PATTERN in src/server/auth.js.
 const WMIT_USERNAME_PATTERN = /^[a-z0-9][a-z0-9._-]{2,39}$/;
@@ -115,6 +133,10 @@ function dateOnlyPlusDays(value, days) {
   date.setUTCDate(date.getUTCDate() + Number(days || 0));
   return date.toISOString().slice(0, 10);
 }
+// Public link tokens are stored as SHA-256 hashes only (quote-link scheme).
+function statusTokenHash(token) {
+  return crypto.createHash('sha256').update(String(token), 'utf8').digest('hex');
+}
 function dateOnlyMinusBusinessDays(value, days) {
   const date = new Date(value);
   let remaining = Math.max(0, Number(days || 0));
@@ -144,9 +166,12 @@ class Phase1Runtime {
       tariffRateUnits: DEFAULT_TARIFF_RATE_UNITS.slice(),
       quotationDefaults: { paymentTerms: '50% deposit upon confirmation; balance due 30 business days before departure.', validityDays: 7, currency: 'PHP', paymentCurrencyPolicy: 'Payment due in quotation currency.', downPaymentDaysAfterReservation: 3, finalBalanceBusinessDaysBeforeDeparture: 30, bankDetails: DEFAULT_BANK_DETAILS },
       messageTemplates: [],
+      commissionRules: [],
       trustedActors: {}, expo: { id: 'EXPO-MVP', name: 'WMIT Expo', startAt: null, endAt: null, discountPercent: 0 }
     }, opts.config || {});
     this.onSettingsChanged = typeof opts.onSettingsChanged === 'function' ? opts.onSettingsChanged : null;
+    // Optional flyer AI adapter; null means manual intake only — never a dependency.
+    this.flyerAdapter = opts.flyerAdapter || null;
     this.repos = {};
     // Hosted deployments inject SQLite-backed repositories; local and test
     // runs keep the in-memory default. The interface is identical.
@@ -1349,6 +1374,9 @@ class Phase1Runtime {
         service_date: flight.date || flight.service_date || null
       }));
       const booking = this.list('Booking', (record) => record.quotation_id === quotation.quotation_id)[0] || null;
+      const hotels = (preview.items || [])
+        .filter((item) => /hotel|resort|accommodation/i.test(String(item.service_type || '')))
+        .map((item) => ({ service_type: item.service_type, description: item.description, quantity: item.quantity, notes: item.notes || null }));
       let vouchers = [];
       if (booking) {
         const bookingItems = this.list('BookingItem', (record) => record.booking_id === booking.booking_id);
@@ -1366,6 +1394,7 @@ class Phase1Runtime {
       return ok({
         itinerary: preview.quotation,
         flights,
+        hotels,
         vouchers,
         booking: booking ? { booking_id: booking.booking_id } : null,
         client: preview.client || null
@@ -1436,6 +1465,9 @@ class Phase1Runtime {
         this.repos.Booking.delete(booking.data.booking_id);
         return participant;
       }
+      // Commission rule automation drafts only; it is audited inside
+      // applyCommissionRules and must never fail the booking itself.
+      try { this.applyCommissionRules({ booking_id: booking.data.booking_id, trigger: 'BOOKING_CREATED' }, context); } catch (_) { /* never fails the booking */ }
       return booking;
     } catch (error) { return fail(error); }
   }
@@ -1697,6 +1729,26 @@ class Phase1Runtime {
       return this.createRecord('RoomingListEntry', Object.assign({ state: 'DRAFT' }, input, { booking_id: booking.booking_id, person_id: person.person_id, occupancy }), context);
     } catch (error) { return fail(error); }
   }
+  updateRoomingListEntry(input, context) {
+    try {
+      const entry = this.must('RoomingListEntry', input.rooming_list_entry_id);
+      const nextLabel = input.room_label !== undefined ? String(input.room_label).trim() : String(entry.room_label || '').trim();
+      requireValue(nextLabel, 'room_label');
+      const occupancy = input.occupancy !== undefined ? normalizeRoomingOccupancy(input.occupancy) : normalizeRoomingOccupancy(entry.occupancy);
+      const capacity = ROOMING_CAPACITY[occupancy];
+      if (!capacity) throw new WmitError('INVALID_ROOMING_OCCUPANCY', 'Occupancy must be SGL, TWN, DBL, TRP, or QUAD.', { allowed: Object.keys(ROOMING_CAPACITY) });
+      const nextState = input.state !== undefined ? input.state : entry.state || 'DRAFT';
+      if (!['DRAFT', 'CONFIRMED', 'CANCELLED'].includes(nextState)) throw new WmitError('INVALID_ROOMING_STATE', 'Rooming state is not supported.', { allowed: ['DRAFT', 'CONFIRMED', 'CANCELLED'] });
+      const group = nextLabel.toUpperCase();
+      const groupEntries = this.list('RoomingListEntry', (record) => record.booking_id === entry.booking_id && record.rooming_list_entry_id !== entry.rooming_list_entry_id && String(record.room_label || '').trim().toUpperCase() === group && record.state !== 'CANCELLED');
+      if (nextState !== 'CANCELLED') {
+        const existingOccupancies = groupEntries.map((record) => normalizeRoomingOccupancy(record.occupancy));
+        if (existingOccupancies.length && existingOccupancies.some((value) => value !== occupancy)) throw new WmitError('ROOMING_GROUP_OCCUPANCY_MISMATCH', 'All travelers in the same group must use the same occupancy type.', { room_label: nextLabel, existing_occupancy: existingOccupancies[0], requested_occupancy: occupancy });
+        if (groupEntries.length >= capacity) throw new WmitError('ROOMING_CAPACITY_EXCEEDED', occupancy + ' allows up to ' + capacity + ' traveler' + (capacity === 1 ? '' : 's') + ' in this group.', { room_label: nextLabel, occupancy, capacity, current_count: groupEntries.length });
+      }
+      return this.updateRecord('RoomingListEntry', entry.rooming_list_entry_id, { room_label: nextLabel, occupancy, state: nextState }, context);
+    } catch (error) { return fail(error); }
+  }
   createBookingParticipant(input, context) {
     try {
       this.must('Booking', input.booking_id); this.must('Person', input.person_id);
@@ -1825,7 +1877,14 @@ class Phase1Runtime {
       return this.updateSupplierBooking(Object.assign({}, input, { supplier_booking_id: targetBooking.supplier_booking_id, reservation_state: 'CONFIRMED' }), context);
     } catch (error) { return fail(error); }
   }
-  updateSettings(input, context) {
+  // Single payload shape for the settings-persistence hook: every mutation
+  // path (updateSettings, commission rule actions) notifies with all three
+  // persisted sections so hosted deployments store a consistent snapshot.
+  emitSettingsChanged() {
+    if (this.onSettingsChanged) {
+      try { this.onSettingsChanged({ quotationDefaults: this.config.quotationDefaults, messageTemplates: this.config.messageTemplates, commissionRules: this.config.commissionRules }); } catch (_) { /* persistence failure must not roll back the in-memory setting */ }
+    }
+  }  updateSettings(input, context) {
     try {
       this.requireAuthorization(ACTIONS.CONFIGURE_SETTINGS, context);
       const values = input && (input.quotation_defaults || input.quotationDefaults) || input || {};
@@ -1841,16 +1900,15 @@ class Phase1Runtime {
       });
       if (next.currency && !/^[A-Z]{3}$/i.test(next.currency)) throw new WmitError('INVALID_SETTING', 'currency must be a three-letter currency code.');
       this.config.quotationDefaults = next;
-      let templatesChanged = false;
-      if (values.messageTemplates !== undefined) {
-        this.config.messageTemplates = this.validatedMessageTemplates(values.messageTemplates);
-        templatesChanged = true;
-      }
-      this.auditLog.record({ actor: this.context(context).actor, action: 'UPDATE', entity_type: 'Configuration', entity_id: 'LOCAL_CONFIGURATION', details: { changedFields: Object.keys(values) }, correlation_id: this.context(context).correlationId });
-      if (this.onSettingsChanged) {
-        try { this.onSettingsChanged({ quotationDefaults: this.config.quotationDefaults, messageTemplates: this.config.messageTemplates }); } catch (_) { /* persistence failure must not roll back the in-memory setting */ }
-      }
-      return ok({ quotationDefaults: clone(next), messageTemplates: this.config.messageTemplates.slice() }, { action: 'UPDATE_SETTINGS' });
+      if (values.messageTemplates !== undefined) this.config.messageTemplates = this.validatedMessageTemplates(values.messageTemplates);
+      const rulesInput = input && input.commission_rules !== undefined ? input.commission_rules
+        : input && input.commissionRules !== undefined ? input.commissionRules
+        : values.commission_rules !== undefined ? values.commission_rules
+        : values.commissionRules;
+      if (rulesInput !== undefined) this.config.commissionRules = commissionRules.validatedCommissionRules(rulesInput, { defaultCurrency: this.config.defaultCurrency });
+      this.emitSettingsChanged();
+      this.auditLog.record({ actor: this.context(context).actor, action: 'UPDATE', entity_type: 'Configuration', entity_id: 'LOCAL_CONFIGURATION', details: { changedFields: Object.keys(input && (input.quotation_defaults || input.quotationDefaults) || input || {}) }, correlation_id: this.context(context).correlationId });
+      return ok({ quotationDefaults: clone(next), messageTemplates: this.config.messageTemplates.slice(), commissionRules: clone(this.config.commissionRules) }, { action: 'UPDATE_SETTINGS' });
     } catch (error) { return fail(error); }
   }
   validatedMessageTemplates(templates) {
@@ -2037,6 +2095,8 @@ class Phase1Runtime {
       const signature = normalized.map((a) => [a.booking_id, a.client_obligation_id || '', a.amount].join(':')).sort().join('|');
       const priorSignature = this.list('PaymentAllocation', (allocation) => allocation.client_payment_id === payment.client_payment_id && allocation.state === 'ACTIVE' && allocation.allocation_signature === signature);
       if (priorSignature.length) return ok(priorSignature, { action: 'IDEMPOTENT_REPLAY', idempotent: true });
+      let fullyPaidBefore = false;
+      try { fullyPaidBefore = this.bookingPaymentProgress(payment.booking_id).fullyPaid; } catch (_) { /* commission triggers only evaluate on the post-allocation state */ }
       const saved = [];
       try {
         normalized.forEach((a) => {
@@ -2048,6 +2108,14 @@ class Phase1Runtime {
         saved.forEach((allocation) => this.repos.PaymentAllocation.delete(allocation.payment_allocation_id));
         throw error;
       }
+      // BOOKING_FULLY_PAID commission rules fire once, at the exact
+      // transition into fully paid; later allocations or replays never
+      // re-trigger. Automation is audited inside applyCommissionRules and
+      // must never fail the allocation itself.
+      try {
+        const progressAfter = this.bookingPaymentProgress(payment.booking_id);
+        if (progressAfter.fullyPaid && !fullyPaidBefore) this.applyCommissionRules({ booking_id: payment.booking_id, trigger: 'BOOKING_FULLY_PAID' }, context);
+      } catch (_) { /* never fails the allocation */ }
       return ok(saved, { action: 'ALLOCATE_PAYMENT' });
     } catch (error) { return fail(error); }
   }
@@ -2397,6 +2465,1533 @@ class Phase1Runtime {
       return ok(updated.data, { action: 'REVIEW_INTERN_TASK' });
     } catch (error) {
       this.auditFailure('REVIEW_INTERN_TASK', 'InternTask', input, ctx, error);
+      return fail(error);
+    }
+  }
+  // ------------------------------------------------- owner's daily cockpit
+  //
+  // Read-only projections over existing records. Both actions audit like any
+  // other read the runtime performs, including validation failures, and never
+  // write business records.
+  getTodayOverview(input, context) {
+    const ctx = this.context(context);
+    try {
+      const value = input || {};
+      const overview = todayOverview.buildTodayOverview(this, { asOf: value.asOf, now: this.now() });
+      this.audit('GET_TODAY_OVERVIEW', 'TodayOverview', null, ctx, { today: overview.today, counts: overview.counts });
+      return ok(overview, { action: 'GET_TODAY_OVERVIEW', read_only: true });
+    } catch (error) {
+      this.auditFailure('GET_TODAY_OVERVIEW', 'TodayOverview', input, ctx, error);
+      return fail(error);
+    }
+  }
+  globalSearch(input, context) {
+    const ctx = this.context(context);
+    try {
+      const result = todayOverview.globalSearch(this, input || {});
+      this.audit('GLOBAL_SEARCH', 'GlobalSearch', null, ctx, {
+        query: result.query.slice(0, 100),
+        counts: result.groups.reduce((carry, group) => Object.assign(carry, { [group.type]: group.totalMatches }), {})
+      });
+      return ok(result, { action: 'GLOBAL_SEARCH', read_only: true });
+    } catch (error) {
+      this.auditFailure('GLOBAL_SEARCH', 'GlobalSearch', input, ctx, error);
+      return fail(error);
+    }
+  }
+  // ---------------------------------------------- reminder draft queue
+  //
+  // Client-facing reminder emails are prepared as drafts ONLY. A human
+  // reviews and sends them manually; this runtime exposes no send action.
+  // Drafts persist as Task records (task_type 'REMINDER_DRAFT') so they ride
+  // the existing repository, audit chain, and dispatcher instead of a new
+  // record type or schema change. Discarding marks the task CANCELLED — the
+  // audited equivalent of deletion for a review queue.
+  draftSummary(task) {
+    return {
+      task_id: task.task_id,
+      state: task.state || 'OPEN',
+      category: task.category || null,
+      recipient: task.recipient_email || null,
+      recipient_name: task.recipient_name || null,
+      subject: task.subject || task.title || null,
+      body: task.description || null,
+      client_id: task.client_id || null,
+      booking_id: task.booking_id || null,
+      departure_id: task.departure_id || null,
+      client_obligation_id: task.client_obligation_id || null,
+      generated_for_date: task.generated_for_date || null,
+      generated_at: task.created_at || null,
+      send_state: task.send_state || 'DRAFT'
+    };
+  }
+  generateReminderDrafts(input, context) {
+    const ctx = this.context(context);
+    try {
+      const value = input || {};
+      const category = String(value.category === undefined || value.category === null ? '' : value.category).trim().toUpperCase();
+      if (!reminderDrafts.REMINDER_CATEGORIES.includes(category)) {
+        throw new WmitError('REMINDER_CATEGORY_INVALID', 'Reminder category must be one of: ' + reminderDrafts.REMINDER_CATEGORIES.join(', ') + '.', { field: 'category', category: value.category === undefined || value.category === null ? null : String(value.category).slice(0, 40), allowed: reminderDrafts.REMINDER_CATEGORIES.slice() });
+      }
+      const asOf = todayOverview.resolveAsOf(value.asOf, this.now());
+      const selection = reminderDrafts.collectReminderTargets(this, {
+        category,
+        asOf,
+        messageTemplates: this.config.messageTemplates || [],
+        quotationDefaults: this.config.quotationDefaults || {}
+      });
+      const drafts = [];
+      let skippedExisting = 0;
+      let skippedNoRecipient = 0;
+      selection.targets.forEach((target) => {
+        if (!target.recipientEmail) { skippedNoRecipient += 1; return; }
+        // Natural-key dedupe mirroring expo follow-up tasks: one open draft
+        // per category+target; a discarded draft can be regenerated.
+        const key = 'REMINDER_DRAFT:' + category + ':' + target.key;
+        const existing = this.list('Task', (task) => task.automation_key === key && ['OPEN', 'IN_PROGRESS', 'BLOCKED'].includes(String(task.state || 'OPEN').toUpperCase()));
+        if (existing.length) { skippedExisting += 1; return; }
+        const created = this.createTask({
+          automation_key: key,
+          task_type: 'REMINDER_DRAFT',
+          category,
+          title: '[Reminder draft] ' + target.recipientName + ' — ' + category.replace(/_/g, ' ').toLowerCase(),
+          subject: target.subject,
+          description: target.body,
+          recipient_email: target.recipientEmail,
+          recipient_name: target.recipientName,
+          client_id: target.clientId || null,
+          booking_id: target.bookingId || null,
+          departure_id: target.departureId || null,
+          client_obligation_id: target.obligationId || null,
+          related_type: target.bookingId ? 'Booking' : (target.departureId ? 'Departure' : null),
+          related_id: target.bookingId || target.departureId || null,
+          priority: target.priority || 'NORMAL',
+          state: 'OPEN',
+          source: 'REMINDER_DRAFTS',
+          generated_for_date: asOf,
+          send_state: 'DRAFT'
+        }, ctx);
+        if (created.ok) drafts.push(created.data);
+      });
+      this.audit('GENERATE_REMINDER_DRAFTS', 'ReminderDraft', null, ctx, {
+        category,
+        asOf,
+        targets_found: selection.targets.length,
+        drafts_created: drafts.length,
+        skipped_existing: skippedExisting,
+        skipped_no_recipient: skippedNoRecipient
+      });
+      return ok({
+        version: reminderDrafts.REMINDER_DRAFTS_VERSION,
+        category,
+        asOf,
+        targets_found: selection.targets.length,
+        drafts_created: drafts.length,
+        skipped_existing: skippedExisting,
+        skipped_no_recipient: skippedNoRecipient,
+        drafts: drafts.map((draft) => this.draftSummary(draft))
+      }, { action: 'GENERATE_REMINDER_DRAFTS', drafts_only: true });
+    } catch (error) {
+      this.auditFailure('GENERATE_REMINDER_DRAFTS', 'ReminderDraft', input, ctx, error);
+      return fail(error);
+    }
+  }
+  listReminderDrafts(input, context) {
+    const ctx = this.context(context);
+    try {
+      const value = input || {};
+      let category = null;
+      if (value.category !== undefined && value.category !== null && String(value.category).trim() !== '') {
+        category = String(value.category).trim().toUpperCase();
+        if (!reminderDrafts.REMINDER_CATEGORIES.includes(category)) {
+          throw new WmitError('REMINDER_CATEGORY_INVALID', 'Reminder category must be one of: ' + reminderDrafts.REMINDER_CATEGORIES.join(', ') + '.', { field: 'category', category: String(value.category).slice(0, 40), allowed: reminderDrafts.REMINDER_CATEGORIES.slice() });
+        }
+      }
+      const includeDiscarded = value.include_discarded === true;
+      const all = this.list('Task', (task) => task.task_type === 'REMINDER_DRAFT');
+      const visible = all
+        .filter((task) => !category || (task.category || '').toUpperCase() === category)
+        .filter((task) => includeDiscarded || ['OPEN', 'IN_PROGRESS', 'BLOCKED'].includes(String(task.state || 'OPEN').toUpperCase()))
+        .sort((a, b) => String(a.due_date || a.created_at || '').localeCompare(String(b.due_date || b.created_at || '')) || String(a.task_id).localeCompare(String(b.task_id)));
+      const categories = reminderDrafts.REMINDER_CATEGORIES.map((name) => ({
+        category: name,
+        count: visible.filter((task) => (task.category || '').toUpperCase() === name).length,
+        drafts: visible.filter((task) => (task.category || '').toUpperCase() === name).map((task) => this.draftSummary(task))
+      }));
+      this.audit('LIST_REMINDER_DRAFTS', 'ReminderDraft', null, ctx, {
+        category,
+        open_count: includeDiscarded ? undefined : visible.length,
+        discarded_count: all.filter((task) => String(task.state || 'OPEN').toUpperCase() === 'CANCELLED').length
+      });
+      return ok({
+        version: reminderDrafts.REMINDER_DRAFTS_VERSION,
+        category,
+        include_discarded: includeDiscarded,
+        counts: {
+          open: all.filter((task) => ['OPEN', 'IN_PROGRESS', 'BLOCKED'].includes(String(task.state || 'OPEN').toUpperCase())).length,
+          discarded: all.filter((task) => String(task.state || 'OPEN').toUpperCase() === 'CANCELLED').length
+        },
+        categories
+      }, { action: 'LIST_REMINDER_DRAFTS', read_only: true });
+    } catch (error) {
+      this.auditFailure('LIST_REMINDER_DRAFTS', 'ReminderDraft', input, ctx, error);
+      return fail(error);
+    }
+  }
+  discardReminderDraft(input, context) {
+    const ctx = this.context(context);
+    try {
+      const value = input || {};
+      const task = this.must('Task', requireValue(value.task_id, 'task_id'));
+      if (task.task_type !== 'REMINDER_DRAFT') {
+        throw new WmitError('REMINDER_DRAFT_INVALID', 'That task is not a reminder draft.', { task_id: task.task_id, task_type: task.task_type || null });
+      }
+      if (String(task.state || 'OPEN').toUpperCase() === 'CANCELLED') {
+        return ok(this.draftSummary(task), { action: 'DISCARD_REMINDER_DRAFT', idempotent: true });
+      }
+      const updated = this.updateTask({ task_id: task.task_id, state: 'CANCELLED', completion_note: value.reason || 'Reminder draft discarded before sending; nothing was sent to the client.' }, ctx);
+      if (!updated.ok) return updated;
+      this.audit('DISCARD_REMINDER_DRAFT', 'Task', updated.data, ctx, { category: task.category || null, recipient: task.recipient_email || null });
+      return ok(this.draftSummary(updated.data), { action: 'DISCARD_REMINDER_DRAFT' });
+    } catch (error) {
+      this.auditFailure('DISCARD_REMINDER_DRAFT', 'Task', input, ctx, error);
+      return fail(error);
+    }
+  }
+  // ------------------------------------------ departure readiness runner
+  //
+  // Read-only checklist projection plus (for the run action) idempotent
+  // DEPARTURE_READINESS task raising for every FAIL — one open task per
+  // member+check, mirroring expo follow-up dedupe.
+  getDepartureReadiness(input, context) {
+    const ctx = this.context(context);
+    try {
+      const value = input || {};
+      const departureId = requireValue(value.departure_id, 'departure_id');
+      this.must('Departure', departureId);
+      const readiness = departureReadiness.buildDepartureReadiness(this, departureId, { asOf: value.asOf, now: this.now() });
+      this.audit('GET_DEPARTURE_READINESS', 'DepartureReadiness', null, ctx, {
+        departure_id: departureId,
+        asOf: readiness.asOf,
+        state: readiness.state,
+        score: readiness.score,
+        counts: readiness.counts
+      });
+      return ok(readiness, { action: 'GET_DEPARTURE_READINESS', read_only: true });
+    } catch (error) {
+      this.auditFailure('GET_DEPARTURE_READINESS', 'Departure', input, ctx, error);
+      return fail(error);
+    }
+  }
+  runDepartureReadinessCheck(input, context) {
+    const ctx = this.context(context);
+    try {
+      const value = input || {};
+      const asOf = todayOverview.resolveAsOf(value.asOf, this.now());
+      const horizon = dateOnlyPlusDays(asOf, 14);
+      let departureIds;
+      if (value.departure_id !== undefined && value.departure_id !== null && String(value.departure_id).trim() !== '') {
+        this.must('Departure', String(value.departure_id).trim());
+        departureIds = [String(value.departure_id).trim()];
+      } else {
+        departureIds = this.list('Departure', (departure) => {
+          if (String(departure.state || 'DRAFT').toUpperCase() === 'CANCELLED') return false;
+          const startDate = String(departure.start_date || departure.travel_start || '').slice(0, 10);
+          const endDate = String(departure.end_date || departure.travel_end || startDate || '').slice(0, 10);
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) return false;
+          return startDate <= horizon && (endDate || startDate) >= asOf;
+        }).map((departure) => departure.departure_id);
+      }
+      const results = [];
+      const tasks = [];
+      let failuresFound = 0;
+      departureIds.forEach((departureId) => {
+        const readiness = departureReadiness.buildDepartureReadiness(this, departureId, { asOf, now: this.now() });
+        failuresFound += readiness.counts.fail;
+        readiness.members.forEach((member) => member.checks.forEach((check) => {
+          if (check.status !== 'FAIL') return;
+          const scopeId = member.bookingItemId || member.membershipId || member.bookingId || 'UNKNOWN';
+          const key = 'DEPARTURE_READINESS:' + departureId + ':' + scopeId + ':' + check.check;
+          const existing = this.list('Task', (task) => task.automation_key === key && ['OPEN', 'IN_PROGRESS', 'BLOCKED'].includes(String(task.state || 'OPEN').toUpperCase()));
+          if (existing.length) return;
+          const startDate = readiness.departure.startDate;
+          const created = this.createTask({
+            automation_key: key,
+            task_type: 'DEPARTURE_READINESS',
+            title: 'Departure readiness: ' + departureReadiness.CHECK_LABELS[check.check] + ' — ' + readiness.departure.name,
+            description: check.detail + ' (Departure ' + departureId + (member.bookingId ? ', Booking ' + member.bookingId : '') + ', member ' + (member.clientName || member.leadPaxName || scopeId) + ').',
+            related_type: 'Departure',
+            related_id: departureId,
+            departure_id: departureId,
+            booking_id: member.bookingId || null,
+            booking_item_id: member.bookingItemId || null,
+            due_date: startDate && startDate >= asOf ? startDate : asOf,
+            priority: startDate && startDate <= dateOnlyPlusDays(asOf, 3) ? 'HIGH' : 'NORMAL',
+            state: 'OPEN',
+            source: 'DEPARTURE_READINESS'
+          }, ctx);
+          if (created.ok) tasks.push({ task_id: created.data.task_id, due_date: created.data.due_date, priority: created.data.priority, automation_key: key });
+        }));
+        results.push({
+          departure_id: departureId,
+          name: readiness.departure.name,
+          state: readiness.state,
+          score: readiness.score,
+          counts: readiness.counts
+        });
+      });
+      this.audit('RUN_DEPARTURE_READINESS_CHECK', 'DepartureReadiness', null, ctx, {
+        asOf,
+        departures_checked: results.length,
+        failures_found: failuresFound,
+        tasks_created: tasks.length
+      });
+      return ok({
+        version: departureReadiness.DEPARTURE_READINESS_VERSION,
+        asOf,
+        departures_checked: results.length,
+        failures_found: failuresFound,
+        tasks_created: tasks.length,
+        tasks,
+        results
+      }, { action: 'RUN_DEPARTURE_READINESS_CHECK' });
+    } catch (error) {
+      this.auditFailure('RUN_DEPARTURE_READINESS_CHECK', 'Departure', input, ctx, error);
+      return fail(error);
+    }
+  }
+  // --------------------------------------------- accountant period export
+  //
+  // Read-only CSV projection (cashbook / receivables / payables) over an
+  // explicit accounting period. Pure math lives in accountant-export.js;
+  // this action owns validation pass-through, audit, and the generatedAt
+  // stamp. Unverified client payments appear in the cashbook flagged as
+  // UNVERIFIED and never reduce receivables.
+  getAccountantExport(input, context) {
+    const ctx = this.context(context);
+    try {
+      const value = input || {};
+      const result = accountantExport.buildAccountantExport(this, { from: value.from, to: value.to });
+      this.audit('GET_ACCOUNTANT_EXPORT', 'AccountantExport', null, ctx, {
+        from: result.from,
+        to: result.to,
+        counts: { cashbook: result.cashbook.count, receivables: result.receivables.count, payables: result.payables.count }
+      });
+      return ok({
+        from: result.from,
+        to: result.to,
+        generatedAt: this.now(),
+        cashbook: result.cashbook,
+        receivables: result.receivables,
+        payables: result.payables,
+        summary: result.summary
+      }, { action: 'GET_ACCOUNTANT_EXPORT', read_only: true });
+    } catch (error) {
+      this.auditFailure('GET_ACCOUNTANT_EXPORT', 'AccountantExport', input, ctx, error);
+      return fail(error);
+    }
+  }
+  // ------------------------------------------------- commission tracking
+  //
+  // Commissions are recorded manually against a Booking (optionally sourced
+  // from a converted ExpoLead referral). The amount is computed exactly once
+  // at record time and stored; approval and payment never change it. The
+  // lifecycle is strictly DRAFT -> APPROVED -> PAID: approval and payment are
+  // manager-gated ACTIONS, and any attempt to supply a new amount on a
+  // transition fails closed instead of silently mutating money.
+  commissionSummaryView(commission) {
+    return {
+      commission_id: commission.commission_id,
+      booking_id: commission.booking_id || null,
+      source: commission.source || null,
+      beneficiary_name: commission.beneficiary_name || null,
+      basis: commission.basis || null,
+      amount: commission.amount || null,
+      percent: commission.percent || null,
+      computed_amount: commission.computed_amount || null,
+      currency: commission.currency || null,
+      status: commission.status || 'DRAFT',
+      recorded_by: commission.recorded_by || null,
+      automation_key: commission.automation_key || null,
+      rule_id: commission.rule_id || null,
+      approved_by: commission.approved_by || null,
+      approved_at: commission.approved_at || null,
+      paid_at: commission.paid_at || null,
+      paid_by: commission.paid_by || null,
+      payment_reference: commission.payment_reference || null,
+      notes: commission.notes || null,
+      created_at: commission.created_at || null
+    };
+  }
+  rejectCommissionAmountEdit(input, commission) {
+    const attempted = ['amount', 'percent', 'computed_amount'].filter((field) => input[field] !== undefined && input[field] !== null);
+    if (attempted.length) {
+      throw new WmitError('COMMISSION_AMOUNT_IMMUTABLE', 'Commission amounts are computed once at record time and can never be edited. Record a new commission instead.', { commission_id: commission.commission_id, fields: attempted, stored_computed_amount: commission.computed_amount });
+    }
+  }
+  // Shared FLAT/PERCENT math for every commission creation path (manual
+  // recordCommission and automatic rule drafts): percent reads the booking
+  // client total in minor units and rounds half up; both bases reject zero
+  // or uncomputable results.
+  commissionAmountForBasis(booking, basis, amountValue, percentValue) {
+    if (basis === 'FLAT') {
+      const flatAmount = money(amountValue, 'amount');
+      if (toMinorUnits(flatAmount) <= 0n) throw new WmitError('COMMISSION_AMOUNT_INVALID', 'Commission amount must be greater than zero.', { booking_id: booking.booking_id });
+      return { amount: flatAmount, percent: null, computed_amount: flatAmount };
+    }
+    const rawPercent = requireValue(percentValue, 'percent');
+    const percentNumber = Number(rawPercent);
+    if (!Number.isFinite(percentNumber) || percentNumber <= 0 || percentNumber > 100) {
+      throw new WmitError('COMMISSION_PERCENT_INVALID', 'Commission percent must be greater than 0 and at most 100.', { percent: rawPercent === undefined || rawPercent === null ? null : String(rawPercent).slice(0, 20) });
+    }
+    const percent = String(rawPercent).trim();
+    const baseAmount = booking.client_total !== undefined && booking.client_total !== null && String(booking.client_total).trim() !== ''
+      ? booking.client_total
+      : booking.current_price;
+    if (baseAmount === undefined || baseAmount === null || String(baseAmount).trim() === '') {
+      throw new WmitError('COMMISSION_BASIS_AMOUNT_MISSING', 'The Booking has no client total to compute a percentage commission from.', { booking_id: booking.booking_id });
+    }
+    let baseMinor;
+    try { baseMinor = toMinorUnits(baseAmount); }
+    catch (_) { throw new WmitError('COMMISSION_BASIS_AMOUNT_MISSING', 'The Booking client total is not a valid amount a percentage can be computed from.', { booking_id: booking.booking_id, client_total: String(baseAmount).slice(0, 40) }); }
+    // percent * 100 basis points; round half up to whole minor units.
+    const basisPoints = BigInt(Math.round(percentNumber * 100));
+    const computedMinor = (baseMinor * basisPoints + 5000n) / 10000n;
+    if (computedMinor <= 0n) throw new WmitError('COMMISSION_AMOUNT_INVALID', 'The computed commission amount must be greater than zero.', { booking_id: booking.booking_id });
+    return { amount: null, percent, computed_amount: fromMinorUnits(computedMinor) };
+  }
+  recordCommission(input, context) {
+    const ctx = this.context(context);
+    try {
+      const value = input || {};
+      const booking = this.must('Booking', requireValue(value.booking_id, 'booking_id'));
+      const beneficiaryName = String(requireValue(value.beneficiary_name, 'beneficiary_name')).trim();
+      const basis = String(value.basis === undefined || value.basis === null ? '' : value.basis).trim().toUpperCase();
+      if (!COMMISSION_BASIS_VALUES.includes(basis)) {
+        throw new WmitError('COMMISSION_BASIS_INVALID', 'Commission basis must be FLAT or PERCENT.', { field: 'basis', basis: basis || null, allowed: COMMISSION_BASIS_VALUES.slice() });
+      }
+      const currency = String(value.currency || booking.currency || this.config.defaultCurrency).trim().toUpperCase();
+      if (!/^[A-Z]{3}$/.test(currency)) throw new WmitError('INVALID_CURRENCY', 'Commission currency must be a three-letter currency code.', { currency });
+      const math = this.commissionAmountForBasis(booking, basis, value.amount, value.percent);
+      const flatAmount = math.amount;
+      const percent = math.percent;
+      const computedAmount = math.computed_amount;
+      if (value.status !== undefined && value.status !== null && String(value.status).trim().toUpperCase() !== 'DRAFT') {
+        throw new WmitError('COMMISSION_STATUS_INVALID', 'A new commission always starts as DRAFT.', { requested_status: String(value.status).slice(0, 20) });
+      }
+      const created = this.createRecord('Commission', {
+        booking_id: booking.booking_id,
+        source: value.source === undefined || value.source === null || String(value.source).trim() === '' ? null : String(value.source).trim(),
+        beneficiary_name: beneficiaryName,
+        basis,
+        amount: flatAmount,
+        percent,
+        computed_amount: computedAmount,
+        currency,
+        status: 'DRAFT',
+        recorded_by: ctx.actor,
+        notes: value.notes === undefined || value.notes === null || String(value.notes).trim() === '' ? null : String(value.notes).trim()
+      }, ctx);
+      if (!created.ok) return created;
+      this.audit('RECORD_COMMISSION', 'Commission', created.data, ctx, {
+        booking_id: booking.booking_id,
+        beneficiary_name: beneficiaryName,
+        basis,
+        percent,
+        computed_amount: computedAmount,
+        currency
+      });
+      return ok(this.commissionSummaryView(created.data), { action: 'RECORD_COMMISSION' });
+    } catch (error) {
+      this.auditFailure('RECORD_COMMISSION', 'Commission', input, ctx, error);
+      return fail(error);
+    }
+  }
+  approveCommission(input, context) {
+    const ctx = this.context(context);
+    try {
+      this.requireAuthorization(ACTIONS.COMMISSION_APPROVE, ctx);
+      const value = input || {};
+      const commission = this.must('Commission', requireValue(value.commission_id, 'commission_id'));
+      this.rejectCommissionAmountEdit(value, commission);
+      if (commission.status === 'APPROVED') return ok(this.commissionSummaryView(commission), { action: 'APPROVE_COMMISSION', idempotent: true });
+      if (commission.status !== 'DRAFT') {
+        throw new WmitError('COMMISSION_STATE_INVALID', 'Only a draft commission can be approved.', { commission_id: commission.commission_id, current_status: commission.status });
+      }
+      const updated = this.updateRecord('Commission', commission.commission_id, { status: 'APPROVED', approved_by: ctx.actor, approved_at: this.now() }, ctx);
+      if (!updated.ok) return updated;
+      this.audit('APPROVE_COMMISSION', 'Commission', updated.data, ctx, {
+        booking_id: commission.booking_id,
+        from_status: 'DRAFT',
+        to_status: 'APPROVED',
+        computed_amount: commission.computed_amount,
+        currency: commission.currency
+      });
+      return ok(this.commissionSummaryView(updated.data), { action: 'APPROVE_COMMISSION' });
+    } catch (error) {
+      this.auditFailure('APPROVE_COMMISSION', 'Commission', input, ctx, error);
+      return fail(error);
+    }
+  }
+  markCommissionPaid(input, context) {
+    const ctx = this.context(context);
+    try {
+      this.requireAuthorization(ACTIONS.COMMISSION_PAY, ctx);
+      const value = input || {};
+      const commission = this.must('Commission', requireValue(value.commission_id, 'commission_id'));
+      this.rejectCommissionAmountEdit(value, commission);
+      if (commission.status === 'PAID') return ok(this.commissionSummaryView(commission), { action: 'MARK_COMMISSION_PAID', idempotent: true });
+      if (commission.status !== 'APPROVED') {
+        throw new WmitError('COMMISSION_STATE_INVALID', 'Only an approved commission can be marked paid.', { commission_id: commission.commission_id, current_status: commission.status });
+      }
+      const paymentReference = value.payment_reference === undefined || value.payment_reference === null ? '' : String(value.payment_reference).trim();
+      const hasPaidAt = value.paid_at !== undefined && value.paid_at !== null && String(value.paid_at).trim() !== '';
+      if (!paymentReference && !hasPaidAt) {
+        throw new WmitError('COMMISSION_EVIDENCE_REQUIRED', 'Marking a commission paid requires a payment reference or an explicit paid_at date.', { commission_id: commission.commission_id });
+      }
+      let paidAt = this.now();
+      if (hasPaidAt) {
+        if (Number.isNaN(Date.parse(String(value.paid_at).trim()))) {
+          throw new WmitError('COMMISSION_PAID_AT_INVALID', 'The paid_at date could not be read as a date.', { commission_id: commission.commission_id, paid_at: String(value.paid_at).slice(0, 30) });
+        }
+        paidAt = String(value.paid_at).trim();
+      }
+      const updated = this.updateRecord('Commission', commission.commission_id, {
+        status: 'PAID',
+        paid_at: paidAt,
+        paid_by: ctx.actor,
+        payment_reference: paymentReference || null
+      }, ctx);
+      if (!updated.ok) return updated;
+      this.audit('MARK_COMMISSION_PAID', 'Commission', updated.data, ctx, {
+        booking_id: commission.booking_id,
+        from_status: 'APPROVED',
+        to_status: 'PAID',
+        computed_amount: commission.computed_amount,
+        currency: commission.currency,
+        payment_reference: paymentReference || null
+      });
+      return ok(this.commissionSummaryView(updated.data), { action: 'MARK_COMMISSION_PAID' });
+    } catch (error) {
+      this.auditFailure('MARK_COMMISSION_PAID', 'Commission', input, ctx, error);
+      return fail(error);
+    }
+  }
+  listCommissions(input, context) {
+    const ctx = this.context(context);
+    try {
+      const value = input || {};
+      let status = null;
+      if (value.status !== undefined && value.status !== null && String(value.status).trim() !== '') {
+        status = String(value.status).trim().toUpperCase();
+        if (!COMMISSION_STATUS_VALUES.includes(status)) {
+          throw new WmitError('COMMISSION_STATUS_INVALID', 'Commission status must be one of: ' + COMMISSION_STATUS_VALUES.join(', ') + '.', { field: 'status', status, allowed: COMMISSION_STATUS_VALUES.slice() });
+        }
+      }
+      const bookingId = value.booking_id !== undefined && value.booking_id !== null && String(value.booking_id).trim() !== '' ? String(value.booking_id).trim() : null;
+      const beneficiary = value.beneficiary !== undefined && value.beneficiary !== null && String(value.beneficiary).trim() !== '' ? String(value.beneficiary).trim().toLowerCase() : null;
+      const commissions = this.list('Commission')
+        .filter((commission) => !status || String(commission.status || 'DRAFT').toUpperCase() === status)
+        .filter((commission) => !bookingId || commission.booking_id === bookingId)
+        .filter((commission) => !beneficiary || String(commission.beneficiary_name || '').toLowerCase().includes(beneficiary))
+        .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')) || String(a.commission_id).localeCompare(String(b.commission_id)))
+        .map((commission) => this.commissionSummaryView(commission));
+      const counts = { total: commissions.length };
+      COMMISSION_STATUS_VALUES.forEach((name) => { counts[name] = commissions.filter((commission) => commission.status === name).length; });
+      this.audit('LIST_COMMISSIONS', 'Commission', null, ctx, { status, booking_id: bookingId, beneficiary: beneficiary || null, count: commissions.length });
+      return ok({ commissions, counts }, { action: 'LIST_COMMISSIONS', read_only: true });
+    } catch (error) {
+      this.auditFailure('LIST_COMMISSIONS', 'Commission', input, ctx, error);
+      return fail(error);
+    }
+  }
+  getCommissionSummary(input, context) {
+    const ctx = this.context(context);
+    try {
+      const value = input || {};
+      let from = null;
+      let to = null;
+      const hasFrom = value.from !== undefined && value.from !== null && String(value.from).trim() !== '';
+      const hasTo = value.to !== undefined && value.to !== null && String(value.to).trim() !== '';
+      if (hasFrom || hasTo) {
+        const period = accountantExport.resolveExportPeriod({ from: value.from, to: value.to });
+        from = period.from;
+        to = period.to;
+      }
+      const inPeriod = (commission) => {
+        if (!from) return true;
+        const created = String(commission.created_at || '').slice(0, 10);
+        return Boolean(created) && created >= from && created <= to;
+      };
+      const commissions = this.list('Commission').filter(inPeriod);
+      const addAmount = (entry, commission) => {
+        entry.count += 1;
+        const currency = commission.currency || '???';
+        entry.amounts[currency] = (entry.amounts[currency] || 0n) + toMinorUnits(commission.computed_amount || '0.00');
+      };
+      const statusEntries = Object.fromEntries(COMMISSION_STATUS_VALUES.map((name) => [name, { count: 0, amounts: {} }]));
+      const beneficiaryEntries = {};
+      commissions.forEach((commission) => {
+        const status = COMMISSION_STATUS_VALUES.includes(String(commission.status || 'DRAFT').toUpperCase()) ? String(commission.status || 'DRAFT').toUpperCase() : 'DRAFT';
+        addAmount(statusEntries[status], commission);
+        const name = commission.beneficiary_name || 'Unrecorded';
+        if (!beneficiaryEntries[name]) beneficiaryEntries[name] = { count: 0, amounts: {} };
+        addAmount(beneficiaryEntries[name], commission);
+      });
+      const formatEntry = (entry) => ({ count: entry.count, amounts: Object.fromEntries(Object.keys(entry.amounts).sort().map((currency) => [currency, fromMinorUnits(entry.amounts[currency])])) });
+      const summary = {
+        version: 'V1',
+        from,
+        to,
+        generated_at: this.now(),
+        counts: { total: commissions.length },
+        by_status: Object.fromEntries(COMMISSION_STATUS_VALUES.map((name) => [name, formatEntry(statusEntries[name])])),
+        by_beneficiary: Object.fromEntries(Object.keys(beneficiaryEntries).sort().map((name) => [name, formatEntry(beneficiaryEntries[name])]))
+      };
+      this.audit('GET_COMMISSION_SUMMARY', 'Commission', null, ctx, { from, to, total: commissions.length });
+      return ok(summary, { action: 'GET_COMMISSION_SUMMARY', read_only: true });
+    } catch (error) {
+      this.auditFailure('GET_COMMISSION_SUMMARY', 'Commission', input, ctx, error);
+      return fail(error);
+    }
+  }
+  // ------------------------------------------- automatic commission drafts
+  //
+  // The owner teaches the system commission RULES once; matching bookings
+  // then get DRAFT commissions automatically. Automation stops at the
+  // draft: approval and payment stay the human-gated lifecycle above.
+  // Rules live in persisted settings (like message templates); amounts are
+  // immutable after creation, mirroring commission amount immutability.
+  addCommissionRule(input, context) {
+    const ctx = this.context(context);
+    try {
+      this.requireAuthorization(ACTIONS.COMMISSION_RULES, ctx);
+      const value = input || {};
+      const rules = Array.isArray(this.config.commissionRules) ? this.config.commissionRules.slice() : [];
+      if (rules.length >= commissionRules.COMMISSION_RULE_LIMIT) throw new WmitError('COMMISSION_RULE_LIMIT', 'At most ' + commissionRules.COMMISSION_RULE_LIMIT + ' commission rules are allowed. Deactivate unused rules first.');
+      const rule = Object.assign(commissionRules.validateCommissionRuleEntry(value, { defaultCurrency: this.config.defaultCurrency }), {
+        rule_id: this.idGenerator.next('COMMISSION_RULE', { yearBased: true }),
+        created_at: this.now(),
+        updated_at: this.now()
+      });
+      rules.push(rule);
+      this.config.commissionRules = rules;
+      this.emitSettingsChanged();
+      this.audit('ADD_COMMISSION_RULE', 'Configuration', rule, ctx, {
+        rule_id: rule.rule_id,
+        name: rule.name,
+        beneficiary_name: rule.beneficiary_name,
+        basis: rule.basis,
+        amount: rule.amount,
+        percent: rule.percent,
+        currency: rule.currency,
+        trigger: rule.trigger,
+        source_filter: rule.source_filter,
+        active: rule.active
+      });
+      return ok(commissionRules.commissionRuleView(rule), { action: 'ADD_COMMISSION_RULE' });
+    } catch (error) {
+      this.auditFailure('ADD_COMMISSION_RULE', 'Configuration', input, ctx, error);
+      return fail(error);
+    }
+  }
+  updateCommissionRule(input, context) {
+    const ctx = this.context(context);
+    try {
+      this.requireAuthorization(ACTIONS.COMMISSION_RULES, ctx);
+      const value = input || {};
+      const ruleId = String(requireValue(value.rule_id, 'rule_id')).trim();
+      const rules = Array.isArray(this.config.commissionRules) ? this.config.commissionRules.slice() : [];
+      const index = rules.findIndex((rule) => rule.rule_id === ruleId);
+      if (index === -1) throw new WmitError('NOT_FOUND', 'Commission rule ' + ruleId + ' was not found.', { rule_id: ruleId });
+      // Only the label and the active flag may change. Basis, amount,
+      // percent, beneficiary, currency, trigger, and source filter are
+      // immutable after creation, mirroring commission amount immutability.
+      const attempted = ['beneficiary_name', 'basis', 'amount', 'percent', 'currency', 'trigger', 'source_filter'].filter((field) => value[field] !== undefined && value[field] !== null);
+      if (attempted.length) {
+        throw new WmitError('COMMISSION_RULE_IMMUTABLE', 'Commission rule amounts and matching terms are fixed once created. Deactivate this rule and add a new one instead.', { rule_id: ruleId, fields: attempted });
+      }
+      const current = rules[index];
+      const next = Object.assign({}, current);
+      let renamed = false;
+      if (value.name !== undefined && value.name !== null) {
+        const name = String(value.name).trim();
+        if (!name) throw new WmitError('REQUIRED_FIELD', 'name is required.', { field: 'name' });
+        if (name.length > 120) throw new WmitError('INVALID_SETTING', 'Rule name must be at most 120 characters.', { field: 'name' });
+        if (name !== current.name) renamed = true;
+        next.name = name;
+      }
+      let toggled = false;
+      if (value.active !== undefined && value.active !== null) {
+        let active = value.active;
+        if (typeof active !== 'boolean') {
+          if (active === 'true') active = true;
+          else if (active === 'false') active = false;
+          else throw new WmitError('INVALID_SETTING', 'Rule active flag must be true or false.', { field: 'active', active: value.active });
+        }
+        if (active !== current.active) toggled = true;
+        next.active = active;
+      }
+      if (!renamed && !toggled) throw new WmitError('NO_CHANGES', 'Supply a new name or an active flag for this commission rule.', { rule_id: ruleId });
+      next.updated_at = this.now();
+      rules[index] = next;
+      this.config.commissionRules = rules;
+      this.emitSettingsChanged();
+      this.audit('UPDATE_COMMISSION_RULE', 'Configuration', next, ctx, {
+        rule_id: ruleId,
+        renamed,
+        active: next.active,
+        old_values: { name: current.name, active: current.active },
+        new_values: { name: next.name, active: next.active }
+      });
+      return ok(commissionRules.commissionRuleView(next), { action: 'UPDATE_COMMISSION_RULE' });
+    } catch (error) {
+      this.auditFailure('UPDATE_COMMISSION_RULE', 'Configuration', input, ctx, error);
+      return fail(error);
+    }
+  }
+  listCommissionRules(input, context) {
+    const ctx = this.context(context);
+    try {
+      const rules = (Array.isArray(this.config.commissionRules) ? this.config.commissionRules : [])
+        .slice()
+        .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')) || String(a.rule_id).localeCompare(String(b.rule_id)))
+        .map((rule) => commissionRules.commissionRuleView(rule));
+      const counts = { total: rules.length, active: rules.filter((rule) => rule.active).length, inactive: rules.filter((rule) => !rule.active).length };
+      this.audit('LIST_COMMISSION_RULES', 'Configuration', null, ctx, { total: rules.length });
+      return ok({ rules, counts }, { action: 'LIST_COMMISSION_RULES', read_only: true });
+    } catch (error) {
+      this.auditFailure('LIST_COMMISSION_RULES', 'Configuration', input, ctx, error);
+      return fail(error);
+    }
+  }
+  // ------------------------------------------- wholesaler package library
+  //
+  // Wholesaler flyers become reusable SupplierPackage records: capture (or
+  // verify an AI draft against the flyer image) once, then sell many times
+  // via createQuotationFromPackage. A package only quotes after a human
+  // confirms it; extraction itself never creates records.
+  packageListValue(value, field) {
+    if (value === undefined || value === null) return [];
+    const items = Array.isArray(value) ? value : String(value).split(/\r?\n|;/);
+    const cleaned = items.map((item) => String(item).trim()).filter(Boolean).map((item) => item.slice(0, 300));
+    if (cleaned.length > 40) throw new WmitError('PACKAGE_LIST_TOO_LONG', field + ' has too many entries (max 40).', { field });
+    return cleaned;
+  }
+  packageItineraryDays(value) {
+    if (value === undefined || value === null || value === '') return [];
+    const days = Array.isArray(value) ? value : (() => { try { return JSON.parse(String(value)); } catch (_) { return null; } })();
+    if (!Array.isArray(days)) throw new WmitError('PACKAGE_ITINERARY_INVALID', 'itinerary_days must be a list of day objects.', { field: 'itinerary_days' });
+    if (days.length > 60) throw new WmitError('PACKAGE_ITINERARY_INVALID', 'A package can carry at most 60 itinerary days.', { field: 'itinerary_days' });
+    return days.map((entry, index) => {
+      const day = entry && typeof entry === 'object' ? entry : { activities: String(entry || '') };
+      const text = (key, max) => {
+        const raw = day[key];
+        if (raw === undefined || raw === null) return null;
+        const trimmed = String(raw).trim();
+        return trimmed ? trimmed.slice(0, max) : null;
+      };
+      const dayNumber = Number(day.day);
+      return {
+        day: Number.isInteger(dayNumber) && dayNumber >= 1 && dayNumber <= 60 ? dayNumber : index + 1,
+        date: /^\d{4}-\d{2}-\d{2}$/.test(String(day.date || '')) ? String(day.date) : null,
+        city: text('city', 120),
+        title: text('title', 200),
+        activities: text('activities', 1200),
+        meals: text('meals', 300),
+        overnight: text('overnight', 200),
+        notes: text('notes', 600)
+      };
+    });
+  }
+  packageValidatedFields(value, existing) {
+    const current = existing || {};
+    const get = (field) => value[field] !== undefined ? value[field] : current[field];
+    const supplierId = requireValue(get('supplier_id'), 'supplier_id');
+    this.must('Supplier', supplierId);
+    const name = String(requireValue(get('name'), 'name')).trim();
+    if (!name || name.length > 160) throw new WmitError('PACKAGE_NAME_INVALID', 'Package name is required (max 160 characters).', { field: 'name' });
+    const destination = String(requireValue(get('destination'), 'destination')).trim();
+    if (!destination || destination.length > 120) throw new WmitError('PACKAGE_DESTINATION_REQUIRED', 'Destination is required (max 120 characters).', { field: 'destination' });
+    const price = money(get('price_amount'), 'price_amount');
+    if (toMinorUnits(price) <= 0n) throw new WmitError('INVALID_MONEY', 'Package price must be greater than zero.', { field: 'price_amount' });
+    const currency = String(get('currency') || this.config.defaultCurrency).trim().toUpperCase();
+    if (!/^[A-Z]{3}$/.test(currency)) throw new WmitError('INVALID_CURRENCY', 'Package currency must be a three-letter currency code.', { currency });
+    const paxBasis = String(get('pax_basis') || 'PER_PERSON').trim().toUpperCase();
+    if (!PACKAGE_PAX_BASIS_VALUES.includes(paxBasis)) throw new WmitError('PACKAGE_PAX_BASIS_INVALID', 'Pax basis must be PER_PERSON or PER_GROUP.', { field: 'pax_basis', allowed: PACKAGE_PAX_BASIS_VALUES.slice() });
+    const travelStart = get('travel_start') === undefined || get('travel_start') === null || get('travel_start') === '' ? null : String(get('travel_start'));
+    const travelEnd = get('travel_end') === undefined || get('travel_end') === null || get('travel_end') === '' ? null : String(get('travel_end'));
+    if (travelStart && !/^\d{4}-\d{2}-\d{2}$/.test(travelStart)) throw new WmitError('PACKAGE_DATE_INVALID', 'Travel start must be a YYYY-MM-DD date.', { field: 'travel_start' });
+    if (travelEnd && !/^\d{4}-\d{2}-\d{2}$/.test(travelEnd)) throw new WmitError('PACKAGE_DATE_INVALID', 'Travel end must be a YYYY-MM-DD date.', { field: 'travel_end' });
+    if (travelStart && travelEnd && travelEnd < travelStart) throw new WmitError('PACKAGE_DATE_RANGE_INVALID', 'Travel end cannot be before travel start.', { travel_start: travelStart, travel_end: travelEnd });
+    let durationDays = get('duration_days') === undefined || get('duration_days') === null || get('duration_days') === '' ? null : Number(get('duration_days'));
+    if (durationDays !== null && (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > 60)) {
+      throw new WmitError('PACKAGE_DURATION_INVALID', 'Duration must be 1-60 days.', { field: 'duration_days' });
+    }
+    if (travelStart && travelEnd && durationDays === null) {
+      durationDays = Math.round((new Date(travelEnd) - new Date(travelStart)) / 86400000) + 1;
+    }
+    return {
+      supplier_id: supplierId,
+      name,
+      destination,
+      price_amount: price,
+      currency,
+      pax_basis: paxBasis,
+      travel_start: travelStart,
+      travel_end: travelEnd,
+      duration_days: durationDays,
+      itinerary_days: this.packageItineraryDays(get('itinerary_days')),
+      inclusions: this.packageListValue(get('inclusions'), 'inclusions'),
+      exclusions: this.packageListValue(get('exclusions'), 'exclusions'),
+      notes: (() => {
+        const raw = get('notes');
+        const trimmed = raw === undefined || raw === null ? null : String(raw).trim();
+        return trimmed ? trimmed.slice(0, 2000) : null;
+      })()
+    };
+  }
+  createPackage(input, context) {
+    const ctx = this.context(context);
+    try {
+      const value = input || {};
+      if (value.status !== undefined && value.status !== null && String(value.status).trim().toUpperCase() !== 'DRAFT') {
+        throw new WmitError('PACKAGE_STATUS_INVALID', 'A new package always starts as DRAFT.', { requested_status: String(value.status).slice(0, 20) });
+      }
+      const source = String(value.source === undefined || value.source === null || String(value.source).trim() === '' ? 'MANUAL' : value.source).trim().toUpperCase();
+      if (!PACKAGE_SOURCE_VALUES.includes(source)) throw new WmitError('PACKAGE_SOURCE_INVALID', 'Package source must be MANUAL or FLYER_IMPORT.', { field: 'source', allowed: PACKAGE_SOURCE_VALUES.slice() });
+      let sourceDocumentId = null;
+      if (value.source_document_id !== undefined && value.source_document_id !== null && String(value.source_document_id).trim() !== '') {
+        sourceDocumentId = String(value.source_document_id).trim();
+      }
+      if (source === 'FLYER_IMPORT' && !sourceDocumentId) {
+        throw new WmitError('FLYER_SOURCE_REQUIRED', 'A FLYER_IMPORT package must reference the uploaded flyer document.', { field: 'source_document_id' });
+      }
+      if (source === 'MANUAL' && sourceDocumentId) {
+        throw new WmitError('PACKAGE_SOURCE_INVALID', 'source_document_id only applies to FLYER_IMPORT packages.', { field: 'source_document_id' });
+      }
+      if (sourceDocumentId) {
+        const document = this.must('Document', sourceDocumentId);
+        if (String(document.source_type || '') !== 'WHOLESALER_FLYER') {
+          throw new WmitError('FLYER_SOURCE_REQUIRED', 'The referenced document is not a wholesaler flyer.', { source_document_id: sourceDocumentId, source_type: document.source_type || null });
+        }
+      }
+      const fields = this.packageValidatedFields(value, {});
+      const created = this.createRecord('SupplierPackage', Object.assign({ availability_state: 'NOT_CHECKED' }, fields, {
+        status: 'DRAFT',
+        source,
+        source_document_id: sourceDocumentId,
+        idempotency_key: value.idempotency_key || null
+      }), ctx);
+      if (!created.ok) return created;
+      this.audit('CREATE_PACKAGE', 'SupplierPackage', created.data, ctx, {
+        supplier_id: fields.supplier_id,
+        name: fields.name,
+        destination: fields.destination,
+        price_amount: fields.price_amount,
+        currency: fields.currency,
+        source,
+        source_document_id: sourceDocumentId
+      });
+      return ok(created.data, { action: 'CREATE_PACKAGE' });
+    } catch (error) {
+      this.auditFailure('CREATE_PACKAGE', 'SupplierPackage', input, ctx, error);
+      return fail(error);
+    }
+  }
+  updatePackage(input, context) {
+    const ctx = this.context(context);
+    try {
+      const value = input || {};
+      const existing = this.must('SupplierPackage', requireValue(value.supplier_package_id, 'supplier_package_id'));
+      const editable = ['name', 'destination', 'supplier_id', 'travel_start', 'travel_end', 'duration_days', 'pax_basis', 'price_amount', 'currency', 'itinerary_days', 'inclusions', 'exclusions', 'notes'];
+      if (existing.status === 'ARCHIVED') {
+        const attempted = editable.filter((field) => value[field] !== undefined);
+        if (attempted.length) throw new WmitError('PACKAGE_LOCKED', 'An archived package can no longer be edited.', { supplier_package_id: existing.supplier_package_id, fields: attempted });
+      } else if (existing.status === 'CONFIRMED') {
+        const attempted = editable.filter((field) => value[field] !== undefined && field !== 'notes');
+        if (attempted.length) {
+          throw new WmitError('PACKAGE_LOCKED', 'A confirmed package is locked. Only notes can change; archive it and create a new package for price or itinerary changes.', { supplier_package_id: existing.supplier_package_id, fields: attempted });
+        }
+      }
+      const changes = {};
+      editable.forEach((field) => { if (value[field] !== undefined) changes[field] = value[field]; });
+      if (!Object.keys(changes).length) throw new WmitError('NO_CHANGES', 'Supply at least one package field to update.', { supplier_package_id: existing.supplier_package_id });
+      const merged = Object.assign({}, existing, changes);
+      const fields = this.packageValidatedFields(merged, {});
+      editable.forEach((field) => { if (field in changes) changes[field] = fields[field]; });
+      const expectedVersion = value.expected_record_version;
+      if (expectedVersion !== undefined) changes.expected_record_version = expectedVersion;
+      const updated = this.updateRecord('SupplierPackage', existing.supplier_package_id, changes, ctx);
+      if (!updated.ok) return updated;
+      this.audit('UPDATE_PACKAGE', 'SupplierPackage', updated.data, ctx, { changedFields: Object.keys(changes).filter((key) => key !== 'expected_record_version') });
+      return ok(updated.data, { action: 'UPDATE_PACKAGE' });
+    } catch (error) {
+      this.auditFailure('UPDATE_PACKAGE', 'SupplierPackage', input, ctx, error);
+      return fail(error);
+    }
+  }
+  confirmPackage(input, context) {
+    const ctx = this.context(context);
+    try {
+      const pkg = this.must('SupplierPackage', requireValue(input && input.supplier_package_id, 'supplier_package_id'));
+      if (pkg.status === 'CONFIRMED') {
+        this.audit('CONFIRM_PACKAGE', 'SupplierPackage', pkg, ctx, { idempotent: true });
+        return ok(pkg, { action: 'CONFIRM_PACKAGE', idempotent: true });
+      }
+      if (pkg.status !== 'DRAFT') throw new WmitError('PACKAGE_STATE_INVALID', 'Only a draft package can be confirmed.', { supplier_package_id: pkg.supplier_package_id, current_status: pkg.status });
+      const updated = this.updateRecord('SupplierPackage', pkg.supplier_package_id, { status: 'CONFIRMED', confirmed_at: this.now(), confirmed_by: ctx.actor }, ctx);
+      if (!updated.ok) return updated;
+      this.audit('CONFIRM_PACKAGE', 'SupplierPackage', updated.data, ctx, { from_status: 'DRAFT', to_status: 'CONFIRMED' });
+      return ok(updated.data, { action: 'CONFIRM_PACKAGE' });
+    } catch (error) {
+      this.auditFailure('CONFIRM_PACKAGE', 'SupplierPackage', input, ctx, error);
+      return fail(error);
+    }
+  }
+  archivePackage(input, context) {
+    const ctx = this.context(context);
+    try {
+      const value = input || {};
+      const pkg = this.must('SupplierPackage', requireValue(value.supplier_package_id, 'supplier_package_id'));
+      if (pkg.status === 'ARCHIVED') {
+        this.audit('ARCHIVE_PACKAGE', 'SupplierPackage', pkg, ctx, { idempotent: true });
+        return ok(pkg, { action: 'ARCHIVE_PACKAGE', idempotent: true });
+      }
+      const reason = value.reason === undefined || value.reason === null ? null : String(value.reason).trim().slice(0, 500) || null;
+      const updated = this.updateRecord('SupplierPackage', pkg.supplier_package_id, { status: 'ARCHIVED', archived_at: this.now(), archived_by: ctx.actor, archive_reason: reason }, ctx);
+      if (!updated.ok) return updated;
+      this.audit('ARCHIVE_PACKAGE', 'SupplierPackage', updated.data, ctx, { from_status: pkg.status, to_status: 'ARCHIVED', reason });
+      return ok(updated.data, { action: 'ARCHIVE_PACKAGE' });
+    } catch (error) {
+      this.auditFailure('ARCHIVE_PACKAGE', 'SupplierPackage', input, ctx, error);
+      return fail(error);
+    }
+  }
+  listPackages(input, context) {
+    const ctx = this.context(context);
+    try {
+      const value = input || {};
+      let status = null;
+      if (value.status !== undefined && value.status !== null && String(value.status).trim() !== '') {
+        status = String(value.status).trim().toUpperCase();
+        if (!PACKAGE_STATUS_VALUES.includes(status)) {
+          throw new WmitError('PACKAGE_STATUS_INVALID', 'Package status must be one of: ' + PACKAGE_STATUS_VALUES.join(', ') + '.', { field: 'status', status, allowed: PACKAGE_STATUS_VALUES.slice() });
+        }
+      }
+      const supplierId = value.supplier_id !== undefined && value.supplier_id !== null && String(value.supplier_id).trim() !== '' ? String(value.supplier_id).trim() : null;
+      if (supplierId) this.must('Supplier', supplierId);
+      const destination = value.destination !== undefined && value.destination !== null && String(value.destination).trim() !== '' ? String(value.destination).trim().toLowerCase() : null;
+      const packages = this.list('SupplierPackage')
+        .filter((pkg) => !status || String(pkg.status || 'DRAFT').toUpperCase() === status)
+        .filter((pkg) => !supplierId || pkg.supplier_id === supplierId)
+        .filter((pkg) => !destination || String(pkg.destination || '').toLowerCase().includes(destination))
+        .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')) || String(a.supplier_package_id).localeCompare(String(b.supplier_package_id)));
+      const counts = { total: packages.length };
+      PACKAGE_STATUS_VALUES.forEach((name) => { counts[name] = packages.filter((pkg) => pkg.status === name).length; });
+      this.audit('LIST_PACKAGES', 'SupplierPackage', null, ctx, { status, supplier_id: supplierId, destination: destination || null, count: packages.length });
+      return ok({ packages, counts }, { action: 'LIST_PACKAGES', read_only: true });
+    } catch (error) {
+      this.auditFailure('LIST_PACKAGES', 'SupplierPackage', input, ctx, error);
+      return fail(error);
+    }
+  }
+  createQuotationFromPackage(input, context) {
+    const ctx = this.context(context);
+    try {
+      const value = input || {};
+      const pkg = this.must('SupplierPackage', requireValue(value.package_id, 'package_id'));
+      if (pkg.status === 'ARCHIVED') throw new WmitError('PACKAGE_ARCHIVED', 'An archived package cannot be quoted. Restore or create a new package instead.', { package_id: pkg.supplier_package_id });
+      if (pkg.status !== 'CONFIRMED') throw new WmitError('PACKAGE_NOT_CONFIRMED', 'Confirm the package before quoting it. Extraction and drafts never quote directly.', { package_id: pkg.supplier_package_id, current_status: pkg.status });
+      const client = this.must('Client', requireValue(value.client_id, 'client_id'));
+      let inquiry = null;
+      if (value.inquiry_id !== undefined && value.inquiry_id !== null && String(value.inquiry_id).trim() !== '') {
+        inquiry = this.must('Inquiry', String(value.inquiry_id).trim());
+        if (inquiry.client_id !== client.client_id) {
+          throw new WmitError('CLIENT_INQUIRY_MISMATCH', 'The quotation client must match the Inquiry client.', { client_id: client.client_id, inquiry_client_id: inquiry.client_id });
+        }
+      }
+      let paxCount = value.pax_count !== undefined && value.pax_count !== null && String(value.pax_count).trim() !== '' ? Number(value.pax_count) : null;
+      if (paxCount !== null && (!Number.isInteger(paxCount) || paxCount < 1)) throw new WmitError('INVALID_PAX_COUNT', 'Passenger count must be a whole number of at least 1.', { field: 'pax_count' });
+      if (paxCount === null && inquiry) {
+        const requirements = inquiry.current_requirements || {};
+        const inquiryPax = Number(requirements.pax_count);
+        if (Number.isInteger(inquiryPax) && inquiryPax > 0) paxCount = inquiryPax;
+      }
+      const quantity = pkg.pax_basis === 'PER_GROUP' ? 1 : (paxCount || 1);
+      const unitCost = pkg.price_amount;
+      let unitSellingPrice = unitCost;
+      if (value.unit_selling_price !== undefined && value.unit_selling_price !== null && String(value.unit_selling_price).trim() !== '') {
+        unitSellingPrice = money(value.unit_selling_price, 'unit_selling_price');
+      }
+      const itineraryDays = this.packageItineraryDays(pkg.itinerary_days);
+      const quotationInput = {
+        client_id: client.client_id,
+        inquiry_id: inquiry ? inquiry.inquiry_id : undefined,
+        supplier_package_id: pkg.supplier_package_id,
+        destination: pkg.destination,
+        travel_start: pkg.travel_start || undefined,
+        travel_end: pkg.travel_end || undefined,
+        pax_count: paxCount || undefined,
+        currency: pkg.currency,
+        supplier_cost_total: multiplyMoney(unitCost, quantity),
+        inclusions: pkg.inclusions.length ? pkg.inclusions.join('\n') : 'As per package ' + pkg.name + '.',
+        exclusions: pkg.exclusions.length ? pkg.exclusions.join('\n') : 'As per package ' + pkg.name + '.',
+        itinerary: JSON.stringify(itineraryDays),
+        provenance: 'Supplier package ' + pkg.supplier_package_id
+      };
+      const created = this.createQuotation(quotationInput, context);
+      if (!created.ok) return created;
+      const quotationId = created.data.quotation_id;
+      const item = this.createQuotationItem({
+        quotation_id: quotationId,
+        service_type: 'Tour Package',
+        description: pkg.name,
+        supplier_id: pkg.supplier_id,
+        quantity,
+        unit_cost: unitCost,
+        unit_selling_price: unitSellingPrice,
+        currency: pkg.currency
+      }, context);
+      if (!item.ok) {
+        // Fail closed: never leave a package quotation without its line item.
+        this.repos.Quotation.delete(quotationId);
+        this.audit('DELETE', 'Quotation', created.data, ctx, { reason: 'package quotation item failed: ' + (item.error && item.error.code) });
+        this.auditFailure('CREATE_QUOTATION_FROM_PACKAGE', 'Quotation', { package_id: pkg.supplier_package_id }, ctx, item.error || new WmitError('QUOTATION_ITEM_FAILED', 'The package quotation item could not be created.'));
+        return item;
+      }
+      this.audit('CREATE_QUOTATION_FROM_PACKAGE', 'Quotation', item.data.quotation, ctx, {
+        package_id: pkg.supplier_package_id,
+        quotation_id: quotationId,
+        client_id: client.client_id,
+        inquiry_id: inquiry ? inquiry.inquiry_id : null,
+        quantity,
+        pax_basis: pkg.pax_basis,
+        unit_selling_price: unitSellingPrice,
+        currency: pkg.currency
+      });
+      return ok({ quotation: item.data.quotation, item: item.data.item, package_id: pkg.supplier_package_id }, { action: 'CREATE_QUOTATION_FROM_PACKAGE' });
+    } catch (error) {
+      this.auditFailure('CREATE_QUOTATION_FROM_PACKAGE', 'Quotation', input, ctx, error);
+      return fail(error);
+    }
+  }
+  uploadFlyer(input, context) {
+    const ctx = this.context(context);
+    try {
+      const value = input || {};
+      const fileName = String(requireValue(value.file_name, 'file_name')).trim();
+      const contentBase64 = String(requireValue(value.content_base64, 'content_base64'));
+      const bytes = Buffer.from(contentBase64, 'base64');
+      if (!bytes.length) throw new WmitError('FILE_CONTENT_REQUIRED', 'The selected flyer file has no readable content.');
+      if (bytes.length > FLYER_UPLOAD_LIMIT_BYTES) throw new WmitError('FILE_TOO_LARGE', 'The flyer upload limit is 700 KB.');
+      const mimeType = String(value.mime_type || '').trim().toLowerCase();
+      if (!FLYER_MIME_PATTERN.test(mimeType)) throw new WmitError('FLYER_FORMAT_UNSUPPORTED', 'Flyer uploads accept PNG, JPEG, or WebP images and PDF.', { mime_type: mimeType || null });
+      let supplierId = null;
+      if (value.supplier_id !== undefined && value.supplier_id !== null && String(value.supplier_id).trim() !== '') {
+        supplierId = String(value.supplier_id).trim();
+        this.must('Supplier', supplierId);
+      }
+      const checksum = crypto.createHash('sha256').update(bytes).digest('hex');
+      const document = this.createDocument({
+        external_file_id: 'FLYER-UPLOAD-' + checksum,
+        file_name: fileName,
+        file_url: 'FLYER-UPLOAD://' + encodeURIComponent(fileName),
+        file_ref: 'FLYER-UPLOAD://' + encodeURIComponent(fileName),
+        mime_type: mimeType,
+        file_size: bytes.length,
+        content_base64: contentBase64,
+        checksum,
+        supplier_id: supplierId,
+        source_type: 'WHOLESALER_FLYER',
+        document_type: 'WHOLESALER_FLYER',
+        extraction_status: 'NOT_EXTRACTED',
+        status: 'RECEIVED',
+        review_status: 'NEEDS_REVIEW',
+        received_at: this.now(),
+        notes: 'Wholesaler flyer retained for package intake.'
+      }, ctx);
+      if (!document.ok) return document;
+      this.audit('UPLOAD_FLYER', 'Document', document.data, ctx, { file_name: fileName, mime_type: mimeType, file_size: bytes.length, supplier_id: supplierId });
+      const isImage = /^image\//i.test(mimeType);
+      return ok({
+        document_id: document.data.document_id,
+        file_name: fileName,
+        mime_type: mimeType,
+        file_size: bytes.length,
+        image_url: isImage ? 'data:' + mimeType + ';base64,' + contentBase64 : null
+      }, { action: 'UPLOAD_FLYER' });
+    } catch (error) {
+      this.auditFailure('UPLOAD_FLYER', 'Document', input, ctx, error);
+      return fail(error);
+    }
+  }
+  async extractFlyerDraft(input, context) {
+    const ctx = this.context(context);
+    try {
+      const value = input || {};
+      const document = this.must('Document', requireValue(value.document_id, 'document_id'));
+      // Hard rule: only wholesaler flyers ever reach the AI adapter. Client
+      // personal documents never leave the system.
+      if (String(document.source_type || '') !== 'WHOLESALER_FLYER') {
+        throw new WmitError('FLYER_SOURCE_REQUIRED', 'AI extraction runs only on wholesaler flyer documents. Client and supplier documents never leave the system.', { document_id: document.document_id, source_type: document.source_type || null });
+      }
+      const mimeType = String(document.mime_type || '');
+      const isImage = /^image\//i.test(mimeType) && Boolean(document.content_base64);
+      let extraction = {
+        provider: 'none',
+        model: null,
+        available: false,
+        message: 'Flyer AI extraction is not configured on this server. Enter the package fields manually next to the flyer.',
+        fields: {},
+        notes: []
+      };
+      if (!isImage) {
+        extraction.message = 'Only image flyers can be read by the AI adapter. The PDF flyer is retained for review — enter the fields manually.';
+      } else if (this.flyerAdapter && typeof this.flyerAdapter.extract === 'function') {
+        try {
+          const result = await this.flyerAdapter.extract({ image_base64: document.content_base64, mime_type: mimeType });
+          if (result && result.ok) {
+            extraction = { provider: result.provider || 'unknown', model: result.model || null, available: true, message: 'Draft extraction ready — verify every field against the flyer before confirming.', fields: result.fields || {}, notes: result.notes || [] };
+          } else {
+            extraction.message = (result && result.message) || extraction.message;
+          }
+        } catch (error) {
+          extraction.message = 'The flyer AI adapter failed (' + String(error && error.message || 'unknown error').slice(0, 160) + '). Enter the package fields manually.';
+        }
+      }
+      const fieldCount = Object.keys(extraction.fields).length;
+      if (extraction.available && fieldCount) {
+        const stored = this.updateRecord('Document', document.document_id, {
+          extraction_draft: { provider: extraction.provider, model: extraction.model, extracted_at: this.now(), fields: extraction.fields, notes: extraction.notes },
+          extraction_status: 'EXTRACTED_DRAFT'
+        }, ctx);
+        if (!stored.ok) return stored;
+      }
+      this.audit('EXTRACT_FLYER_DRAFT', 'Document', document, ctx, {
+        provider: extraction.provider,
+        available: extraction.available,
+        field_count: fieldCount,
+        stored: Boolean(extraction.available && fieldCount)
+      });
+      return ok({
+        document_id: document.document_id,
+        extraction_available: extraction.available,
+        reason_code: extraction.available ? null : 'EXTRACTION_UNAVAILABLE',
+        message: extraction.message,
+        provider: extraction.provider,
+        model: extraction.model,
+        fields: extraction.fields,
+        notes: extraction.notes,
+        image_url: isImage ? 'data:' + mimeType + ';base64,' + document.content_base64 : null
+      }, { action: 'EXTRACT_FLYER_DRAFT' });
+    } catch (error) {
+      this.auditFailure('EXTRACT_FLYER_DRAFT', 'Document', input, ctx, error);
+      return fail(error);
+    }
+  }
+  // Obligation math mirrors today-overview/departure-readiness: obligations
+  // (ClientObligation, falling back to PaymentScheduleItem) count as
+  // satisfied only by ACTIVE allocations of VERIFIED client payments.
+  bookingPaymentProgress(bookingId) {
+    const booking = this.get('Booking', bookingId);
+    const obligationRecords = this.list('ClientObligation', (record) => record.booking_id === booking.booking_id);
+    const scheduleRecords = this.list('PaymentScheduleItem', (record) => record.booking_id === booking.booking_id);
+    const authoritativeObligations = obligationRecords.length ? obligationRecords : scheduleRecords;
+    const obligationTotal = authoritativeObligations.reduce((sum, record) => sum + toMinorUnits(record.amount || record.total_amount || record.balance_due || '0.00'), 0n);
+    const verifiedPaymentIds = new Set(this.list('ClientPayment', (payment) => String(payment.payment_state || '').toUpperCase() === 'VERIFIED').map((payment) => payment.client_payment_id));
+    const allocatedTotal = this.list('PaymentAllocation', (record) => record.booking_id === booking.booking_id && String(record.state || 'ACTIVE').toUpperCase() === 'ACTIVE' && verifiedPaymentIds.has(record.client_payment_id))
+      .reduce((sum, record) => sum + toMinorUnits(record.amount || '0.00'), 0n);
+    return { obligation_total: fromMinorUnits(obligationTotal), allocated_total: fromMinorUnits(allocatedTotal), fullyPaid: obligationTotal > 0n && allocatedTotal >= obligationTotal };
+  }
+  // Applies matching commission rules to a booking for one trigger point
+  // (BOOKING_CREATED or the BOOKING_FULLY_PAID transition). Per-rule failures
+  // are audited and skipped so one broken rule never blocks the others, and
+  // the whole call never throws: host actions (booking creation, payment
+  // allocation) treat it as best-effort automation.
+  applyCommissionRules(input, context) {
+    const ctx = this.context(context);
+    try {
+      const value = input || {};
+      const bookingId = requireValue(value.booking_id, 'booking_id');
+      const trigger = String(value.trigger === undefined || value.trigger === null ? '' : value.trigger).trim().toUpperCase();
+      if (!commissionRules.COMMISSION_RULE_TRIGGERS.includes(trigger)) {
+        throw new WmitError('COMMISSION_RULE_TRIGGER_INVALID', 'Commission rule trigger must be one of: ' + commissionRules.COMMISSION_RULE_TRIGGERS.join(', ') + '.', { field: 'trigger', trigger: trigger || null, allowed: commissionRules.COMMISSION_RULE_TRIGGERS.slice() });
+      }
+      const booking = this.must('Booking', bookingId);
+      const rules = Array.isArray(this.config.commissionRules) ? this.config.commissionRules : [];
+      if (!rules.length) return ok({ booking_id: booking.booking_id, trigger, applied: [], skipped: [], failed: [] }, { action: 'APPLY_COMMISSION_RULES', read_only: true });
+      const expoTraceable = commissionRules.bookingExpoTraceable((type, predicate) => this.list(type, predicate), booking);
+      const applied = [];
+      const skipped = [];
+      const failed = [];
+      commissionRules.rulesMatchingTrigger(rules, trigger, expoTraceable).forEach((rule) => {
+        const key = commissionRules.autoCommissionKey(rule.rule_id, booking.booking_id);
+        try {
+          // Idempotency: one commission per rule per booking, ever. A
+          // matching record in ANY lifecycle state (DRAFT, APPROVED, PAID)
+          // skips creation — commissions have no discard, so re-triggers
+          // after approval still never duplicate.
+          const existing = this.list('Commission', (commission) => commission.automation_key === key);
+          if (existing.length) {
+            skipped.push({ rule_id: rule.rule_id, automation_key: key, commission_id: existing[0].commission_id, existing_status: existing[0].status, reason: 'ALREADY_APPLIED' });
+            this.audit('APPLY_COMMISSION_RULES', 'Commission', existing[0], ctx, { rule_id: rule.rule_id, booking_id: booking.booking_id, trigger, automation_key: key, skipped: true, skip_reason: 'ALREADY_APPLIED', existing_status: existing[0].status });
+            return;
+          }
+          const currency = String(rule.currency || booking.currency || this.config.defaultCurrency).trim().toUpperCase();
+          if (!/^[A-Z]{3}$/.test(currency)) throw new WmitError('INVALID_CURRENCY', 'Commission currency must be a three-letter currency code.', { currency });
+          const math = this.commissionAmountForBasis(booking, rule.basis, rule.amount, rule.percent);
+          const created = this.createRecord('Commission', {
+            booking_id: booking.booking_id,
+            source: 'AUTO_RULE',
+            beneficiary_name: rule.beneficiary_name,
+            basis: rule.basis,
+            amount: math.amount,
+            percent: math.percent,
+            computed_amount: math.computed_amount,
+            currency,
+            status: 'DRAFT',
+            recorded_by: ctx.actor,
+            automation_key: key,
+            rule_id: rule.rule_id,
+            notes: 'Automatic DRAFT from rule ' + rule.name + ' (' + trigger + '). Approval and payment stay manual.'
+          }, ctx);
+          if (!created.ok) throw new WmitError(created.error.code, created.error.message, created.error.details);
+          applied.push(this.commissionSummaryView(created.data));
+          this.audit('APPLY_COMMISSION_RULES', 'Commission', created.data, ctx, {
+            rule_id: rule.rule_id,
+            booking_id: booking.booking_id,
+            trigger,
+            automation_key: key,
+            computed_amount: math.computed_amount,
+            currency
+          });
+        } catch (error) {
+          failed.push({ rule_id: rule.rule_id, automation_key: key, error_code: error && error.code ? error.code : 'UNEXPECTED_ERROR' });
+          this.auditFailure('APPLY_COMMISSION_RULES', 'Commission', { rule_id: rule.rule_id, booking_id: booking.booking_id, trigger, automation_key: key }, ctx, error);
+        }
+      });
+      return ok({ booking_id: booking.booking_id, trigger, applied, skipped, failed }, { action: 'APPLY_COMMISSION_RULES' });
+    } catch (error) {
+      this.auditFailure('APPLY_COMMISSION_RULES', 'Commission', input, ctx, error);
+      return fail(error);
+    }
+  }
+  // ------------------------------------------------ data privacy (DPA)
+  //
+  // Enforcement of docs/data-privacy.md sections 3, 5, and 6: consent
+  // history on the Client entity, a per-client (or whole-db) privacy
+  // overview, manager-gated erasure of sensitive documents, and the daily
+  // retention scan. Booking and financial records are never touched by
+  // these actions — their retention duty outlives every erasure request.
+
+  recordClientDataConsent(input, context) {
+    const ctx = this.context(context);
+    try {
+      const value = input || {};
+      const client = this.must('Client', requireValue(value.client_id, 'client_id'));
+      const purpose = String(requireValue(value.purpose, 'purpose')).trim().slice(0, 300);
+      const grantedAt = value.granted_at !== undefined && value.granted_at !== null && String(value.granted_at).trim() !== ''
+        ? String(value.granted_at).trim()
+        : this.now();
+      const entry = { granted_at: grantedAt, purpose, actor: ctx.actor };
+      const history = (Array.isArray(client.data_consent_history) ? client.data_consent_history.slice() : []);
+      history.push(entry);
+      const updated = this.updateRecord('Client', client.client_id, { data_consent: entry, data_consent_history: history }, ctx);
+      if (!updated.ok) return updated;
+      this.audit('RECORD_CLIENT_DATA_CONSENT', 'Client', updated.data, ctx, { client_id: client.client_id, purpose, granted_at: entry.granted_at });
+      return ok({ client_id: client.client_id, consent: entry, history_count: history.length }, { action: 'RECORD_CLIENT_DATA_CONSENT' });
+    } catch (error) {
+      this.auditFailure('RECORD_CLIENT_DATA_CONSENT', 'Client', input, ctx, error);
+      return fail(error);
+    }
+  }
+
+  getPrivacyOverview(input, context) {
+    const ctx = this.context(context);
+    try {
+      const value = input || {};
+      let clientId = null;
+      if (value.client_id !== undefined && value.client_id !== null && String(value.client_id).trim() !== '') {
+        clientId = String(value.client_id).trim();
+        this.must('Client', clientId);
+      }
+      if (value.asOf !== undefined && value.asOf !== null && String(value.asOf).trim() !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(String(value.asOf).trim())) {
+        throw new WmitError('ASOF_DATE_INVALID', 'asOf must be a date like 2026-08-20.', { asOf: String(value.asOf).slice(0, 10) });
+      }
+      const overview = privacy.buildPrivacyOverview(this, { clientId, asOf: value.asOf });
+      this.audit('GET_PRIVACY_OVERVIEW', 'Client', clientId ? { client_id: clientId } : null, ctx, {
+        client_id: clientId,
+        asOf: overview.asOf,
+        scope: overview.scope,
+        eligible_documents: overview.scope === 'CLIENT' ? overview.counts.eligible_documents : overview.totals.eligible_documents
+      });
+      return ok(overview, { action: 'GET_PRIVACY_OVERVIEW', read_only: true });
+    } catch (error) {
+      this.auditFailure('GET_PRIVACY_OVERVIEW', 'Client', input, ctx, error);
+      return fail(error);
+    }
+  }
+
+  eraseClientDocuments(input, context) {
+    const ctx = this.context(context);
+    try {
+      this.requireAuthorization(ACTIONS.DATA_ERASE, ctx);
+      const value = input || {};
+      if (String(value.confirm || '') !== 'ERASE') {
+        throw new WmitError('ERASE_CONFIRMATION_REQUIRED', 'Document erasure requires the explicit confirmation string ERASE.', { client_id: value.client_id || null });
+      }
+      const client = this.must('Client', requireValue(value.client_id, 'client_id'));
+      const asOf = this.now().slice(0, 10);
+      const clientDocs = this.list('Document', (document) => privacy.documentClientId(document) === client.client_id);
+
+      let candidates = [];
+      const skippedErased = [];
+      if (Array.isArray(value.document_ids)) {
+        if (!value.document_ids.length) throw new WmitError('DOCUMENT_LIST_REQUIRED', 'Provide at least one document_id or omit the list to erase every eligible document.');
+        const requested = value.document_ids.map((id) => String(id));
+        requested.forEach((documentId) => {
+          const document = clientDocs.find((candidate) => candidate.document_id === documentId);
+          if (!document) {
+            throw new WmitError('NOT_FOUND', 'Document ' + documentId + ' was not found for this client.', { type: 'Document', id: documentId });
+          }
+          if (!privacy.isSensitiveDocument(document)) {
+            throw new WmitError('DOCUMENT_NOT_SENSITIVE', 'Only passport, visa, and identity documents can be erased. ' + documentId + ' is ' + (privacy.documentTypeOf(document) || 'untyped') + '.', { document_id: documentId, document_type: privacy.documentTypeOf(document) });
+          }
+          if (String(document.status || '').toUpperCase() === 'ERASED') { skippedErased.push(documentId); return; }
+          candidates.push(document);
+        });
+      } else {
+        const lastTravelEnd = privacy.clientLastTravelEnd(this, client.client_id);
+        candidates = clientDocs.filter((document) => String(document.status || '').toUpperCase() !== 'ERASED'
+          && privacy.isSensitiveDocument(document)
+          && privacy.retentionStatusOf(document, lastTravelEnd, asOf) === 'ELIGIBLE_FOR_ERASURE');
+        if (!candidates.length) {
+          throw new WmitError('NO_ELIGIBLE_DOCUMENTS', 'No sensitive document for this client is past the departure + 30-day retention limit. Erasure stays closed.', { client_id: client.client_id, asOf });
+        }
+      }
+      if (!candidates.length) {
+        return ok({
+          client_id: client.client_id,
+          erased: [],
+          skipped_already_erased: skippedErased,
+          note: 'Every requested document was already erased; nothing changed.'
+        }, { action: 'ERASE_CLIENT_DOCUMENTS', idempotent: true });
+      }
+
+      // Repository-level update with a hand-written audit row: the generic
+      // updateRecord audit would copy the purged content into old_values,
+      // and the audit trail must record what was erased, never the content.
+      const erasedAt = this.now();
+      const erased = candidates.map((document) => {
+        const documentType = privacy.documentTypeOf(document);
+        const stub = {
+          document_id: document.document_id,
+          document_type: documentType,
+          status: 'ERASED',
+          review_status: 'ERASED',
+          text: null,
+          content_base64: null,
+          content_hash: null,
+          filename: null,
+          file_name: null,
+          file_url: null,
+          file_ref: null,
+          classification: null,
+          extraction: null,
+          erased_at: erasedAt,
+          erased_by: ctx.actor
+        };
+        this.repos.Document.update(document.document_id, stub);
+        this.audit('ERASE_DOCUMENT', 'Document', { document_id: document.document_id, document_type: documentType }, ctx, {
+          client_id: client.client_id,
+          document_id: document.document_id,
+          document_type: documentType
+        });
+        return { document_id: document.document_id, document_type: documentType };
+      });
+      this.audit('ERASE_CLIENT_DOCUMENTS', 'Client', { client_id: client.client_id }, ctx, {
+        client_id: client.client_id,
+        erased_count: erased.length,
+        documents: erased,
+        skipped_already_erased: skippedErased
+      });
+      return ok({ client_id: client.client_id, erased, erased_count: erased.length, skipped_already_erased: skippedErased }, { action: 'ERASE_CLIENT_DOCUMENTS' });
+    } catch (error) {
+      this.auditFailure('ERASE_CLIENT_DOCUMENTS', 'Document', input, ctx, error);
+      return fail(error);
+    }
+  }
+
+  runPrivacyRetentionCheck(input, context) {
+    const ctx = this.context(context);
+    try {
+      const value = input || {};
+      const asOf = /^\d{4}-\d{2}-\d{2}$/.test(String(value.asOf || '').trim()) ? String(value.asOf).trim() : this.now().slice(0, 10);
+      const scan = privacy.buildRetentionScan(this, { asOf });
+      let task = null;
+      let tasksCreated = 0;
+      if (scan.documents.length) {
+        // One deduped task per day: a human decides via the privacy panel,
+        // nothing is ever erased automatically.
+        const dayKey = 'PRIVACY_RETENTION:' + asOf;
+        const existing = this.list('Task', (taskItem) => taskItem.automation_key === dayKey && ['OPEN', 'IN_PROGRESS', 'BLOCKED'].includes(String(taskItem.state || 'OPEN').toUpperCase()));
+        if (!existing.length) {
+          const documentIds = scan.documents.map((document) => document.document_id);
+          const clientIds = Array.from(new Set(scan.documents.map((document) => document.client_id)));
+          const created = this.createTask({
+            automation_key: dayKey,
+            task_type: 'PRIVACY_RETENTION',
+            title: 'Privacy retention: ' + scan.documents.length + ' document(s) eligible for erasure',
+            description: 'Passport/visa/identity document(s) past the departure + 30-day retention limit: ' + documentIds.join(', ') + '. Review in Operations > Documents > Privacy and erase with manager authority. Nothing is erased automatically.',
+            related_type: 'Client',
+            related_id: clientIds.length === 1 ? clientIds[0] : null,
+            document_ids: documentIds,
+            client_ids: clientIds,
+            due_date: asOf,
+            priority: 'NORMAL',
+            state: 'OPEN',
+            source: 'PRIVACY_RETENTION'
+          }, ctx);
+          if (created.ok) {
+            task = { task_id: created.data.task_id, automation_key: dayKey };
+            tasksCreated = 1;
+          }
+        } else {
+          task = { task_id: existing[0].task_id, automation_key: dayKey, existing: true };
+        }
+      }
+      this.audit('RUN_PRIVACY_RETENTION_CHECK', 'Document', null, ctx, {
+        asOf,
+        eligible_documents: scan.documents.length,
+        tasks_created: tasksCreated
+      });
+      return ok({ asOf, eligible_count: scan.eligible_count, documents: scan.documents, tasks_created: tasksCreated, task }, { action: 'RUN_PRIVACY_RETENTION_CHECK' });
+    } catch (error) {
+      this.auditFailure('RUN_PRIVACY_RETENTION_CHECK', 'Document', input, ctx, error);
+      return fail(error);
+    }
+  }
+
+  // ----------------------------------------------- client status links
+  //
+  // Public booking-status pages (/status/<token>) mirror the expo quote
+  // links (/q/<token>): the raw token is returned exactly once, only its
+  // SHA-256 hash is stored, and re-issuing replaces the hash so the
+  // previous link stops working.
+
+  publicBaseUrl() { return String(this.config.publicBaseUrl || this.config.baseUrl || 'http://127.0.0.1:3000').replace(/\/+$/, ''); }
+
+  bookingStatusUrl(token) { return this.publicBaseUrl() + '/status/' + encodeURIComponent(token); }
+
+  bookingIsCancelled(booking) {
+    const state = String(booking.record_state || '').trim().toUpperCase();
+    const statusText = String(booking.status || '').trim().toUpperCase();
+    const commitment = String(booking.commitment_state || '').trim().toUpperCase();
+    return state === 'CANCELLED' || statusText === 'CANCELLED' || commitment === 'CANCELLED';
+  }
+
+  issueBookingStatusLink(input, context) {
+    const ctx = this.context(context);
+    try {
+      const value = input || {};
+      const booking = this.must('Booking', requireValue(value.booking_id, 'booking_id'));
+      if (this.bookingIsCancelled(booking)) {
+        throw new WmitError('BOOKING_CANCELLED', 'This booking was cancelled; client status links are not available for it.', { booking_id: booking.booking_id });
+      }
+      const token = crypto.randomBytes(24).toString('hex');
+      const issuedAt = this.now();
+      // Clients check status during and after travel, so the link outlives
+      // the trip by 30 days; without travel dates it simply lasts 90 days.
+      const expiresAt = booking.travel_end ? dateOnlyPlusDays(booking.travel_end, 30) : dateOnlyPlusDays(issuedAt, 90);
+      const updated = this.updateRecord('Booking', booking.booking_id, {
+        status_token_hash: statusTokenHash(token),
+        status_token_issued_at: issuedAt,
+        status_token_expires_at: expiresAt
+      }, ctx);
+      if (!updated.ok) return updated;
+      this.audit('ISSUE_BOOKING_STATUS_LINK', 'Booking', updated.data, ctx, {
+        booking_id: booking.booking_id,
+        reissued: Boolean(booking.status_token_hash),
+        expires_at: expiresAt
+      });
+      return ok({
+        booking_id: booking.booking_id,
+        token,
+        url: this.bookingStatusUrl(token),
+        issued_at: issuedAt,
+        expires_at: expiresAt,
+        reissued: Boolean(booking.status_token_hash)
+      }, { action: 'ISSUE_BOOKING_STATUS_LINK' });
+    } catch (error) {
+      this.auditFailure('ISSUE_BOOKING_STATUS_LINK', 'Booking', input, ctx, error);
+      return fail(error);
+    }
+  }
+
+  getPublicBookingStatus(token) {
+    try {
+      const value = String(requireValue(token, 'token'));
+      if (!/^[a-f0-9]{48}$/.test(value)) throw new WmitError('TOKEN_INVALID', 'This status link is invalid.');
+      const hash = statusTokenHash(value);
+      const booking = this.list('Booking', (record) => record.status_token_hash === hash)[0] || null;
+      // Unknown, expired, and cancelled links answer identically so the
+      // public error never reveals which case applies (no enumeration).
+      const invalidLink = () => new WmitError('BOOKING_STATUS_NOT_FOUND', 'This status link is invalid or has expired.');
+      if (!booking) throw invalidLink();
+      const today = this.now().slice(0, 10);
+      if (String(booking.status_token_expires_at || '') < today) throw invalidLink();
+      if (this.bookingIsCancelled(booking)) throw invalidLink();
+      const entities = caseProjection.getEntities(this);
+      const finance = caseProjection.financeProjection(entities, booking, new Set([booking.booking_id]));
+      const quotation = booking.quotation_id && this.repos.Quotation && this.repos.Quotation.exists(booking.quotation_id) ? this.must('Quotation', booking.quotation_id) : null;
+      const documents = caseProjection.documentsProjection(entities, booking, booking.inquiry_id || null, null);
+      let requiredCount = documents.requiredCount;
+      let completeCount = documents.completeCount;
+      this.list('BookingItem', (item) => item.booking_id === booking.booking_id).forEach((item) => {
+        const service = caseProjection.serviceDocumentsProjection(entities, item);
+        if (service.requiredCount) {
+          requiredCount += service.requiredCount;
+          completeCount += service.requiredCount - service.missing.length;
+        }
+      });
+      const currency = finance.currency || booking.currency || this.config.defaultCurrency;
+      const outstandingObligations = (finance.obligations || [])
+        .filter((obligation) => String(obligation.outstanding) !== '0.00')
+        .sort((a, b) => String(a.dueAt || '9999-12-31').localeCompare(String(b.dueAt || '9999-12-31')));
+      const nextDue = outstandingObligations[0] || null;
+      const departureDays = booking.travel_start
+        ? Math.floor((Date.parse(booking.travel_start + 'T00:00:00Z') - Date.parse(today + 'T00:00:00Z')) / 86400000)
+        : null;
+      return ok({
+        booking_id: booking.booking_id,
+        destination: booking.destination || (quotation && quotation.destination) || null,
+        travel_start: booking.travel_start || (quotation && quotation.travel_start) || null,
+        travel_end: booking.travel_end || (quotation && quotation.travel_end) || null,
+        pax_count: booking.pax_count || (quotation && quotation.pax_count) || null,
+        payments: {
+          currency,
+          obligation_total: finance.obligationTotal || '0.00',
+          verified_received: finance.verifiedReceived || '0.00',
+          outstanding: finance.outstanding || '0.00',
+          obligations: (finance.obligations || []).map((obligation) => ({
+            purpose: obligation.purpose || 'INSTALLMENT',
+            amount: obligation.amount,
+            outstanding: obligation.outstanding,
+            due_on: obligation.dueAt || null
+          }))
+        },
+        documents: {
+          required: requiredCount,
+          complete: completeCount,
+          recorded: documents.documentCount
+        },
+        milestones: {
+          next_payment_due: nextDue ? { due_on: nextDue.dueAt || null, amount: nextDue.outstanding } : null,
+          departure: booking.travel_start ? { date: booking.travel_start, days_until: departureDays } : null
+        }
+      });
+    } catch (error) {
       return fail(error);
     }
   }

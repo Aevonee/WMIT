@@ -81,6 +81,13 @@ function loadConfig(overrides) {
       fromEmail: read('WMIT_SMTP_FROM', ''),
       fromName: read('WMIT_SMTP_FROM_NAME', 'WMIT Operations')
     },
+    // Optional AI adapter for wholesaler-flyer extraction (never required;
+    // package intake falls back to manual entry when unset).
+    flyerAi: {
+      provider: String(read('FLYER_AI_PROVIDER', 'none')).trim().toLowerCase(),
+      apiKey: read('FLYER_AI_API_KEY', ''),
+      model: read('FLYER_AI_MODEL', '')
+    },
     smtpConfigured() {
       const smtp = this.smtp;
       return Boolean(smtp.host && smtp.username && smtp.password && smtp.fromEmail);

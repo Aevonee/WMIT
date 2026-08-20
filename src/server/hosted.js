@@ -14,6 +14,7 @@ const { ExpoService } = require('../expo/expo-service');
 const { DocumentsIngestionService } = require('../documents/ingestion-service');
 const { createPdfTariffUploadAdapter } = require('../adapters/pdf-tariff-upload-adapter');
 const { createPasteTariffUploadAdapter } = require('../adapters/paste-tariff-upload-adapter');
+const { createFlyerExtractionAdapter } = require('../adapters/flyer-extraction-adapter');
 const { createPhase1Runtime, ENTITY_DEFS } = require('../phase1/runtime');
 const { createPhase1Application } = require('../application/phase1');
 const { createMvpServer } = require('../../app/server');
@@ -52,9 +53,10 @@ function createHostedServer(options) {
     idGenerator,
     auditLog,
     repositoryFactory,
-    config: Object.assign({ trustedActors: {} }, persistedSettings),
+    flyerAdapter: createFlyerExtractionAdapter({ provider: config.flyerAi.provider, apiKey: config.flyerAi.apiKey, model: config.flyerAi.model }),
+    config: Object.assign({ trustedActors: {}, baseUrl: config.baseUrl }, persistedSettings),
     onSettingsChanged: (settings) => {
-      upsertConfiguration.run('runtime_settings', JSON.stringify({ quotationDefaults: settings.quotationDefaults, messageTemplates: settings.messageTemplates }), new Date().toISOString());
+      upsertConfiguration.run('runtime_settings', JSON.stringify({ quotationDefaults: settings.quotationDefaults, messageTemplates: settings.messageTemplates, commissionRules: settings.commissionRules }), new Date().toISOString());
     }
   });
 
@@ -110,6 +112,25 @@ function createHostedServer(options) {
   try { expo.ensureDefaultExpo(); } catch (_) { /* registry seeding is best effort; the service falls back to the EXPO-2026 tag */ }
   try { expo.seedPlaceholderTemplates(); } catch (_) { /* seeding is best effort; the console reports template state */ }
   scheduler.register('expo-followups', { intervalMs: 15 * 60 * 1000 }, () => expo.ensureFollowUpTasks());
+
+  // Departure readiness: nightly checklist run for departures overlapping
+  // the next 14 days. FAIL rows raise idempotent DEPARTURE_READINESS tasks;
+  // every run is recorded in system_job_runs like the other jobs.
+  scheduler.register('departure-readiness', { daily: { hour: 6, minute: 30 } }, () => {
+    const result = runtime.runDepartureReadinessCheck({}, { actor: 'SCHEDULER_DEPARTURE_READINESS' });
+    if (!result.ok) throw new Error(result.error && result.error.message || 'Departure readiness check failed.');
+    return result.data;
+  });
+
+  // Privacy retention (docs/data-privacy.md section 5): nightly scan for
+  // passport/visa/identity documents past departure + 30 days. The job only
+  // raises one deduped PRIVACY_RETENTION task per day — a human decides via
+  // the gated erasure action; nothing is ever erased automatically.
+  scheduler.register('privacy-retention', { daily: { hour: 7, minute: 15 } }, () => {
+    const result = runtime.runPrivacyRetentionCheck({}, { actor: 'SCHEDULER_PRIVACY_RETENTION' });
+    if (!result.ok) throw new Error(result.error && result.error.message || 'Privacy retention check failed.');
+    return result.data;
+  });
 
   // Document ingestion (Phase 6): register, classify, extract, review on
   // top of the document-intelligence modules and the same runtime audit.

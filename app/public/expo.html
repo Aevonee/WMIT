@@ -148,8 +148,8 @@
       <div id="k-message" class="kiosk-message" role="alert"></div>
       <button type="submit" class="kiosk-submit">Send my travel request</button>
       <div class="kiosk-agree">
-        <input type="checkbox" id="k-consent" checked>
-        <label for="k-consent">By submitting you agree that Worldmaster International Travel may contact you about this travel request. Your details are used only for this quotation.</label>
+        <input type="checkbox" id="k-consent" checked aria-label="Agree to data use for quotations and follow-up">
+        <label for="k-consent">By submitting you agree that Worldmaster International Travel will use your details to prepare travel quotations and follow up on this request. Your details are used only for this purpose.</label>
       </div>
     </form>
 
@@ -337,6 +337,8 @@
         if (!email) return show('Please enter your email so we can send your quotation.');
         if (!payload.destination) return show('Please tell us your destination.');
         if (!payload.travel_month) return show('Please choose a travel month.');
+        if (!document.getElementById('k-consent').checked) return show('Please tick the agreement below the button — we can only prepare your quotation with your consent.');
+        payload.consent = true;
         if (expoTag) payload.expo_tag = expoTag;
         // A stable key per filled form: kiosk double-taps never create
         // duplicate leads even if the network retries.

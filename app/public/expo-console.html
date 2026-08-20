@@ -45,15 +45,10 @@
 <body>
   <header>
     <div class="header-row">
-      <div>
-        <div class="eyebrow">WMIT workspace</div>
-        <h1>Events</h1>
-        <div class="header-muted">Expo lead capture, follow-ups, quotations, and results</div>
-      </div>
+      <div><h1>Events</h1></div>
       <div class="actions">
         <input id="wmit-global-search" type="search" placeholder="Search leads, quotes, packages…" autocomplete="off" aria-label="Search leads, quotes, packages" style="background:#fff;color:#172334;border:1px solid #c8d2df;border-radius:6px;padding:8px 10px;font:inherit;font-size:13px;min-width:200px;">
         <button class="secondary" onclick="window.open(kioskUrlForSelected ? kioskUrlForSelected() : '/expo.html', '_blank', 'noopener')">Open sign-up form</button>
-        <button class="secondary" id="nav-change-password">Change password</button>
         <button class="secondary" id="nav-logout">Sign out</button>
       </div>
     </div>
@@ -64,6 +59,7 @@
       <a data-tab="packages" href="#packages">Packages</a>
       <a data-tab="quotes" href="#quotes">Quotes</a>
       <a data-tab="expos" href="#expos">Events</a>
+      <a data-tab="analytics" href="#analytics">Analytics</a>
       <a href="/operations.html">Operations</a>
     </nav>
   </header>
@@ -154,6 +150,17 @@
         <div id="expo-create-result" class="muted" style="margin-top:8px"></div>
       </details>
       <div id="expo-content"></div>
+    </section>
+
+    <section id="tab-analytics" class="workspace-view panel" style="display:none">
+      <div class="panel-head"><div><div class="eyebrow">All events</div><h2>Analytics</h2><p class="muted">Source analytics across every event (ended ones included): per-event funnel, day-1/3/7 follow-up effectiveness, bookings by lead source, and the monthly trend.</p></div><button id="refresh-analytics">Refresh</button></div>
+      <div class="metric-row" id="analytics-metrics"></div>
+      <div id="analytics-funnel-wrap" style="margin-top:14px"></div>
+      <div id="analytics-followup-wrap" class="card"></div>
+      <div class="case-header" style="margin-top:14px">
+        <div style="flex:1"><h3>Bookings by lead source</h3><div id="analytics-source-wrap"></div></div>
+        <div style="flex:1"><h3>Monthly trend</h3><div id="analytics-month-wrap"></div></div>
+      </div>
     </section>
   </main>
 

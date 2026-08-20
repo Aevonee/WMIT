@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Your Booking Status — Worldmaster International Travel</title>
+  <link rel="stylesheet" href="/tokens.css">
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    body { background: var(--chart-paper); }
+    .status-wrap { max-width: 760px; margin: 0 auto; padding: 22px 16px 60px; }
+    .status-sheet { background: var(--paper); border: 1px solid var(--rule); border-radius: 11px; overflow: hidden; box-shadow: 0 4px 18px rgba(23,35,52,.09); }
+    .status-banner { background: var(--harbor-navy); padding: 26px; }
+    .status-banner img { display: block; width: 210px; height: auto; }
+    .status-banner .brand-subtitle { color: var(--mist); letter-spacing: .12em; text-transform: uppercase; font-size: 11px; margin-top: 8px; }
+    .status-body { padding: 26px; }
+    .status-greeting { font-size: 21px; font-weight: 800; color: var(--ledger-ink); }
+    .status-meta-row { display: flex; flex-wrap: wrap; gap: 18px; color: var(--sea-fog); font-size: 13px; margin-top: 8px; }
+    .status-section { margin-top: 22px; }
+    .status-section h3 { margin: 0 0 8px; font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: var(--label-ink); }
+    .status-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .status-table th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--label-ink); border-bottom: 1px solid var(--rule); padding: 6px 8px 6px 0; }
+    .status-table td { border-bottom: 1px solid var(--rule); padding: 8px 8px 8px 0; color: var(--ledger-ink); }
+    .status-table .num { text-align: right; white-space: nowrap; }
+    .status-totals { margin-top: 10px; font-size: 15px; }
+    .status-totals div { display: flex; justify-content: space-between; padding: 4px 0; }
+    .status-totals .grand { font-weight: 800; color: var(--harbor-navy); border-top: 2px solid var(--rule); margin-top: 4px; padding-top: 8px; }
+    .milestone-list { list-style: none; margin: 0; padding: 0; font-size: 15px; }
+    .milestone-list li { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--rule); }
+    .milestone-list li:last-child { border-bottom: 0; }
+    .status-note { margin-top: 26px; color: var(--sea-fog); font-size: 12px; border-top: 1px solid var(--rule); padding-top: 14px; }
+    .error-card { text-align: center; padding: 46px 20px; }
+    .error-card h2 { font-size: 26px; color: var(--ledger-ink); }
+    .error-card p { color: var(--sea-fog); margin-top: 10px; font-size: 15px; }
+    .spin { color: var(--sea-fog); text-align: center; padding: 60px 0; }
+    .pill { display: inline-block; border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 700; }
+    .pill.paid { background: var(--manifest-green, #1d7a3e); color: #fff; }
+    .pill.due { background: var(--msg-warn-bg, #f4e3c1); color: var(--msg-warn-text, #6d5416); }
+    @media (max-width: 640px) { .status-body { padding: 16px; } .status-table .hide-mobile, .status-table th.hide-mobile { display: none; } }
+    @media print { body { background: #fff; } }
+  </style>
+</head>
+<body>
+  <main class="status-wrap">
+    <div class="status-sheet">
+      <div class="status-banner">
+        <img src="/assets/wmit-logo.png" alt="Worldmaster International Travel">
+        <div class="brand-subtitle">International Travel · Booking Status</div>
+      </div>
+      <div id="status-body" class="status-body"><p class="spin">Loading your booking status…</p></div>
+    </div>
+  </main>
+
+  <script>
+    'use strict';
+    (function () {
+      var esc = function (value) { return String(value === undefined || value === null ? '' : value).replace(/[&<>"']/g, function (c) { return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]; }); };
+      var money = function (value, currency) { return esc(value) + ' ' + esc(currency || ''); };
+      var purpose = function (value) { return esc(String(value || 'INSTALLMENT').replace(/_/g, ' ').toLowerCase()); };
+      var dateOnly = function (value) { return esc(String(value || '').slice(0, 10)); };
+      var token = (function () {
+        var match = window.location.pathname.match(/^\/status\/([a-f0-9]+)$/i);
+        return match ? match[1] : new URLSearchParams(window.location.search).get('token');
+      })();
+
+      var body = document.getElementById('status-body');
+
+      function renderError(message) {
+        body.innerHTML = '<div class="error-card"><h2>We could not open this booking status</h2><p>' + esc(message) + '</p><p>Please contact Worldmaster International Travel and we will send you a fresh link.</p></div>';
+      }
+
+      function renderObligation(obligation, currency) {
+        var settled = String(obligation.outstanding) === '0.00';
+        return '<tr><td>' + purpose(obligation.purpose) + '</td>' +
+          '<td class="num">' + money(obligation.amount, currency) + '</td>' +
+          '<td class="num">' + (settled ? '<span class="pill paid">Paid</span>' : money(obligation.outstanding, currency)) + '</td>' +
+          '<td class="num hide-mobile">' + (obligation.due_on ? 'due ' + dateOnly(obligation.due_on) : '—') + '</td></tr>';
+      }
+
+      function renderStatus(data) {
+        var payments = data.payments || {};
+        var documents = data.documents || {};
+        var milestones = data.milestones || {};
+        var currency = payments.currency || '';
+
+        var obligationsHtml = (payments.obligations || []).length
+          ? '<table class="status-table"><thead><tr><th>Payment</th><th class="num">Amount</th><th class="num">Outstanding</th><th class="num hide-mobile">Due</th></tr></thead><tbody>' +
+            (payments.obligations || []).map(function (obligation) { return renderObligation(obligation, currency); }).join('') +
+            '</tbody></table>' +
+            '<div class="status-totals">' +
+            '<div><span>Total</span><span>' + money(payments.obligation_total, currency) + '</span></div>' +
+            '<div><span>Verified payments received</span><span>' + money(payments.verified_received, currency) + '</span></div>' +
+            '<div class="grand"><span>Outstanding balance</span><span>' + money(payments.outstanding, currency) + '</span></div>' +
+            '</div>'
+          : '<p class="muted">Your payment schedule has not been configured yet. Our team will confirm it with you.</p>';
+
+        var documentsHtml = documents.required > 0
+          ? '<p>Documents: <b>' + esc(documents.complete) + ' of ' + esc(documents.required) + '</b> required document(s) recorded.</p>'
+          : (documents.recorded > 0
+            ? '<p>Documents: <b>' + esc(documents.recorded) + '</b> document(s) on file. We will tell you directly if anything else is needed.</p>'
+            : '<p class="muted">No documents recorded yet. We will tell you directly what is needed.</p>');
+
+        var milestoneItems = [];
+        if (milestones.next_payment_due && milestones.next_payment_due.due_on) {
+          milestoneItems.push('<li><span>Next balance payment</span><span><b>' + money(milestones.next_payment_due.amount, currency) + '</b> due ' + dateOnly(milestones.next_payment_due.due_on) + '</span></li>');
+        }
+        if (milestones.departure && milestones.departure.date) {
+          var days = Number(milestones.departure.days_until);
+          var countdown = isNaN(days) ? '' : days > 0 ? ' — ' + days + ' day(s) to go' : days === 0 ? ' — today' : ' — completed';
+          milestoneItems.push('<li><span>Departure</span><span>' + dateOnly(milestones.departure.date) + countdown + '</span></li>');
+        }
+        var milestonesHtml = milestoneItems.length
+          ? '<ul class="milestone-list">' + milestoneItems.join('') + '</ul>'
+          : '<p class="muted">Dates will appear here once they are confirmed.</p>';
+
+        body.innerHTML =
+          '<p class="status-greeting">Your booking status</p>' +
+          '<div class="status-meta-row">' +
+          '<span>Booking ' + esc(data.booking_id) + '</span>' +
+          (data.destination ? '<span>' + esc(data.destination) + '</span>' : '') +
+          (data.travel_start ? '<span>Travel ' + dateOnly(data.travel_start) + (data.travel_end ? ' to ' + dateOnly(data.travel_end) : '') + '</span>' : '') +
+          (data.pax_count ? '<span>' + esc(data.pax_count) + ' traveller(s)</span>' : '') +
+          '</div>' +
+          '<div class="status-section"><h3>Payment progress</h3>' + obligationsHtml + '</div>' +
+          '<div class="status-section"><h3>Documents</h3>' + documentsHtml + '</div>' +
+          '<div class="status-section"><h3>What happens next</h3>' + milestonesHtml + '</div>' +
+          '<p class="status-note">Amounts reflect verified payments only; deposits being verified may not appear yet. Questions about your booking? Contact Worldmaster International Travel. This page shows your status only — please do not share this link beyond your travel group.</p>';
+      }
+
+      if (!token) {
+        renderError('This status link is missing its code.');
+      } else {
+        fetch('/api/public/booking-status?token=' + encodeURIComponent(token))
+          .then(function (response) { return response.json(); })
+          .then(function (result) {
+            if (result.ok) renderStatus(result.data);
+            else renderError(result.error && result.error.message || 'This status link is invalid or has expired.');
+          })
+          .catch(function () { renderError('No connection — please try again.'); });
+      }
+    })();
+  </script>
+</body>
+</html>

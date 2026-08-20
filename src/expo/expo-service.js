@@ -14,9 +14,15 @@ const crypto = require('node:crypto');
 const { WmitError, errorResult } = require('../core/errors');
 const { toMinorUnits, fromMinorUnits } = require('../core/money');
 const { RateLimiter } = require('../server/rate-limiter');
+const expoAnalytics = require('./expo-analytics');
 
 const EXPO_TAG = 'EXPO-2026';
 const EXPO_NAME = 'Worldmaster International Travel â€” Expo 2026';
+// Data-privacy consent (docs/data-privacy.md section 3): the sign-up form
+// states this purpose near the submit button and the lead record carries it
+// with the capture timestamp. Badge imports carry no explicit consent and
+// therefore stay 'legacy' until staff obtain one.
+const CONSENT_TEXT = 'Worldmaster International Travel will use your details to prepare travel quotations and follow up on this request. Your details are used only for this purpose.';
 const LEAD_STATUSES = ['NEW', 'CONTACTED', 'QUOTED', 'ACCEPTED', 'BOOKED', 'LOST', 'UNREACHABLE'];
 const TERMINAL_LEAD_STATUSES = ['BOOKED', 'LOST', 'UNREACHABLE'];
 const QUOTE_STATUSES = ['DRAFT', 'SENT', 'ACCEPTED', 'DECLINED', 'EXPIRED', 'BOOKED'];
@@ -269,6 +275,14 @@ class ExpoService {
       const derivedPax = adults !== null || children !== null ? (adults === null ? 1 : adults) + (children === null ? 0 : children) : paxCount;
       const notes = value.notes ? String(value.notes).trim().slice(0, 500) : '';
       const expoTag = this.resolveExpoTag(value.expo_tag);
+      // The public sign-up channel requires the displayed consent: a caller
+      // that explicitly withheld it is rejected rather than recorded as
+      // consenting. Badge imports (importLeads) have no form and stay legacy.
+      const isImport = value.source === 'IMPORT';
+      const consent = value.consent === undefined || value.consent === null ? true : Boolean(value.consent);
+      if (!isImport && !consent) {
+        throw new WmitError('CONSENT_REQUIRED', 'Please agree to the data-use notice so we can prepare your quotation.', { consent });
+      }
 
       // Idempotent retries stay free: a kiosk double-tap with the same key
       // replays the original result before any rate-limit accounting, exactly
@@ -296,8 +310,10 @@ class ExpoService {
         meal_plan: mealPlan,
         notes: notes || null,
         status: 'NEW',
-        source: value.source === 'IMPORT' ? 'IMPORT' : 'KIOSK',
+        source: isImport ? 'IMPORT' : 'KIOSK',
         expo_tag: expoTag,
+        consent_captured_at: isImport ? null : this.now(),
+        consent_text: isImport ? null : CONSENT_TEXT,
         idempotency_key: value.idempotency_key || null
       }, this.ctx('PUBLIC_EXPO_KIOSK'));
       if (!created.ok) return created;
@@ -397,6 +413,13 @@ class ExpoService {
       const quotes = this.runtime.list('ExpoQuote', (quote) => quote.expo_lead_id === lead.expo_lead_id);
       return ok({
         lead, tasks, quotes,
+        consent: {
+          // Leads captured before consent capture existed are 'legacy', not
+          // consent-denied: the field simply did not exist yet.
+          status: lead.consent_captured_at ? 'granted' : 'legacy',
+          captured_at: lead.consent_captured_at || null,
+          text: lead.consent_text || null
+        },
         whatsapp_url: lead.mobile ? waLink(lead.mobile) : null,
         viber_url: lead.mobile ? viberLink(lead.mobile) : null
       });
@@ -1143,10 +1166,37 @@ class ExpoService {
       today: today
     }, { action: 'EXPO_DASHBOARD', read_only: true });
   }
+
+  // Cross-event source analytics (funnel per event, day-1/3/7 follow-up
+  // effectiveness, source comparison, monthly trend). Wired like the
+  // dashboard: a read-only expo-service action behind GET /api/expo/analytics,
+  // audited on success and failure.
+  getExpoAnalytics(filters, actor) {
+    try {
+      const value = filters || {};
+      let scopeTag = null;
+      if (value.expo_tag !== undefined && value.expo_tag !== null && String(value.expo_tag).trim() !== '') {
+        scopeTag = String(value.expo_tag).trim().toUpperCase();
+        if (!this.expoByTag(scopeTag) && scopeTag !== EXPO_TAG) {
+          throw new WmitError('EXPO_NOT_FOUND', 'That expo does not exist.', { expo_tag: scopeTag });
+        }
+      }
+      const data = expoAnalytics.buildExpoAnalytics(this.runtime, { expoTag: scopeTag, now: this.now() });
+      this.runtime.audit('GET_EXPO_ANALYTICS', 'ExpoLead', null, this.ctx(actor), {
+        expo_tag: scopeTag,
+        events: data.events.length,
+        leads: data.totals.funnel.leads
+      });
+      return ok(data, { action: 'EXPO_ANALYTICS', read_only: true });
+    } catch (error) {
+      this.runtime.auditFailure('GET_EXPO_ANALYTICS', 'ExpoLead', filters, this.ctx(actor), error);
+      return fail(error);
+    }
+  }
 }
 
 function escapeHtml(value) {
   return String(value === undefined || value === null ? '' : value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 }
 
-module.exports = { ExpoService, EXPO_TAG, EXPO_NAME, LEAD_STATUSES, QUOTE_STATUSES, normalizeMobile, waLink, viberLink, escapeHtml };
+module.exports = { ExpoService, EXPO_TAG, EXPO_NAME, CONSENT_TEXT, LEAD_STATUSES, QUOTE_STATUSES, normalizeMobile, waLink, viberLink, escapeHtml };

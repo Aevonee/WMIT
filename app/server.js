@@ -6,7 +6,7 @@ const path = require('path');
 const zlib = require('zlib');
 const { seedDemoRuntime } = require('../src/application/demo-data');
 const { createPhase1Application } = require('../src/application/phase1');
-const { buildInvoicePdf, buildItineraryPdf, buildReceiptPdf, buildVoucherPdf } = require('../src/documents/client-documents-pdf');
+const { buildInvoicePdf, buildItineraryPdf, buildReceiptPdf, buildVoucherPdf, buildQuotationPdf } = require('../src/documents/client-documents-pdf');
 
 const publicRoot = path.join(__dirname, 'public');
 
@@ -150,6 +150,35 @@ function itineraryEmailText(data) {
   return lines.join('\r\n');
 }
 
+function quotationEmailText(data) {
+  const q = data.quotation || {};
+  const lines = [];
+  lines.push('Dear ' + ((data.client && data.client.name) || 'Client') + ',');
+  lines.push('');
+  lines.push('Your quotation for ' + (q.destination || 'your trip') + (q.travel_start ? ' (' + q.travel_start + (q.travel_end ? ' to ' + q.travel_end : '') + ')' : '') + ' is ready.');
+  lines.push('Total: ' + (q.client_total || '0.00') + ' ' + (q.currency || 'PHP') + (q.valid_until ? ' — valid until ' + q.valid_until : ''));
+  const items = data.items || [];
+  if (items.length) {
+    lines.push('');
+    lines.push('Travel services:');
+    items.forEach((item) => {
+      lines.push('  ' + [item.service_type, item.description, item.quantity !== undefined ? 'x' + item.quantity : '', item.amount + ' ' + (item.currency || q.currency || '')].filter(Boolean).join(' · '));
+    });
+  }
+  if (q.inclusions) {
+    lines.push('');
+    lines.push('Inclusions: ' + String(q.inclusions).replace(/\s+/g, ' ').trim());
+  }
+  if (q.payment_terms) {
+    lines.push('');
+    lines.push('Payment terms: ' + String(q.payment_terms).replace(/\s+/g, ' ').trim());
+  }
+  lines.push('');
+  lines.push('Thank you for considering World Master International Travel.');
+  lines.push('— World Master International Travel');
+  return lines.join('\r\n');
+}
+
 function receiptEmailText(data) {
   const receipt = data.receipt || {};
   const lines = [];
@@ -259,6 +288,15 @@ function createMvpServer(options) {
           }
           return json(res, 404, { ok: false, error: { message: 'Unknown public expo endpoint.' } });
         }
+        // Public booking-status data: the /status/<token> page reads here.
+        // Session-free like the expo quote channel; unknown, expired, and
+        // replaced tokens all answer with the same 404 (no enumeration).
+        if (parsed.pathname === '/api/public/booking-status' && req.method === 'GET') {
+          if (!phase1 || !phase1.runtime) return json(res, 501, { ok: false, error: { code: 'STATUS_UNAVAILABLE', message: 'This server runs without the booking runtime.' } });
+          const result = phase1.runtime.getPublicBookingStatus(parsed.searchParams.get('token'));
+          const statusFor = (outcome) => !outcome.ok && outcome.error && ['BOOKING_STATUS_NOT_FOUND', 'TOKEN_INVALID'].includes(outcome.error.code) ? 404 : outcome.ok ? 200 : 400;
+          return json(res, statusFor(result), result);
+        }
         if (enforceSessions && parsed.pathname !== '/api/health') {
           const session = auth.sessionFor(bearerToken(req));
           if (!session) return json(res, 401, { ok: false, error: { code: 'UNAUTHORIZED', message: 'Sign in to WMIT to use this API.' } });
@@ -325,17 +363,21 @@ function createMvpServer(options) {
           } else if (kind === 'voucher') {
             entityId = String(body.booking_id || '');
             rendered = phase1 && typeof phase1.action === 'function' ? await Promise.resolve(phase1.action({ action: 'getClientVoucherPreview', input: { booking_id: entityId }, actor: req.wmitActor })) : null;
+          } else if (kind === 'quotation') {
+            entityId = String(body.quotation_id || '');
+            rendered = phase1 && typeof phase1.action === 'function' ? await Promise.resolve(phase1.action({ action: 'getClientQuotationPreview', input: { quotation_id: entityId }, actor: req.wmitActor })) : null;
           } else {
-            return json(res, 400, { ok: false, error: { code: 'DOCUMENT_KIND_INVALID', message: 'kind must be invoice, itinerary, receipt, or voucher.' } });
+            return json(res, 400, { ok: false, error: { code: 'DOCUMENT_KIND_INVALID', message: 'kind must be invoice, itinerary, receipt, voucher, or quotation.' } });
           }
           if (!rendered || !rendered.ok) return json(res, 400, rendered || { ok: false, error: { code: 'DOCUMENT_UNAVAILABLE', message: 'The document could not be generated.' } });
           const subjects = {
             invoice: 'World Master International Travel — Statement of Account (' + (rendered.data.invoice && rendered.data.invoice.booking_id || entityId) + ')',
             itinerary: 'World Master International Travel — Travel Itinerary (' + (rendered.data.itinerary && rendered.data.itinerary.destination || entityId) + ')',
             receipt: 'World Master International Travel — Payment Receipt (' + (rendered.data.receipt && rendered.data.receipt.booking_id || entityId) + ')',
-            voucher: 'World Master International Travel — Confirmed Tour Voucher (' + (rendered.data.booking && rendered.data.booking.booking_id || entityId) + ')'
+            voucher: 'World Master International Travel — Confirmed Tour Voucher (' + (rendered.data.booking && rendered.data.booking.booking_id || entityId) + ')',
+            quotation: 'World Master International Travel — Quotation (' + (rendered.data.quotation && rendered.data.quotation.destination || entityId) + ')'
           };
-          const textFor = { invoice: invoiceEmailText, itinerary: itineraryEmailText, receipt: receiptEmailText, voucher: voucherEmailText };
+          const textFor = { invoice: invoiceEmailText, itinerary: itineraryEmailText, receipt: receiptEmailText, voucher: voucherEmailText, quotation: quotationEmailText };
           const delivery = await mailer.send({ to: email, subject: subjects[kind], text: textFor[kind](rendered.data) });
           if (documentAuditLog) {
             try {
@@ -363,11 +405,15 @@ function createMvpServer(options) {
           } else if (kind === 'voucher') {
             entityId = String(body.booking_id || '');
             rendered = phase1 && typeof phase1.action === 'function' ? await Promise.resolve(phase1.action({ action: 'getClientVoucherPreview', input: { booking_id: entityId }, actor: req.wmitActor })) : null;
+          } else if (kind === 'quotation') {
+            entityId = String(body.quotation_id || '');
+            rendered = phase1 && typeof phase1.action === 'function' ? await Promise.resolve(phase1.action({ action: 'getClientQuotationPreview', input: { quotation_id: entityId }, actor: req.wmitActor })) : null;
+            if (rendered && rendered.ok && rendered.data && rendered.data.quotation && !rendered.data.quotation.quotation_id) rendered.data.quotation.quotation_id = entityId;
           } else {
-            return json(res, 400, { ok: false, error: { code: 'DOCUMENT_KIND_INVALID', message: 'kind must be invoice, itinerary, receipt, or voucher.' } });
+            return json(res, 400, { ok: false, error: { code: 'DOCUMENT_KIND_INVALID', message: 'kind must be invoice, itinerary, receipt, voucher, or quotation.' } });
           }
           if (!rendered || !rendered.ok) return json(res, 400, rendered || { ok: false, error: { code: 'DOCUMENT_UNAVAILABLE', message: 'The document could not be generated.' } });
-          const pdfFor = { invoice: buildInvoicePdf, itinerary: buildItineraryPdf, receipt: buildReceiptPdf, voucher: buildVoucherPdf };
+          const pdfFor = { invoice: buildInvoicePdf, itinerary: buildItineraryPdf, receipt: buildReceiptPdf, voucher: buildVoucherPdf, quotation: buildQuotationPdf };
           const pdfResult = pdfFor[kind](rendered.data);
           if (!pdfResult.ok) return json(res, 400, { ok: false, error: { code: 'PDF_RENDER_FAILED', message: pdfResult.error.message } });
           if (documentAuditLog) {
@@ -510,6 +556,9 @@ function createMvpServer(options) {
           if (req.method === 'GET' && parsed.pathname === '/api/expo/dashboard') {
             return json(res, 200, expo.dashboard(Object.fromEntries(parsed.searchParams.entries())));
           }
+          if (req.method === 'GET' && parsed.pathname === '/api/expo/analytics') {
+            return json(res, 200, expo.getExpoAnalytics(Object.fromEntries(parsed.searchParams.entries()), actor));
+          }
           if (req.method === 'POST') {
             const body = await readBody(req);
             const routes = {
@@ -532,6 +581,28 @@ function createMvpServer(options) {
             return json(res, expoStatus(result), result);
           }
           return json(res, 405, { ok: false, error: { message: 'This expo operation only supports GET or POST.' } });
+        }
+        // Accountant CSV download: renders one of the three period export
+        // documents (cashbook / receivables / payables) through the audited
+        // read-only runtime action. BOM + CRLF so Excel opens it cleanly.
+        if (parsed.pathname === '/api/accounting/export.csv' && req.method === 'GET') {
+          const type = String(parsed.searchParams.get('type') || 'cashbook');
+          if (!['cashbook', 'receivables', 'payables'].includes(type)) {
+            return json(res, 400, { ok: false, error: { code: 'EXPORT_TYPE_INVALID', message: 'type must be cashbook, receivables, or payables.' } });
+          }
+          const from = parsed.searchParams.get('from');
+          const to = parsed.searchParams.get('to');
+          const result = await Promise.resolve(phase1.action({ action: 'getAccountantExport', input: { from, to }, actor: req.wmitActor }));
+          if (!result.ok) return json(res, 400, result);
+          const document = result.data[type];
+          const filename = 'wmit-' + type + '-' + result.data.from + '-to-' + result.data.to + '.csv';
+          res.writeHead(200, {
+            'Content-Type': 'text/csv; charset=utf-8',
+            'Content-Disposition': 'attachment; filename="' + filename + '"',
+            'Cache-Control': 'no-store'
+          });
+          res.end(document.bom);
+          return;
         }
         if (req.method === 'GET' && parsed.pathname === '/api/phase1/state') return json(res, 200, await Promise.resolve(phase1.snapshot()));
         if (req.method === 'POST' && parsed.pathname === '/api/phase1/action') {
@@ -576,6 +647,15 @@ function createMvpServer(options) {
       // which reads the token from the path and fetches its own data.
       if (parsed.pathname.startsWith('/q/') && req.method === 'GET') {
         const filePath = path.join(publicRoot, 'quote.html');
+        if (!fs.existsSync(filePath)) return json(res, 404, { ok: false, error: { message: 'Page not found.' } });
+        serveStatic(req, res, filePath);
+        return;
+      }
+      // Public booking-status links: /status/<token> renders the client
+      // status page the same way — the page parses the token from the path
+      // and fetches its own data from the public booking-status endpoint.
+      if (parsed.pathname.startsWith('/status/') && req.method === 'GET') {
+        const filePath = path.join(publicRoot, 'status.html');
         if (!fs.existsSync(filePath)) return json(res, 404, { ok: false, error: { message: 'Page not found.' } });
         serveStatic(req, res, filePath);
         return;

@@ -8,7 +8,7 @@ const { projectCase, projectCases } = require('../phase1/case-projection');
 
 const LOCAL_AUTH = {
   LOCAL_STAFF: [ACTIONS.SELECT_OPTION, ACTIONS.RESERVE_SUPPLIER, ACTIONS.ALLOCATE_PAYMENT, ACTIONS.EDIT_DRAFT_PRICING, ACTIONS.REVISE_QUOTATION, ACTIONS.ACCEPT_QUOTATION, ACTIONS.RECORD_TICKETING, ACTIONS.ISSUE_VOUCHER, ACTIONS.ASSIGN_INTERN_TASK, ACTIONS.REVIEW_INTERN_TASK],
-  LOCAL_MANAGER: [ACTIONS.VERIFY_PAYMENT, ACTIONS.APPROVE_QUOTATION, ACTIONS.APPROVE_PAYABLE, ACTIONS.SUPPLIER_PAYMENT, ACTIONS.CONFIRM_COMMITMENT, ACTIONS.REFUND, ACTIONS.PRICE_OVERRIDE, ACTIONS.CLIENT_ACCEPT_AMENDMENT, ACTIONS.RECONCILE_BOOKING, ACTIONS.CONFIGURE_SETTINGS, ACTIONS.DELETE_TARIFF, ACTIONS.DELETE_SUPPLIER]
+  LOCAL_MANAGER: [ACTIONS.VERIFY_PAYMENT, ACTIONS.APPROVE_QUOTATION, ACTIONS.APPROVE_PAYABLE, ACTIONS.SUPPLIER_PAYMENT, ACTIONS.CONFIRM_COMMITMENT, ACTIONS.REFUND, ACTIONS.PRICE_OVERRIDE, ACTIONS.CLIENT_ACCEPT_AMENDMENT, ACTIONS.RECONCILE_BOOKING, ACTIONS.CONFIGURE_SETTINGS, ACTIONS.DELETE_TARIFF, ACTIONS.DELETE_SUPPLIER, ACTIONS.COMMISSION_APPROVE, ACTIONS.COMMISSION_PAY, ACTIONS.COMMISSION_RULES, ACTIONS.DATA_ERASE]
 };
 
 // Only these runtime methods may be reached through the generic action
@@ -24,7 +24,7 @@ const RUNTIME_ACTION_WHITELIST = new Set([
   'createQuotationItem', 'updateQuotationItem', 'removeQuotationItem', 'reorderQuotationItems',
   'createBooking', 'createBookingItemsFromAcceptedSnapshot', 'confirmCommitment',
   'createBookingItem', 'updateBookingItem', 'createAvailabilityHold', 'updateAvailabilityHold',
-  'recordTicketing', 'issueVoucher', 'createRoomingListEntry', 'createBookingParticipant', 'updateBookingParticipant', 'removeBookingParticipant',
+  'recordTicketing', 'issueVoucher', 'createRoomingListEntry', 'updateRoomingListEntry', 'createBookingParticipant', 'updateBookingParticipant', 'removeBookingParticipant',
   'createSupplierBooking', 'updateSupplierBooking', 'confirmSupplierBookingItem',
   'createClientObligation', 'createBookingPaymentObligations', 'updateSettings',
   'createClientInvoice', 'createPaymentScheduleItem',
@@ -33,13 +33,23 @@ const RUNTIME_ACTION_WHITELIST = new Set([
   'requestRefund', 'executeRefund', 'amendBooking', 'acceptAmendment', 'reconcileBooking',
   'createDocument', 'createTask', 'updateTask', 'createCommunication',
   'createDeparture', 'addDepartureMembership', 'createDepartureReadinessIssue', 'updateDepartureReadinessIssue',
-  'createIntern', 'updateIntern', 'listInterns', 'assignInternTask', 'submitInternTask', 'reviewInternTask'
+  'getTodayOverview', 'globalSearch',
+  'generateReminderDrafts', 'listReminderDrafts', 'discardReminderDraft',
+  'getDepartureReadiness', 'runDepartureReadinessCheck',
+  'getAccountantExport',
+  'recordCommission', 'approveCommission', 'markCommissionPaid', 'listCommissions', 'getCommissionSummary',
+  'addCommissionRule', 'updateCommissionRule', 'listCommissionRules',
+  'recordClientDataConsent', 'getPrivacyOverview', 'eraseClientDocuments', 'runPrivacyRetentionCheck',
+  'issueBookingStatusLink',
+  'createIntern', 'updateIntern', 'listInterns', 'assignInternTask', 'submitInternTask', 'reviewInternTask',
+  'createPackage', 'updatePackage', 'confirmPackage', 'archivePackage', 'listPackages', 'createQuotationFromPackage',
+  'uploadFlyer', 'extractFlyerDraft'
 ]);
 
 function createPhase1Application(options) {
   const opts = options || {};
   const sourceAdapters = opts.sourceAdapters || {};
-  const runtimeOptions = { clock: opts.clock, config: Object.assign({ trustedActors: LOCAL_AUTH }, opts.config || {}) };
+  const runtimeOptions = { clock: opts.clock, config: Object.assign({ trustedActors: LOCAL_AUTH }, opts.config || {}), flyerAdapter: opts.flyerAdapter || null };
   const seededRuntime = () => opts.runtime || createPhase1Runtime(runtimeOptions);
   let runtime = seededRuntime();
   const seedSynthetic = (target) => {
@@ -233,6 +243,7 @@ function createPhase1Application(options) {
           tariffRateUnits: runtime.config && runtime.config.tariffRateUnits || [],
           quotationDefaults: runtime.config && runtime.config.quotationDefaults || {},
           messageTemplates: runtime.config && runtime.config.messageTemplates || [],
+          commissionRules: runtime.config && runtime.config.commissionRules || [],
           expo: {
             id: expo.id || null,
             name: expo.name || null,
@@ -247,7 +258,8 @@ function createPhase1Application(options) {
     action: (body) => call(body && body.action, body && body.input, body && body.actor),
     settings: () => ({
       messageTemplates: (runtime.config && runtime.config.messageTemplates) || [],
-      quotationDefaults: (runtime.config && runtime.config.quotationDefaults) || {}
+      quotationDefaults: (runtime.config && runtime.config.quotationDefaults) || {},
+      commissionRules: (runtime.config && runtime.config.commissionRules) || []
     }),
     resetSyntheticTestCase: () => call('resetSyntheticTestCase', {}, 'LOCAL_STAFF'),
     createClient: (input, actor) => call('createClient', input, actor),
@@ -286,6 +298,7 @@ function createPhase1Application(options) {
     recordTicketing: (input, actor) => call('recordTicketing', input, actor),
     issueVoucher: (input, actor) => call('issueVoucher', input, actor),
     createRoomingListEntry: (input, actor) => call('createRoomingListEntry', input, actor),
+  updateRoomingListEntry: (input, actor) => call('updateRoomingListEntry', input, actor),
     createBookingParticipant: (input, actor) => call('createBookingParticipant', input, actor),
     updateBookingParticipant: (input, actor) => call('updateBookingParticipant', input, actor),
     removeBookingParticipant: (input, actor) => call('removeBookingParticipant', input, actor),
@@ -316,12 +329,41 @@ function createPhase1Application(options) {
     addDepartureMembership: (input, actor) => call('addDepartureMembership', input, actor),
     createDepartureReadinessIssue: (input, actor) => call('createDepartureReadinessIssue', input, actor),
     updateDepartureReadinessIssue: (input, actor) => call('updateDepartureReadinessIssue', input, actor),
+    getTodayOverview: (input, actor) => call('getTodayOverview', input, actor),
+    globalSearch: (input, actor) => call('globalSearch', input, actor),
+    generateReminderDrafts: (input, actor) => call('generateReminderDrafts', input, actor),
+    listReminderDrafts: (input, actor) => call('listReminderDrafts', input, actor),
+    discardReminderDraft: (input, actor) => call('discardReminderDraft', input, actor),
+    getDepartureReadiness: (input, actor) => call('getDepartureReadiness', input, actor),
+    runDepartureReadinessCheck: (input, actor) => call('runDepartureReadinessCheck', input, actor),
+    getAccountantExport: (input, actor) => call('getAccountantExport', input, actor),
+    recordCommission: (input, actor) => call('recordCommission', input, actor),
+    approveCommission: (input, actor) => call('approveCommission', input, actor),
+    markCommissionPaid: (input, actor) => call('markCommissionPaid', input, actor),
+    listCommissions: (input, actor) => call('listCommissions', input, actor),
+    getCommissionSummary: (input, actor) => call('getCommissionSummary', input, actor),
+    addCommissionRule: (input, actor) => call('addCommissionRule', input, actor),
+    updateCommissionRule: (input, actor) => call('updateCommissionRule', input, actor),
+    listCommissionRules: (input, actor) => call('listCommissionRules', input, actor),
+    recordClientDataConsent: (input, actor) => call('recordClientDataConsent', input, actor),
+    getPrivacyOverview: (input, actor) => call('getPrivacyOverview', input, actor),
+    eraseClientDocuments: (input, actor) => call('eraseClientDocuments', input, actor),
+    runPrivacyRetentionCheck: (input, actor) => call('runPrivacyRetentionCheck', input, actor),
+    issueBookingStatusLink: (input, actor) => call('issueBookingStatusLink', input, actor),
     createIntern: (input, actor) => call('createIntern', input, actor),
     updateIntern: (input, actor) => call('updateIntern', input, actor),
     listInterns: (input, actor) => call('listInterns', input, actor),
     assignInternTask: (input, actor) => call('assignInternTask', input, actor),
     submitInternTask: (input, actor) => call('submitInternTask', input, actor),
-    reviewInternTask: (input, actor) => call('reviewInternTask', input, actor)
+    reviewInternTask: (input, actor) => call('reviewInternTask', input, actor),
+    createPackage: (input, actor) => call('createPackage', input, actor),
+    updatePackage: (input, actor) => call('updatePackage', input, actor),
+    confirmPackage: (input, actor) => call('confirmPackage', input, actor),
+    archivePackage: (input, actor) => call('archivePackage', input, actor),
+    listPackages: (input, actor) => call('listPackages', input, actor),
+    createQuotationFromPackage: (input, actor) => call('createQuotationFromPackage', input, actor),
+    uploadFlyer: (input, actor) => call('uploadFlyer', input, actor),
+    extractFlyerDraft: (input, actor) => call('extractFlyerDraft', input, actor)
   };
 }
 

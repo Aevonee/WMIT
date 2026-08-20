@@ -82,14 +82,15 @@ const TAB_LOADERS = {
   leads: () => loadLeads(),
   packages: () => loadPackages(),
   quotes: () => loadQuotes().then(loadQuoteForm),
-  expos: () => loadExpos()
+  expos: () => loadExpos(),
+  analytics: () => loadAnalytics()
 };
 
 document.querySelectorAll('.nav a[data-tab]').forEach((link) => {
   link.addEventListener('click', (event) => {
     event.preventDefault();
     document.querySelectorAll('.nav a[data-tab]').forEach((other) => other.classList.toggle('active', other === link));
-    ['dashboard', 'followups', 'leads', 'packages', 'quotes', 'expos'].forEach((name) => {
+    ['dashboard', 'followups', 'leads', 'packages', 'quotes', 'expos', 'analytics'].forEach((name) => {
       $('tab-' + name).style.display = name === link.dataset.tab ? 'block' : 'none';
     });
     guard(TAB_LOADERS[link.dataset.tab])();
@@ -104,8 +105,7 @@ $('nav-logout').addEventListener('click', async () => {
 });
 
 // Booth lock: a tablet left on a table must not stay signed in. Five minutes
-// without a touch signs the session out server-side; the Lock button does it
-// on demand.
+// without a touch signs the session out server-side.
 const BOOTH_IDLE_MS = 5 * 60 * 1000;
 let lastBoothActivity = Date.now();
 ['click', 'keydown', 'touchstart', 'pointerdown'].forEach((name) => {
@@ -118,14 +118,6 @@ setInterval(() => {
     window.location.href = 'login.html?next=expo-console.html&reason=idle';
   }
 }, 15000);
-
-const lockButton = document.createElement('button');
-lockButton.className = 'secondary';
-lockButton.id = 'nav-lock';
-lockButton.textContent = 'Lock';
-lockButton.title = 'Sign out now — use before leaving the booth tablet unattended';
-$('nav-logout').parentNode.insertBefore(lockButton, $('nav-logout'));
-lockButton.addEventListener('click', () => $('nav-logout').click());
 
 // ------------------------------------------------------------- dashboard
 
@@ -451,6 +443,42 @@ $('expo-create').addEventListener('click', guard(async () => {
   await loadExpoBar();
 }));
 $('refresh-expos').addEventListener('click', guard(loadExpos));
+
+// -------------------------------------------------------------- analytics
+
+// Pure-CSS bars: width percentages on a div, no chart library (the repo is
+// zero-dependency by rule). Max-relative so the largest value fills the row.
+function analyticsBar(value, max, color) {
+  const width = max > 0 ? Math.max(2, Math.round((value / max) * 100)) : 0;
+  return '<div style="margin-top:3px;height:9px;border-radius:4px;background:' + color + ';width:' + width + '%"></div>';
+}
+
+async function loadAnalytics() {
+  const data = await api('/api/expo/analytics');
+  const totals = data.totals;
+  $('analytics-metrics').innerHTML = [
+    ['Events', totals.events], ['Leads (all events)', totals.funnel.leads], ['Quotes sent', totals.funnel.quotes_sent],
+    ['Accepted', totals.funnel.accepted], ['Booked', totals.funnel.booked], ['Revenue (PHP)', totals.revenue.php_total]
+  ].map(([label, value]) => '<div class="metric"><small>' + esc(label) + '</small><strong>' + esc(value) + '</strong></div>').join('') +
+    '<div class="metric" style="grid-column:1/-1"><small>Consent at capture</small><strong style="font-size:15px">' + esc(totals.consent.granted) + ' granted · ' + esc(totals.consent.legacy) + ' legacy</strong><small>Legacy leads were captured before consent recording existed — not consent-denied.</small></div>';
+
+  const funnelRows = data.events.map((event) => '<tr><td><b>' + esc(event.name || event.expo_tag) + '</b><br><span class="muted">' + esc(event.expo_tag) + (event.start_date ? ' · ' + esc(event.start_date) : '') + '</span></td>' +
+    '<td>' + esc(event.funnel.leads) + '</td><td>' + esc(event.funnel.quotes_sent) + '</td><td>' + esc(event.funnel.accepted) + '</td><td>' + esc(event.funnel.booked) + '</td><td>' + esc(event.revenue.php_total) + '</td>' +
+    '<td>' + esc(event.consent.granted + ' / ' + event.consent.legacy) + '</td><td>' + (event.status ? pill(event.status) : '<span class="muted">legacy</span>') + '</td></tr>').join('');
+  $('analytics-funnel-wrap').innerHTML = tableWrap(funnelRows, '<th>Event</th><th>Leads</th><th>Quotes</th><th>Accepted</th><th>Booked</th><th>Revenue PHP</th><th>Consent granted/legacy</th><th>Status</th>', 'No expo events yet.');
+
+  const followRows = data.follow_up_effectiveness.map((row) => '<tr><td><b>Day ' + esc(row.day) + '</b></td><td>' + esc(row.tasks) + '</td><td>' + esc(row.completed) + '</td><td>' + esc(row.open) + '</td><td>' + esc(row.cancelled) + '</td><td>' + esc(row.leads_completed) + '</td><td>' + esc(row.leads_booked) + '</td><td>' + esc(row.booked_percent) + '%</td></tr>').join('');
+  $('analytics-followup-wrap').innerHTML = '<h3 style="margin-top:0">Follow-up effectiveness (day 1 · 3 · 7)</h3><p class="muted">Bookings among leads whose day-N follow-up was completed, versus all follow-up task outcomes.</p>' + tableWrap(followRows, '<th>Step</th><th>Tasks</th><th>Completed</th><th>Open</th><th>Cancelled</th><th>Leads w/ completed</th><th>Booked</th><th>Booked %</th>', 'No follow-up tasks yet.');
+
+  const maxBookings = Math.max(1, ...data.source_comparison.map((row) => row.bookings));
+  const sourceRows = data.source_comparison.map((row) => '<tr><td><b>' + esc(row.source) + '</b></td><td>' + esc(row.bookings) + analyticsBar(row.bookings, maxBookings, '#3679b6') + '</td><td>' + esc(row.revenue.php_total) + '</td></tr>').join('');
+  $('analytics-source-wrap').innerHTML = tableWrap(sourceRows, '<th>Source</th><th>Bookings</th><th>Revenue PHP</th>', 'No bookings yet.') + '<p class="muted">Expo counts only bookings traceable to an expo lead; other bookings use their recorded source, unrecorded ones count as other.</p>';
+
+  const maxMonth = Math.max(1, ...data.monthly_trend.map((row) => Math.max(row.leads, row.conversions)));
+  const monthRows = data.monthly_trend.map((row) => '<tr><td>' + esc(row.month) + '</td><td>' + esc(row.leads) + analyticsBar(row.leads, maxMonth, '#3679b6') + '</td><td>' + esc(row.conversions) + analyticsBar(row.conversions, maxMonth, '#176237') + '</td></tr>').join('');
+  $('analytics-month-wrap').innerHTML = tableWrap(monthRows, '<th>Month</th><th>Leads</th><th>Conversions</th>', 'No lead history yet.');
+}
+$('refresh-analytics').addEventListener('click', guard(loadAnalytics));
 
 // -------------------------------------------------------------- event bar
 
