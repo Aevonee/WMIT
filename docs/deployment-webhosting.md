@@ -127,7 +127,11 @@ console output, including the startup banner with scheduler status.
 ## Keep-alive and the nightly jobs
 
 The scheduler (nightly verified backups 01:15 Manila, daily digest, expo
-follow-ups every 15 minutes) runs inside the Node process. Two habits keep it
+follow-ups every 15 minutes, departure-readiness check 06:30 Manila) runs
+inside the Node process. The departure-readiness job re-verifies every
+departure in the next 14 days — paid in full, tickets issued, vouchers
+issued, documents complete — and raises a follow-up task for each failure
+(never duplicates an open task). Two habits keep it
 reliable on shared hosting:
 
 - **Uptime monitor:** sign up at uptimerobot.com (free), add an HTTP monitor
