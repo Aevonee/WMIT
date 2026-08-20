@@ -1,9 +1,49 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const { spawn } = require('node:child_process');
+const net = require('node:net');
+const path = require('node:path');
 
-const port = Number(process.env.WMIT_MVP_PORT || 3000);
-const baseUrl = 'http://127.0.0.1:' + port;
+// Self-hosting mode (default): boot a throwaway MVP on an ephemeral port so
+// `npm run acceptance` passes even when port 3000 is occupied by another WMIT
+// server. WMIT_MVP_PORT=<n> instead targets an already-running server.
+let baseUrl = 'http://127.0.0.1:' + Number(process.env.WMIT_MVP_PORT || 3000);
+
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const probe = net.createServer();
+    probe.unref();
+    probe.on('error', reject);
+    probe.listen(0, '127.0.0.1', () => {
+      const port = probe.address().port;
+      probe.close(() => resolve(port));
+    });
+  });
+}
+
+async function waitForServer(url, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(url + '/api/phase1/state', { cache: 'no-store' });
+      if (response.ok) return;
+    } catch (_) { /* retry until the deadline: connection refused means not up yet */ }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error('The local MVP server did not become reachable within ' + timeoutMs + ' ms at ' + url);
+}
+
+function launchMvp(port) {
+  const child = spawn(process.execPath, [path.join(__dirname, 'run-mvp.js')], {
+    env: Object.assign({}, process.env, { WMIT_MVP_PORT: String(port) }),
+    stdio: ['ignore', 'ignore', 'pipe']
+  });
+  let bootLog = '';
+  child.stderr.on('data', (chunk) => { bootLog = (bootLog + chunk).slice(-4000); });
+  child.bootLog = () => bootLog;
+  return child;
+}
 
 async function request(path, options) {
   const response = await fetch(baseUrl + path, Object.assign({
@@ -35,9 +75,33 @@ function count(records, type, predicate) {
 }
 
 async function main() {
-  for (const path of ['/', '/operations.html', '/operations.js']) {
-    const response = await fetch(baseUrl + path, { cache: 'no-store' });
-    assert.equal(response.status, 200, path + ' should be available.');
+  const externalPort = Number(process.env.WMIT_MVP_PORT || 0);
+  let child = null;
+  if (externalPort) {
+    await waitForServer(baseUrl, 5000);
+  } else {
+    const port = await freePort();
+    baseUrl = 'http://127.0.0.1:' + port;
+    child = launchMvp(port);
+    try {
+      await waitForServer(baseUrl, 20000);
+    } catch (error) {
+      child.kill();
+      throw new Error(error.message + (child.bootLog() ? '\nServer output:\n' + child.bootLog() : ''));
+    }
+    console.log('Acceptance: temporary MVP server on port ' + port + '.');
+  }
+  try {
+    await runWalkthrough();
+  } finally {
+    if (child) child.kill();
+  }
+}
+
+async function runWalkthrough() {
+  for (const assetPath of ['/', '/operations.html', '/operations.js']) {
+    const response = await fetch(baseUrl + assetPath, { cache: 'no-store' });
+    assert.equal(response.status, 200, assetPath + ' should be available.');
   }
 
   await action('resetSyntheticTestCase', {}, 'LOCAL_STAFF');

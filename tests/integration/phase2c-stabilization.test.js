@@ -205,6 +205,40 @@ test('rooming groups enforce SGL, TWN, DBL, TRP, and QUAD capacities', () => {
   assert.equal(mismatch.error.code, 'ROOMING_GROUP_OCCUPANCY_MISMATCH');
 });
 
+test('rooming list entries can be edited, confirmed, and re-grouped under the same rules', () => {
+  const { runtime, client } = setup();
+  const inquiry = runtime.createInquiry({ client_id: client.client_id, requirements: { destination: 'Tokyo', travel_start: '2026-11-01', travel_end: '2026-11-05', adults: 1 } }, ctx()).data;
+  const quote = runtime.createQuotation({ client_id: client.client_id, inquiry_id: inquiry.inquiry_id, destination: 'Tokyo', supplier_cost_total: '100.00', currency: 'PHP' }, ctx()).data;
+  assert.equal(makeQuotationApprovable(runtime, quote, ctx()).ok, true);
+  assert.equal(runtime.approveQuotation({ quotation_id: quote.quotation_id }, ctx('manager')).ok, true);
+  assert.equal(runtime.acceptQuotation({ quotation_id: quote.quotation_id, accepted_by: client.client_id }, ctx()).ok, true);
+  const lead = runtime.createPerson({ display_name: 'Edit lead' }, ctx()).data;
+  const booking = runtime.createBooking({ quotation_id: quote.quotation_id, client_id: client.client_id, lead_pax_person_id: lead.person_id }, ctx()).data;
+  const second = runtime.createPerson({ display_name: 'Edit second' }, ctx()).data;
+  const third = runtime.createPerson({ display_name: 'Edit third' }, ctx()).data;
+  [second, third].forEach((person) => assert.equal(runtime.createBookingParticipant({ booking_id: booking.booking_id, person_id: person.person_id, roles: ['TRAVELER'] }, ctx()).ok, true));
+  const entryA = runtime.createRoomingListEntry({ booking_id: booking.booking_id, person_id: lead.person_id, room_label: 'A', occupancy: 'TWN' }, ctx()).data;
+  const entryB = runtime.createRoomingListEntry({ booking_id: booking.booking_id, person_id: second.person_id, room_label: 'A', occupancy: 'TWN' }, ctx()).data;
+  const mismatchOnEdit = runtime.updateRoomingListEntry({ rooming_list_entry_id: entryB.rooming_list_entry_id, occupancy: 'TRP' }, ctx());
+  assert.equal(mismatchOnEdit.error.code, 'ROOMING_GROUP_OCCUPANCY_MISMATCH');
+  const confirmed = runtime.updateRoomingListEntry({ rooming_list_entry_id: entryA.rooming_list_entry_id, state: 'CONFIRMED' }, ctx());
+  assert.equal(confirmed.ok, true);
+  assert.equal(confirmed.data.state, 'CONFIRMED');
+  const renamed = runtime.updateRoomingListEntry({ rooming_list_entry_id: entryA.rooming_list_entry_id, room_label: 'B' }, ctx());
+  assert.equal(renamed.ok, true);
+  assert.equal(renamed.data.room_label, 'B');
+  const invalidState = runtime.updateRoomingListEntry({ rooming_list_entry_id: entryA.rooming_list_entry_id, state: 'PAID' }, ctx());
+  assert.equal(invalidState.error.code, 'INVALID_ROOMING_STATE');
+  const entryC = runtime.createRoomingListEntry({ booking_id: booking.booking_id, person_id: third.person_id, room_label: 'B', occupancy: 'TWN' }, ctx());
+  assert.equal(entryC.ok, true);
+  const capacityOnEdit = runtime.updateRoomingListEntry({ rooming_list_entry_id: entryB.rooming_list_entry_id, room_label: 'B' }, ctx());
+  assert.equal(capacityOnEdit.error.code, 'ROOMING_CAPACITY_EXCEEDED');
+  const cancelled = runtime.updateRoomingListEntry({ rooming_list_entry_id: entryC.data.rooming_list_entry_id, state: 'CANCELLED' }, ctx());
+  assert.equal(cancelled.ok, true);
+  const afterCancel = runtime.updateRoomingListEntry({ rooming_list_entry_id: entryB.rooming_list_entry_id, room_label: 'B' }, ctx());
+  assert.equal(afterCancel.ok, true);
+});
+
 test('Booking Items, Supplier Bookings, and Supplier Payables validate relationships and money', () => {
   const { runtime, client, supplier } = setup();
   const otherSupplier = runtime.createSupplier({ display_name: 'Other Supplier' }, ctx()).data;
@@ -252,7 +286,7 @@ test('manual selected-option cost overrides require explicit authorization', () 
 
 test('Operations UI sends an idempotency key for allocation retries', () => {
   const source = fs.readFileSync('app/public/operations.js', 'utf8');
-  assert.match(source, /api\('allocatePayment', \{ client_payment_id: records\.payment\.client_payment_id, idempotency_key:/);
+  assert.match(source, /api\('allocatePayment', \{ client_payment_id: payment\.client_payment_id, idempotency_key:/);
 });
 
 test('Operations UI sends an idempotency key for Supplier Payment retries', () => {

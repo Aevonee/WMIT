@@ -88,7 +88,7 @@ The repeatable server-level smoke path can be run with `npm run acceptance` whil
 
 ## Verification evidence
 
-- Automated suite: **116 passed, 0 failed**.
+- Automated suite: **316 passed, 0 failed** (re-run August 20 2026).
 - Server smoke check: `GET /` returns HTTP 200 from the local MVP server.
 - Live smoke check: Inquiry creation, tariff review, repeated matching, and state inspection returned one Commercial Option.
 - Matrix regression coverage includes duration ranges, child age bands, calculated quantities, and explicit mismatch reasons.

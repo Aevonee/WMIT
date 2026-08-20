@@ -1,8 +1,11 @@
+@font-face{font-family:'IBM Plex Sans';font-style:normal;font-weight:400;font-display:swap;src:url('/assets/fonts/ibm-plex-sans-400.woff2') format('woff2')}
+@font-face{font-family:'IBM Plex Sans';font-style:normal;font-weight:700;font-display:swap;src:url('/assets/fonts/ibm-plex-sans-700.woff2') format('woff2')}
 :root { color-scheme: light; --ink:#17212b; --muted:#637083; --line:#dce3ea; --blue:#1264a3; --blue-dark:#0b4775; --surface:#fff; --wash:#f4f7fa; --green:#176b48; --amber:#8c5b00; }
 * { box-sizing:border-box; }
 body { margin:0; background:var(--wash); color:var(--ink); font:14px/1.45 'IBM Plex Sans', system-ui, -apple-system, Segoe UI, sans-serif; }
 .topbar { background:#102a43; color:#fff; display:flex; justify-content:space-between; align-items:center; gap:18px; padding:20px max(24px,calc((100vw - 1280px)/2)); } .topbar-actions { display:flex; align-items:center; gap:18px; } .quick-nav { display:flex; gap:12px; } .quick-nav a { color:#d9e8f5; text-decoration:none; font-size:12px; font-weight:700; } .quick-nav a:hover { color:#fff; text-decoration:underline; }
 h1,h2,h3,p { margin:0; } h1 { font-size:25px; letter-spacing:-.02em; } h2 { font-size:20px; } h3 { font-size:15px; margin-bottom:12px; }
+.client-doc-paper h3, .client-preview h3 { font-size:16px; font-weight:700; margin:26px 0 12px; padding-bottom:8px; border-bottom:1px solid var(--line); }
 main { max-width:1280px; margin:0 auto; padding:24px; } .eyebrow { display:block; color:#7f93a8; font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; } .topbar .eyebrow { color:#a9c4dd; }
 .panel { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:20px; margin-top:20px; box-shadow:0 2px 8px #142b3a08; scroll-margin-top:18px; } .section-heading { display:flex; justify-content:space-between; margin-bottom:16px; } .section-help { color:var(--muted); margin-top:5px; } .muted { color:var(--muted); }
 .dashboard-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; } .metric { background:#fff; border:1px solid var(--line); border-radius:10px; padding:16px; } .metric strong { display:block; font-size:28px; margin-top:4px; } .metric small { color:var(--muted); }
@@ -18,3 +21,34 @@ button { border:0; border-radius:6px; background:var(--blue); color:#fff; cursor
 @media (max-width:700px) { .quote-label { font-size:19px; } .quote-meta { grid-template-columns:1fr; } }
 @media print { @page { size:A4; margin:15mm; } body { background:#fff; } body > *:not(main), main > *:not(#commercial-panel), #commercial-panel > *:not(#quotation-editor), #quotation-editor > *:not(#quotation-preview), .preview-actions { display:none !important; } #quotation-preview, .print-sheet { display:block !important; } .print-sheet { max-width:none; border:0; box-shadow:none; margin:0; padding:0; } .quote-header { display:block; } .wmit-logo { max-width:100%; max-height:none; } .preview-table thead { display:table-header-group; } .preview-table tr, .preview-total, .quote-columns, .quote-terms, .itinerary-day-preview { break-inside:avoid; } .quote-final-page.long { break-inside:avoid; min-height:240mm; display:flex; flex-direction:column; } .quote-final-page.long .quote-footer { margin-top:auto; } .quote-header { break-after:avoid; } }
 .arrive-next-day { color: var(--status-bad-text); font-weight: 700; white-space: nowrap; }
+
+/* Supplier combobox (typeahead) — operations.js injects these same rules for
+   operations.html, which inlines its design system and does not link this file.
+   Keep both copies identical when editing. */
+.supplier-combobox { position: relative; }
+.supplier-combobox-input { width: 100%; padding: 9px 24px 9px 9px; border: 1px solid var(--rule-input, #c8d2df); border-radius: 6px; font: inherit; background: var(--surface, #fff); color: var(--ledger-ink, #172334); }
+.supplier-combobox::after { content: ""; position: absolute; right: 11px; top: 50%; width: 0; height: 0; margin-top: -2px; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid var(--sea-fog, #607085); pointer-events: none; }
+.supplier-combobox.open::after { margin-top: -3px; border-top: 0; border-bottom: 5px solid var(--sea-fog, #607085); }
+.supplier-combobox.open .supplier-combobox-input { border-color: var(--passage-blue, #3679b6); }
+.supplier-combobox-list { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 30; max-height: 320px; overflow-y: auto; overscroll-behavior: contain; background: var(--surface, #fff); border: 1px solid var(--rule, #d9e2ec); border-radius: 8px; box-shadow: 0 14px 34px rgba(23, 35, 52, .25); padding: 4px 0; }
+.supplier-combobox-option { display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--rule-hair, #e6ebf0); }
+.supplier-combobox-option:last-child { border-bottom: 0; }
+.supplier-combobox-option.active, .supplier-combobox-option:hover { background: var(--passage-tint, #f5f9fd); }
+.supplier-combobox-name { font-weight: 700; font-size: 13.5px; color: var(--ledger-ink, #172334); }
+.supplier-combobox-context { font-size: 11.5px; color: var(--sea-fog, #607085); }
+.supplier-combobox-empty { padding: 10px 12px; font-size: 12.5px; color: var(--sea-fog, #607085); }
+.supplier-combobox-native { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+.service-supplier-control { display: grid; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--rule-hair, #e6ebf0); }
+.service-supplier-control > label { display: block; color: var(--label-ink, #56677a); font-size: .6875rem; font-weight: 800; }
+.service-supplier-control.required-attention { border: 1px solid var(--required-rule, #c62828); border-radius: 7px; background: var(--required-wash, #fff5f5); }
+.service-supplier-control.required-attention .supplier-combobox-input { border: 2px solid var(--required-rule, #c62828); box-shadow: 0 0 0 2px var(--required-ring, rgba(198, 40, 40, 0.15)); }
+.service-supplier-control.required-attention::after { content: "Required"; color: var(--required-text, #a61b1b); font-size: .6875rem; font-weight: 700; }
+
+/* Allocation section (finance tab) */
+.allocation-section { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--rule-hair, #e6ebf0); display: grid; gap: 10px; }
+.allocation-rows { display: grid; gap: 4px; }
+.allocation-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 7px 12px; background: var(--passage-tint, #f5f9fd); border: 1px solid var(--rule-hair, #e6ebf0); border-radius: 6px; }
+.allocation-amt { font-weight: 700; font-size: 13.5px; color: var(--ledger-ink, #172334); font-variant-numeric: tabular-nums; }
+.allocation-where { font-size: 12px; color: var(--sea-fog, #607085); }
+.allocation-form { display: grid; gap: 12px; padding: 12px; border: 1px solid var(--rule, #d9e2ec); border-radius: 8px; background: var(--surface, #fff); }
+.allocation-hint { font-size: 12.5px; color: var(--sea-fog, #607085); margin: 0; }
