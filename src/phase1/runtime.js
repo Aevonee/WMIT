@@ -9,6 +9,7 @@ const { toMinorUnits, fromMinorUnits } = require('../core/money');
 const quotationEditor = require('../application/quotation-editor');
 const caseProjection = require('./case-projection');
 const todayOverview = require('./today-overview');
+const salesOverview = require('./sales-overview');
 const departureReadiness = require('./departure-readiness');
 const reminderDrafts = require('./reminder-drafts');
 const accountantExport = require('./accountant-export');
@@ -2496,6 +2497,22 @@ class Phase1Runtime {
       return ok(result, { action: 'GLOBAL_SEARCH', read_only: true });
     } catch (error) {
       this.auditFailure('GLOBAL_SEARCH', 'GlobalSearch', input, ctx, error);
+      return fail(error);
+    }
+  }
+  getSalesOverview(input, context) {
+    const ctx = this.context(context);
+    try {
+      const value = input || {};
+      const overview = salesOverview.buildSalesOverview(this, { asOf: value.asOf, now: this.now() });
+      this.audit('GET_SALES_OVERVIEW', 'SalesOverview', null, ctx, {
+        asOf: overview.asOf,
+        packages: overview.packagesBooked.count,
+        travelers_this_month: overview.travelersThisMonth.travelers
+      });
+      return ok(overview, { action: 'GET_SALES_OVERVIEW', read_only: true });
+    } catch (error) {
+      this.auditFailure('GET_SALES_OVERVIEW', 'SalesOverview', input, ctx, error);
       return fail(error);
     }
   }

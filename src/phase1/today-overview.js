@@ -13,6 +13,7 @@ const GLOBAL_SEARCH_VERSION = 'V1';
 
 const PAYMENTS_DUE_WINDOW_DAYS = 7;
 const DEPARTURES_WINDOW_DAYS = 30;
+const QUOTE_EXPIRY_WINDOW_DAYS = 7;
 const GLOBAL_SEARCH_MIN_LENGTH = 2;
 const GLOBAL_SEARCH_MAX_RESULTS = 8;
 
@@ -36,7 +37,7 @@ function asArray(value) {
 function collectEntities(source) {
   if (source && typeof source.list === 'function') {
     const names = [
-      'Client', 'Inquiry', 'Quotation', 'Booking', 'Supplier', 'SupplierBooking',
+      'Client', 'Inquiry', 'Quotation', 'QuotationAcceptance', 'Booking', 'Supplier', 'SupplierBooking',
       'ClientObligation', 'PaymentScheduleItem', 'ClientPayment', 'PaymentAllocation',
       'Task', 'Document', 'Departure', 'DepartureMembership', 'DepartureReadinessIssue', 'ExpoLead'
     ];
@@ -257,32 +258,98 @@ function documentsPendingReviewSection(entities) {
   return { count: items.length, items };
 }
 
+// ---------------------------------------------------------------------------
+// Section 6 — draft quotations with a priced client total, awaiting the
+// owner's approval decision. Mirrors the selection the old Dashboard queue
+// performed client-side; the logic now lives server-side.
+// ---------------------------------------------------------------------------
+
+function quotesAwaitingApprovalSection(entities) {
+  const clientsById = new Map(records(entities, 'Client').map((client) => [client.client_id, client]));
+  const items = records(entities, 'Quotation')
+    .filter((quote) => upper(quote.status) === 'DRAFT' && moneyOrZero(quote.client_total) > 0n)
+    .map((quote) => {
+      const client = clientsById.get(quote.client_id) || null;
+      return {
+        quotationId: quote.quotation_id,
+        clientId: quote.client_id || null,
+        clientName: client && (client.display_name || client.legal_name) || quote.client_id || null,
+        destination: quote.destination || null,
+        clientTotal: String(quote.client_total),
+        currency: quote.currency || null,
+        inquiryId: quote.inquiry_id || null
+      };
+    });
+  items.sort((a, b) => String(a.quotationId).localeCompare(String(b.quotationId)));
+  return { count: items.length, items };
+}
+
+// ---------------------------------------------------------------------------
+// Section 7 — approved quotations the client has not accepted whose validity
+// window ends within 7 days (or has already lapsed: "expired").
+// ---------------------------------------------------------------------------
+
+function quotesExpiringSoonSection(entities, today, horizon) {
+  const clientsById = new Map(records(entities, 'Client').map((client) => [client.client_id, client]));
+  const acceptedQuoteIds = new Set(records(entities, 'QuotationAcceptance')
+    .filter((acceptance) => upper(acceptance.state || 'ACCEPTED') === 'ACCEPTED')
+    .map((acceptance) => acceptance.quotation_id));
+  const items = records(entities, 'Quotation')
+    .filter((quote) => upper(quote.status) === 'APPROVED' && !acceptedQuoteIds.has(quote.quotation_id))
+    .map((quote) => ({ quote, validUntil: dateOnly(quote.valid_until) }))
+    .filter((entry) => entry.validUntil && entry.validUntil <= horizon)
+    .map((entry) => {
+      const quote = entry.quote;
+      const client = clientsById.get(quote.client_id) || null;
+      return {
+        quotationId: quote.quotation_id,
+        clientId: quote.client_id || null,
+        clientName: client && (client.display_name || client.legal_name) || quote.client_id || null,
+        destination: quote.destination || null,
+        validUntil: entry.validUntil,
+        expired: entry.validUntil < today,
+        currency: quote.currency || null,
+        clientTotal: String(quote.client_total || ''),
+        inquiryId: quote.inquiry_id || null
+      };
+    });
+  items.sort((a, b) => a.validUntil.localeCompare(b.validUntil) || String(a.quotationId).localeCompare(String(b.quotationId)));
+  return { count: items.length, items };
+}
+
 function buildTodayOverview(source, options) {
   const opts = options || {};
   const today = resolveAsOf(opts.asOf, opts.now);
   const horizonPayments = dateOnlyPlusDays(today, PAYMENTS_DUE_WINDOW_DAYS);
   const horizonDepartures = dateOnlyPlusDays(today, DEPARTURES_WINDOW_DAYS);
+  const horizonQuotes = dateOnlyPlusDays(today, QUOTE_EXPIRY_WINDOW_DAYS);
   const entities = collectEntities(source);
   const paymentsDue = paymentsDueSection(entities, today, horizonPayments);
   const departures = departuresSection(entities, today, horizonDepartures);
   const supplierConfirmations = supplierConfirmationsSection(entities);
   const followUpsDue = followUpsDueSection(entities, today);
   const documentsPendingReview = documentsPendingReviewSection(entities);
+  const quotesAwaitingApproval = quotesAwaitingApprovalSection(entities);
+  const quotesExpiringSoon = quotesExpiringSoonSection(entities, today, horizonQuotes);
   return {
     version: TODAY_OVERVIEW_VERSION,
     today,
-    windows: { paymentsDueDays: PAYMENTS_DUE_WINDOW_DAYS, departuresDays: DEPARTURES_WINDOW_DAYS },
+    windows: { paymentsDueDays: PAYMENTS_DUE_WINDOW_DAYS, departuresDays: DEPARTURES_WINDOW_DAYS, quoteExpiryDays: QUOTE_EXPIRY_WINDOW_DAYS },
     paymentsDue,
     departures,
     supplierConfirmations,
     followUpsDue,
     documentsPendingReview,
+    quotesAwaitingApproval,
+    quotesExpiringSoon,
     counts: {
       paymentsDue: paymentsDue.count,
       departures: departures.count,
       supplierConfirmations: supplierConfirmations.count,
       followUpsDue: followUpsDue.count,
-      documentsPendingReview: documentsPendingReview.count
+      documentsPendingReview: documentsPendingReview.count,
+      quotesAwaitingApproval: quotesAwaitingApproval.count,
+      quotesExpiringSoon: quotesExpiringSoon.count
     }
   };
 }
@@ -422,6 +489,7 @@ module.exports = {
   GLOBAL_SEARCH_VERSION,
   PAYMENTS_DUE_WINDOW_DAYS,
   DEPARTURES_WINDOW_DAYS,
+  QUOTE_EXPIRY_WINDOW_DAYS,
   GLOBAL_SEARCH_MIN_LENGTH,
   GLOBAL_SEARCH_MAX_RESULTS,
   buildTodayOverview,

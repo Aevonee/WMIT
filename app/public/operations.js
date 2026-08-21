@@ -756,83 +756,15 @@ window.wmitSearchResults = function (query) {
   return results;
 };
 
-function dashboardQueuesMarkup() {
-  const todayIso = new Date().toISOString().slice(0, 10);
-  const weekAheadIso = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
-  const rows = [];
-
-  list('Quotation', (quote) => quote.status === 'DRAFT' && Number(quote.client_total) > 0).forEach((quote) => {
-    const client = latest('Client', (item) => item.client_id === quote.client_id);
-    rows.push({
-      group: 'Quotes awaiting approval',
-      label: ((client && client.display_name) || 'Client') + ' · ' + (quote.destination || 'Destination pending') + ' — ' + quote.client_total + ' ' + (quote.currency || ''),
-      action: quote.inquiry_id ? "openCaseAt('quotation', '" + quote.inquiry_id + "')" : '',
-      actionLabel: 'Review quote'
-    });
-  });
-
-  list('Quotation', (quote) => quote.status === 'APPROVED').forEach((quote) => {
-    if (list('QuotationAcceptance', (item) => item.quotation_id === quote.quotation_id).length) return;
-    const validUntil = String(quote.valid_until || '').slice(0, 10);
-    if (!validUntil || validUntil > weekAheadIso) return;
-    const client = latest('Client', (item) => item.client_id === quote.client_id);
-    rows.push({
-      group: validUntil < todayIso ? 'Quotes expired — follow up or requote' : 'Quotes expiring within 7 days',
-      label: ((client && client.display_name) || 'Client') + ' · ' + (quote.destination || 'Trip') + ' — valid until ' + validUntil,
-      action: quote.inquiry_id ? "openCaseAt('quotation', '" + quote.inquiry_id + "')" : '',
-      actionLabel: 'Open quote'
-    });
-  });
-
-  ((state && state.caseProjections) || []).forEach((projection) => {
-    const inquiryId = projection.identity && projection.identity.inquiryId;
-    const finance = projection.finance || {};
-    (finance.obligations || []).forEach((obligation) => {
-      if (obligation.state === 'SATISFIED' || !obligation.dueAt) return;
-      const due = String(obligation.dueAt).slice(0, 10);
-      if (due > weekAheadIso) return;
-      rows.push({
-        group: due < todayIso ? 'Payments overdue' : 'Payments due within 7 days',
-        label: (projection.clientName || 'Client') + ' — ' + obligation.outstanding + ' ' + (obligation.currency || '') + ' due ' + due + (obligation.purpose && obligation.purpose !== 'INSTALLMENT' ? ' (' + obligation.purpose.toLowerCase() + ')' : ''),
-        action: inquiryId ? "openCaseAt('finance', '" + inquiryId + "')" : '',
-        actionLabel: 'Open payments'
-      });
-    });
-  });
-
-  list('Task', (task) => !['COMPLETED', 'CANCELLED'].includes(task.state) && task.due_at && String(task.due_at).slice(0, 10) <= todayIso).forEach((task) => {
-    const inquiryId = task.related_type === 'Inquiry' ? task.related_id : null;
-    const due = String(task.due_at).slice(0, 10);
-    rows.push({
-      group: due < todayIso ? 'Overdue follow-ups' : 'Due today',
-      label: task.title + ' — due ' + due,
-      action: inquiryId ? "openCaseAt('operations', '" + inquiryId + "')" : "window.location.hash='operations'",
-      actionLabel: 'Open'
-    });
-  });
-
-  const leadsWithoutMobile = list('ExpoLead', (lead) => !lead.mobile);
-  leadsWithoutMobile.slice(0, 5).forEach((lead) => {
-    rows.push({
-      group: 'Leads needing mobile',
-      label: lead.name + (lead.destination ? ' · ' + lead.destination : '') + ' — no mobile number yet',
-      action: "window.open('/expo-console.html#leads', '_blank', 'noopener')",
-      actionLabel: 'Open Events console'
-    });
-  });
-  if (leadsWithoutMobile.length > 5) {
-    rows.push({ group: 'Leads needing mobile', label: '…and ' + (leadsWithoutMobile.length - 5) + ' more', action: "window.open('/expo-console.html#leads', '_blank', 'noopener')", actionLabel: 'Open Events console' });
-  }
-
-  if (!rows.length) return '<div class="card good"><h3>All clear</h3><p class="muted">Nothing needs your attention right now. New quotes, due payments, and follow-ups appear here.</p></div>';
-  const groupOrder = ['Payments overdue', 'Quotes awaiting approval', 'Quotes expired — follow up or requote', 'Quotes expiring within 7 days', 'Payments due within 7 days', 'Overdue follow-ups', 'Due today', 'Leads needing mobile'];
-  const groups = groupOrder.map((name) => ({ name: name, rows: rows.filter((row) => row.group === name) })).filter((group) => group.rows.length);
-  return '<div class="panel"><div class="panel-head"><div><h3>What needs you now</h3><p class="muted">Every row opens the case it belongs to.</p></div></div>' +
-    groups.map((group) => '<div style="margin-bottom:12px"><div class="eyebrow">' + esc(group.name) + ' (' + group.rows.length + ')</div>' +
-      group.rows.slice(0, 8).map((row) => '<div class="event" style="display:flex;justify-content:space-between;gap:10px;align-items:center"><span style="min-width:0;word-wrap:break-word">' + esc(row.label) + '</span>' +
-        (row.action ? '<button class="secondary compact" style="flex:none" onclick="' + esc(row.action) + '">' + esc(row.actionLabel) + '</button>' : '') + '</div>').join('') +
-      (group.rows.length > 8 ? '<p class="muted">…and ' + (group.rows.length - 8) + ' more</p>' : '') + '</div>').join('') +
-    '</div>';
+function inquiryWorkQueueMarkup() {
+  const rows = list('Inquiry').map((inquiry) => {
+    const records = recordsForInquiry(inquiry);
+    const projection = projectionForInquiry(inquiry.inquiry_id);
+    const requirements = inquiry.current_requirements || {};
+    const lifecycle = projection && projection.currentStage || 'NOT_PROJECTED';
+    return '<tr><td><strong>' + esc(records.client && records.client.display_name || 'Client') + '</strong></td><td>' + esc(requirements.destination || 'Not recorded') + '</td><td>' + esc(requirements.travel_start || requirements.travel_month || requirements.travel_year || 'Not recorded') + '</td><td>' + status(lifecycle, records.booking ? 'good' : 'info') + '</td><td>' + esc(nextAction(records)) + '</td><td><button class="secondary compact" onclick="openCase(\'' + esc(inquiry.inquiry_id) + '\')">Open case</button></td></tr>';
+  }).join('');
+  return '<div class="panel"><div class="panel-head"><div><h3>Inquiry work queue</h3><p class="muted">Every open client request with its next action. Nothing is silently selected as the current case.</p></div><span class="muted">' + list('Inquiry').length + ' case' + (list('Inquiry').length === 1 ? '' : 's') + '</span></div>' + (rows ? '<div class="table-wrap"><table><thead><tr><th>Client</th><th>Destination</th><th>Travel start</th><th>Inquiry state</th><th>Next action</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty">No Inquiry cases yet. Create the first case below.</div>') + '</div>';
 }
 
 function openInquiries() {
@@ -1018,6 +950,7 @@ async function refreshWorkspace() {
   try {
     await refreshState();
     loadTodayOverview(true);
+    loadSalesOverview(true);
     showMessage('✓ Workspace refreshed', 'Current records were reloaded from the server.', 'ok');
   } catch (error) {
     showMessage('✕ Workspace unavailable', error.message || 'The workspace state could not be loaded.', 'error');
@@ -1542,6 +1475,11 @@ function openTodayPayment(bookingId) {
   else window.location.hash = 'finance';
 }
 
+function openTodayQuote(inquiryId) {
+  if (inquiryId) openCaseAt('quotation', inquiryId);
+  else window.location.hash = 'quotation';
+}
+
 function openTodayFollowUp(taskId) {
   const task = taskId && latest('Task', (item) => item.task_id === taskId);
   const inquiryId = task && (task.inquiry_id || (task.related_type === 'Inquiry' && task.related_id));
@@ -1596,20 +1534,128 @@ function renderToday() {
   }, 'open the Documents tab');
   const documentsCard = '<div class="card today-card"><div class="today-card-head"><h3>Documents pending review</h3><span class="today-count">' + data.documentsPendingReview.count + '</span></div>' + (documentRows || '<p class="muted">No documents waiting for review.</p>') + '</div>';
 
-  target.innerHTML = meta + '<div class="today-grid">' + paymentsCard + departuresCard + suppliersCard + followUpsCard + documentsCard + '</div>';
+  const quoteApprovalRows = todayItemRows(data.quotesAwaitingApproval.items, (item) => {
+    return '<div class="today-item"><span><b>' + esc(item.clientName || item.clientId || 'Client') + '</b> · ' + esc(item.destination || 'Destination pending') + ' — ' + esc(formatMoney(item.clientTotal, item.currency)) + '</span>' + (item.inquiryId ? '<button class="secondary compact" onclick="openTodayQuote(\'' + esc(item.inquiryId) + '\')">Review quote</button>' : '') + '</div>';
+  }, 'open the Quotations tab');
+  const quoteApprovalCard = '<div class="card today-card"><div class="today-card-head"><h3>Quotes awaiting approval</h3><span class="today-count">' + data.quotesAwaitingApproval.count + '</span></div>' + (quoteApprovalRows || '<p class="muted">No priced draft quotations waiting for approval.</p>') + '</div>';
+
+  const quoteExpiryRows = todayItemRows(data.quotesExpiringSoon.items, (item) => {
+    return '<div class="today-item"><span><b>' + esc(item.clientName || item.clientId || 'Client') + '</b> · ' + esc(item.destination || 'Trip') + ' — ' + (item.expired ? status('Expired ' + item.validUntil, 'bad') : status('Valid until ' + item.validUntil, 'warn')) + '</span>' + (item.inquiryId ? '<button class="secondary compact" onclick="openTodayQuote(\'' + esc(item.inquiryId) + '\')">Open quote</button>' : '') + '</div>';
+  }, 'open the Quotations tab');
+  const quoteExpiryCard = '<div class="card today-card"><div class="today-card-head"><h3>Quotes expiring soon</h3><span class="today-count">' + data.quotesExpiringSoon.count + '</span></div>' + (quoteExpiryRows || '<p class="muted">No approved quotes expiring within ' + data.windows.quoteExpiryDays + ' days.</p>') + '</div>';
+
+  target.innerHTML = meta + '<div class="today-grid">' + paymentsCard + departuresCard + suppliersCard + followUpsCard + documentsCard + quoteApprovalCard + quoteExpiryCard + '</div>';
+}
+
+let salesOverviewData = null;
+let salesOverviewLoading = false;
+let salesOverviewError = null;
+
+async function loadSalesOverview(force) {
+  if (salesOverviewLoading) return;
+  if (salesOverviewData && !force) return;
+  salesOverviewLoading = true;
+  salesOverviewError = null;
+  try {
+    const response = await wmitGuard401(await fetch('/api/phase1/action', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, wmitAuthHeaders()), body: JSON.stringify({ action: 'getSalesOverview', input: {}, actor: 'LOCAL_STAFF' }) }));
+    const result = await response.json();
+    if (result.ok) {
+      salesOverviewData = result.data;
+      if (currentTab() === 'dashboard') renderDashboard();
+    } else {
+      salesOverviewError = result.error && result.error.message || 'The sales overview could not be loaded.';
+    }
+  } catch (_) { salesOverviewError = 'The sales overview could not be loaded from the server.'; }
+  finally { salesOverviewLoading = false; }
+}
+
+function salesBar(widthPercent, color) {
+  if (!widthPercent) return '';
+  return '<div style="margin-top:3px;margin-left:auto;height:7px;border-radius:4px;background:' + color + ';width:' + widthPercent + '%;max-width:100%"></div>';
+}
+
+function salesBarPercent(value, max) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || max <= 0) return 0;
+  return Math.max(2, Math.round(Math.abs(numeric) / max * 100));
+}
+
+function salesMoneyCell(currencies, field, maxByCurrency, colorForValue) {
+  const names = Object.keys(currencies || {}).sort();
+  if (!names.length) return '<span class="muted">—</span>';
+  return names.map((currency) => {
+    const value = currencies[currency][field];
+    if (value === null || value === undefined || value === '') return '<div style="font-variant-numeric:tabular-nums"><span class="muted">not computed</span></div>';
+    const color = colorForValue(Number(value));
+    return '<div style="font-variant-numeric:tabular-nums;white-space:nowrap' + (Number(value) < 0 ? ';color:var(--ensign-red)' : '') + '">' + esc(formatMoney(value, currency)) + salesBar(salesBarPercent(value, maxByCurrency[currency] || 0), color) + '</div>';
+  }).join('');
+}
+
+function salesMaxByCurrency(months, field) {
+  const maxima = {};
+  (months || []).forEach((month) => {
+    Object.keys(month.currencies || {}).forEach((currency) => {
+      const value = Number(month.currencies[currency][field]);
+      if (Number.isFinite(value)) maxima[currency] = Math.max(maxima[currency] || 0, Math.abs(value));
+    });
+  });
+  return maxima;
+}
+
+function salesMonthLabel(monthKey) {
+  const names = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const parts = String(monthKey).split('-');
+  const index = Number(parts[1]) - 1;
+  return names[index] ? names[index] + ' ' + parts[0] : String(monthKey);
 }
 
 function renderDashboard() {
-  const selected = caseRecords();
-  const inquiries = list('Inquiry');
-  const rows = inquiries.map((inquiry) => {
-    const records = recordsForInquiry(inquiry);
-    const projection = projectionForInquiry(inquiry.inquiry_id);
-    const requirements = inquiry.current_requirements || {};
-    const lifecycle = projection && projection.currentStage || 'NOT_PROJECTED';
-    return '<tr><td><strong>' + esc(records.client && records.client.display_name || 'Client') + '</strong></td><td>' + esc(requirements.destination || 'Not recorded') + '</td><td>' + esc(requirements.travel_start || requirements.travel_month || requirements.travel_year || 'Not recorded') + '</td><td>' + status(lifecycle, records.booking ? 'good' : 'info') + '</td><td>' + esc(nextAction(records)) + '</td><td><button class="secondary" onclick="openCase(\'' + esc(inquiry.inquiry_id) + '\')">Open case</button></td></tr>';
+  const target = $('dashboard-content');
+  if (!target) return;
+  if (!salesOverviewData) {
+    target.innerHTML = salesOverviewError
+      ? '<div class="card warn"><h3>Sales overview unavailable</h3><p class="muted">' + esc(salesOverviewError) + '</p><button class="secondary" onclick="loadSalesOverview(true)">Try again</button></div>'
+      : '<div class="card"><h3>Loading business metrics…</h3><p class="muted">Fetching the sales overview from the server.</p></div>';
+    loadSalesOverview();
+    return;
+  }
+  const data = salesOverviewData;
+  const meta = '<div class="today-meta"><span>As of <strong>' + esc(data.asOf) + '</strong></span><span>Sales window: last ' + esc(data.monthlySales.monthsWindow) + ' months</span><span>Currencies are shown separately and never converted</span></div>';
+
+  const currentMonthKey = data.asOf.slice(0, 7);
+  const currentMonth = data.monthlySales.months.find((month) => month.month === currentMonthKey) || { currencies: {} };
+  const monthLabel = data.travelersThisMonth.monthLabel;
+  const bookingsThisMonth = Object.keys(currentMonth.currencies).reduce((sum, currency) => sum + Number(currentMonth.currencies[currency].bookings || 0), 0);
+  const confirmedThisMonth = Object.keys(currentMonth.currencies).sort().map((currency) => formatMoney(currentMonth.currencies[currency].confirmed, currency)).join(' · ');
+  const metricCards = '<div class="grid3">' +
+    '<div class="card"><h3>Travelers this month</h3><div class="money">' + esc(data.travelersThisMonth.travelers) + '</div><p class="muted">Passengers traveling in ' + esc(monthLabel) + ' · ' + data.travelersThisMonth.bookings + ' booking' + (data.travelersThisMonth.bookings === 1 ? '' : 's') + '</p></div>' +
+    '<div class="card"><h3>Bookings this month</h3><div class="money">' + bookingsThisMonth + '</div><p class="muted">Created in ' + esc(monthLabel) + '</p></div>' +
+    '<div class="card"><h3>Confirmed revenue this month</h3><div class="money" style="font-size:1.0625rem">' + esc(confirmedThisMonth || '—') + '</div><p class="muted">Bookings with an executed supplier payment</p></div>' +
+    '</div>';
+
+  const bookedMax = salesMaxByCurrency(data.monthlySales.months, 'booked');
+  const profitMax = salesMaxByCurrency(data.monthlySales.months, 'profit');
+  const salesRows = data.monthlySales.months.slice().reverse().map((month) => {
+    const currencies = month.currencies || {};
+    const costFlag = Object.keys(currencies).reduce((sum, currency) => sum + Number(currencies[currency].costNotRecorded || 0), 0);
+    return '<tr><td><strong>' + esc(salesMonthLabel(month.month)) + '</strong></td><td style="text-align:right">' + salesMoneyCell(currencies, 'booked', bookedMax, () => 'var(--passage-blue)') + '</td><td style="text-align:right">' + salesMoneyCell(currencies, 'profit', profitMax, (value) => value >= 0 ? 'var(--status-good-text)' : 'var(--ensign-red)') + '</td><td style="text-align:right">' + (costFlag ? '<span class="muted">' + costFlag + ' without cost data</span>' : '<span class="muted">—</span>') + '</td></tr>';
   }).join('');
-  $('dashboard-content').innerHTML = dashboardQueuesMarkup() + '<div class="grid3"><div class="card"><h3>Open inquiries</h3><div class="money">' + inquiries.length + '</div><p class="muted">Select the client case you want to operate.</p></div><div class="card"><h3>Tariffs needing review</h3><div class="money">' + list('TariffSource', (item) => !item.trusted).length + '</div><p class="muted">Untrusted extraction cannot be used for client pricing.</p></div><div class="card"><h3>Follow-ups</h3><div class="money">' + list('Task', (item) => !['COMPLETED', 'CANCELLED'].includes(item.state)).length + '</div><p class="muted">Open tasks and deadlines.</p></div></div><div class="panel"><div class="panel-head"><div><h3>Inquiry work queue</h3><p class="muted">Nothing is silently selected as the current case.</p></div><button onclick="openInquiries()">Create or view Inquiries</button></div>' + (rows ? '<div class="table-wrap"><table><thead><tr><th>Client</th><th>Destination</th><th>Travel start</th><th>Inquiry state</th><th>Next action</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty">No Inquiry cases yet. Open Inquiries to create the first case.</div>') + '</div>' + (selected.inquiry ? '<div class="card good"><h3>Selected case</h3><p>' + esc(selected.client && selected.client.display_name || 'Client') + ' · ' + esc(selected.inquiry.current_requirements && selected.inquiry.current_requirements.destination || 'Destination not recorded') + '</p><button class="secondary" onclick="window.location.hash=\'inquiry\'">Open selected Inquiry</button></div>' : '<div class="card warn"><h3>No case selected</h3><p>Select a case before opening case-specific quotation, Booking, or finance workspaces.</p></div>');
+  const hasSales = data.monthlySales.months.some((month) => Object.keys(month.currencies || {}).length);
+  const salesPanel = '<div class="panel"><div class="panel-head"><div><h3>Monthly sales and profit</h3><p class="muted">By booking month. Profit = booked value − supplier costs − paid commissions − executed refunds, only where costs are recorded.</p></div></div>' + (hasSales ? '<div class="table-wrap"><table><thead><tr><th>Month</th><th style="text-align:right">Booked</th><th style="text-align:right">Profit</th><th style="text-align:right">Cost data</th></tr></thead><tbody>' + salesRows + '</tbody></table></div>' : '<div class="empty">No bookings yet. Booked value and profit appear once bookings are created.</div>') + '</div>';
+
+  const packageRows = data.packagesBooked.packages.map((pkg) => {
+    const revenue = Object.keys(pkg.revenue || {}).sort().map((currency) => formatMoney(pkg.revenue[currency], currency)).join(' · ');
+    return '<tr><td><strong>' + esc(pkg.name) + '</strong>' + (pkg.destination ? '<br><span class="muted">' + esc(pkg.destination) + '</span>' : '') + '</td><td style="text-align:right">' + pkg.quotes + '</td><td style="text-align:right">' + pkg.bookings + '</td><td style="text-align:right">' + pkg.supplierPaidBookings + '</td><td style="text-align:right">' + esc(revenue || '—') + '</td></tr>';
+  }).join('');
+  const packagesPanel = '<div class="panel"><div class="panel-head"><div><h3>Packages booked</h3><p class="muted">Wholesaler packages quoted from the library · ' + data.packagesBooked.count + ' package' + (data.packagesBooked.count === 1 ? '' : 's') + ' quoted · revenue counts bookings with an executed supplier payment · top 10 shown.</p></div></div>' + (packageRows ? '<div class="table-wrap"><table><thead><tr><th>Package</th><th style="text-align:right">Quotes</th><th style="text-align:right">Bookings</th><th style="text-align:right">Supplier paid</th><th style="text-align:right">Confirmed revenue</th></tr></thead><tbody>' + packageRows + '</tbody></table></div>' : '<div class="empty">No package quotations yet. Quote a package from the Packages tab to see it here.</div>') + '</div>';
+
+  const collectedMax = salesMaxByCurrency(data.cashCollected.months, 'collected');
+  const cashRows = data.cashCollected.months.slice().reverse().filter((month) => Object.keys(month.currencies || {}).length).map((month) => {
+    return '<tr><td><strong>' + esc(salesMonthLabel(month.month)) + '</strong></td><td style="text-align:right">' + salesMoneyCell(month.currencies, 'collected', collectedMax, () => 'var(--passage-blue)') + '</td><td style="text-align:right">' + salesMoneyCell(month.currencies, 'booked', collectedMax, () => 'var(--sea-fog)') + '</td></tr>';
+  }).join('');
+  const cashPanel = '<div class="panel"><div class="panel-head"><div><h3>Cash collected vs billed</h3><p class="muted">Verified client payments by the month the money arrived, next to the same month\'s booked value.</p></div></div>' + (cashRows ? '<div class="table-wrap"><table><thead><tr><th>Month</th><th style="text-align:right">Collected</th><th style="text-align:right">Booked</th></tr></thead><tbody>' + cashRows + '</tbody></table></div>' : '<div class="empty">No verified client payments yet.</div>') + '</div>';
+
+  target.innerHTML = meta + metricCards + salesPanel + packagesPanel + cashPanel;
 }
 
 function inquiryForBooking(booking) {
@@ -1906,19 +1952,12 @@ function renderSelectedInquiry(records, requirements) {
 
 function renderInquiry() {
   const records = caseRecords();
-  const inquiries = list('Inquiry');
   const requirements = records.inquiry && records.inquiry.current_requirements || {};
   const form = '<div class="card"><h3>Create Inquiry</h3><p class="muted">Destination and travel timing are required before tariff research. Exact dates derive the duration; approximate month/year requires a trip duration in days.</p><div class="grid2"><div class="field"><label>Client</label><input id="inq-client" value="CLIENT-SYNTH-000001" required></div><div class="field"><label>Destination *</label><input id="inq-destination" data-error-field="destination" required placeholder="e.g. Tokyo"></div></div><div class="grid2"><div class="field"><label>Exact travel start date</label><input id="inq-start" data-error-field="travel_start" type="date"></div><div class="field"><label>Exact travel end date</label><input id="inq-end" data-error-field="travel_end" type="date"></div></div><div class="grid2"><div class="field"><label>Approximate travel month</label><input id="inq-month" data-error-field="travel_month" type="month"></div><div class="field"><label>Approximate travel year</label><input id="inq-year" data-error-field="travel_year" type="number" min="2026" max="2100" placeholder="e.g. 2027"></div></div><div class="field"><label>Trip duration (days) <span class="muted">required for approximate timing</span></label><input id="inq-duration-days" data-error-field="duration_days" type="number" min="1" step="1" placeholder="e.g. 5"></div><h4>Traveler composition</h4><div class="grid3"><div class="field"><label>Adults</label><input id="inq-adults" data-error-field="adults" type="number" min="0" step="1" value="2"></div><div class="field"><label>Children</label><input id="inq-children" data-error-field="children" type="number" min="0" step="1" value="0"></div><div class="field"><label>Infants</label><input id="inq-infants" data-error-field="infants" type="number" min="0" step="1" value="0"></div></div><div class="field"><label>Child ages (optional until tariff requires them)</label><input id="inq-child-ages" placeholder="e.g. 6, 10"></div><h4>Optional requirements and certainty</h4><div class="grid3"><div class="field"><label>Hotel category</label><input id="inq-hotel-category"><select id="inq-hotel-category-status" aria-label="Hotel category status"><option value="PREFERRED">Preferred</option><option value="REQUIRED">Required</option><option value="UNKNOWN">Unknown</option><option value="NOT_APPLICABLE">Not applicable</option></select></div><div class="field"><label>Room arrangement</label><input id="inq-room-arrangement"><select id="inq-room-arrangement-status" aria-label="Room arrangement status"><option value="PREFERRED">Preferred</option><option value="REQUIRED">Required</option><option value="UNKNOWN">Unknown</option><option value="NOT_APPLICABLE">Not applicable</option></select></div><div class="field"><label>Meal plan</label><input id="inq-meal-plan"><select id="inq-meal-plan-status" aria-label="Meal plan status"><option value="PREFERRED">Preferred</option><option value="REQUIRED">Required</option><option value="UNKNOWN">Unknown</option><option value="NOT_APPLICABLE">Not applicable</option></select></div></div><button onclick="createInquiry()">Create Inquiry</button></div>';
-  const selected = records.inquiry ? renderSelectedInquiry(records, requirements) : '<div class="card warn"><h3>No case selected</h3><p>Choose an Inquiry below or create a new one.</p></div>';
+  const selected = records.inquiry ? renderSelectedInquiry(records, requirements) : '<div class="card warn"><h3>No case selected</h3><p>Choose an Inquiry in the work queue above or create a new one below.</p></div>';
 
-  const inquiryRows = inquiries.map((inquiry) => {
-    const item = recordsForInquiry(inquiry);
-    const values = inquiry.current_requirements || {};
-    return '<tr><td><strong>' + esc(item.client && item.client.display_name || 'Client') + '</strong></td><td>' + esc(values.destination || 'Not recorded') + '</td><td>' + esc(inquiryTravelLabel(values)) + '</td><td>' + status(item.booking ? 'Converted to Booking' : readableState(inquiry.state), item.booking ? 'good' : 'info') + '</td><td><button class="secondary" onclick="openCase(\'' + esc(inquiry.inquiry_id) + '\')">Open</button></td></tr>';
-  }).join('');
   const research = records.inquiry ? '' : '<div class="card"><h3>Next step</h3><p>Capture the client request, then research matching options without selecting a supplier automatically.</p></div>';
-  const inquiryList = inquiryRows ? '<div class="table-wrap"><table><thead><tr><th>Client</th><th>Destination</th><th>Travel timing</th><th>State</th><th></th></tr></thead><tbody>' + inquiryRows + '</tbody></table></div>' : '<div class="empty">No Inquiry records yet.</div>';
-  $('inquiry-content').innerHTML = records.inquiry ? selected + research + '<details class="secondary-details"><summary>Other Inquiries (' + Math.max(inquiries.length - 1, 0) + ')</summary>' + inquiryList + '</details>' : form + research + '<h3>Inquiry records</h3>' + inquiryList;
+  $('inquiry-content').innerHTML = inquiryWorkQueueMarkup() + (records.inquiry ? selected + research : form + research);
   if (!records.inquiry && $('inq-client')) {
     const clientSelect = document.createElement('select');
     clientSelect.id = 'inq-client';

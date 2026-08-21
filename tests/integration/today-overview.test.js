@@ -34,9 +34,23 @@ function acceptedQuotationChain(runtime, overrides) {
   return { client, person, quotation, booking };
 }
 
+function quoteQueueChain(runtime) {
+  const client = runtime.createClient({ display_name: 'Quote Queue Client', primary_email: 'quotes@example.test' }, staff()).data;
+  const inquiry = runtime.createInquiry({ client_id: client.client_id, requirements: { destination: 'El Nido', travel_start: '2026-12-01', travel_end: '2026-12-05', adults: 2 } }, staff()).data;
+  const draftQuote = runtime.createQuotation({ client_id: client.client_id, inquiry_id: inquiry.inquiry_id, destination: 'El Nido', supplier_cost_total: '41500.00', currency: 'PHP' }, staff()).data;
+  const expiringQuote = runtime.createQuotation({ client_id: client.client_id, destination: 'Coron', supplier_cost_total: '10000.00', currency: 'PHP' }, staff()).data;
+  assert.equal(makeQuotationApprovable(runtime, expiringQuote, staff()).ok, true);
+  assert.equal(runtime.approveQuotation({ quotation_id: expiringQuote.quotation_id }, manager()).ok, true);
+  const expiredQuote = runtime.createQuotation({ client_id: client.client_id, destination: 'Vigan', supplier_cost_total: '8000.00', currency: 'PHP', valid_until: '2026-08-18' }, staff()).data;
+  assert.equal(makeQuotationApprovable(runtime, expiredQuote, staff()).ok, true);
+  assert.equal(runtime.approveQuotation({ quotation_id: expiredQuote.quotation_id }, manager()).ok, true);
+  return { client, inquiry, draftQuote, expiringQuote, expiredQuote };
+}
+
 function buildChain(runtime) {
   const chain = acceptedQuotationChain(runtime, {});
   const supplier = runtime.createSupplier({ display_name: 'Today Supplier' }, staff()).data;
+  const quotes = quoteQueueChain(runtime);
 
   const obligations = runtime.createBookingPaymentObligations({ booking_id: chain.booking.booking_id, obligations: [
     { purpose: 'DOWN_PAYMENT', amount: '20000.00', currency: 'PHP', sequence: 1, due_at: '2026-08-24T09:00:00.000Z' },
@@ -83,10 +97,10 @@ function buildChain(runtime) {
   runtime.createDocument({ file_name: 'archived-contract.pdf', status: 'MATCHED' }, staff());
   runtime.createDocument({ file_name: 'mixed-case-review.pdf', status: 'Needs Review' }, staff());
 
-  return Object.assign({}, chain, { supplier, item, departure, payment });
+  return Object.assign({}, chain, { supplier, item, departure, payment, quotes });
 }
 
-test('getTodayOverview aggregates all five sections from existing records', () => {
+test('getTodayOverview aggregates all overview sections from existing records', () => {
   const runtime = makeRuntime();
   const chain = buildChain(runtime);
 
@@ -135,6 +149,24 @@ test('getTodayOverview aggregates all five sections from existing records', () =
   assert.ok(data.documentsPendingReview.items.some((item) => item.fileName === 'passport-scan.pdf' && item.status === 'RECEIVED'));
   assert.ok(data.documentsPendingReview.items.some((item) => item.fileName === 'mixed-case-review.pdf' && item.status === 'NEEDS_REVIEW'));
 
+  assert.equal(data.counts.quotesAwaitingApproval, 1);
+  const awaiting = data.quotesAwaitingApproval.items[0];
+  assert.equal(awaiting.quotationId, chain.quotes.draftQuote.quotation_id);
+  assert.equal(awaiting.clientName, 'Quote Queue Client');
+  assert.equal(awaiting.destination, 'El Nido');
+  assert.equal(awaiting.clientTotal, chain.quotes.draftQuote.client_total);
+  assert.equal(awaiting.currency, 'PHP');
+  assert.equal(awaiting.inquiryId, chain.quotes.inquiry.inquiry_id);
+
+  assert.equal(data.counts.quotesExpiringSoon, 2);
+  assert.equal(data.quotesExpiringSoon.items[0].quotationId, chain.quotes.expiredQuote.quotation_id);
+  assert.equal(data.quotesExpiringSoon.items[0].validUntil, '2026-08-18');
+  assert.equal(data.quotesExpiringSoon.items[0].expired, true);
+  assert.equal(data.quotesExpiringSoon.items[1].quotationId, chain.quotes.expiringQuote.quotation_id);
+  assert.equal(data.quotesExpiringSoon.items[1].validUntil, '2026-08-27');
+  assert.equal(data.quotesExpiringSoon.items[1].expired, false);
+  assert.ok(!data.quotesExpiringSoon.items.some((item) => item.quotationId === chain.quotation.quotation_id), 'the accepted, booked quotation is not in the expiry queue');
+
   const auditRow = runtime.auditLog.list().filter((entry) => entry.action === 'GET_TODAY_OVERVIEW' && entry.result === 'SUCCESS').pop();
   assert.ok(auditRow, 'successful overview read wrote an audit row');
   assert.equal(auditRow.actor, 'staff');
@@ -147,11 +179,11 @@ test('getTodayOverview returns empty sections on an empty database without error
   assert.equal(result.ok, true);
   const data = result.data;
   assert.equal(data.today, TODAY);
-  ['paymentsDue', 'departures', 'supplierConfirmations', 'followUpsDue', 'documentsPendingReview'].forEach((section) => {
+  ['paymentsDue', 'departures', 'supplierConfirmations', 'followUpsDue', 'documentsPendingReview', 'quotesAwaitingApproval', 'quotesExpiringSoon'].forEach((section) => {
     assert.equal(data[section].count, 0, section + ' should be empty');
     assert.deepEqual(data[section].items, [], section + ' should return an empty array');
   });
-  assert.deepEqual(data.counts, { paymentsDue: 0, departures: 0, supplierConfirmations: 0, followUpsDue: 0, documentsPendingReview: 0 });
+  assert.deepEqual(data.counts, { paymentsDue: 0, departures: 0, supplierConfirmations: 0, followUpsDue: 0, documentsPendingReview: 0, quotesAwaitingApproval: 0, quotesExpiringSoon: 0 });
 });
 
 test('getTodayOverview and globalSearch are reads that need no configured authority', () => {
@@ -250,7 +282,7 @@ test('globalSearch rejects missing and too-short queries, and invalid overview i
 
 test('today overview and global search work over HTTP through the phase 1 action dispatcher', async () => {
   const runtime = makeRuntime();
-  buildChain(runtime);
+  const chain = buildChain(runtime);
   runtime.createRecord('ExpoLead', { name: 'Maria Zamora', mobile: '+639171234567', email: 'maria@example.test', destination: 'Sapporo', travel_month: '2026-11', status: 'NEW', expo_tag: 'EXPO-2026' }, staff());
   const phase1App = createPhase1Application({ runtime, seedSynthetic: false });
   const { server } = createMvpServer({ phase1App });
@@ -270,7 +302,10 @@ test('today overview and global search work over HTTP through the phase 1 action
     assert.equal(overview.body.data.counts.supplierConfirmations, 1);
     assert.equal(overview.body.data.counts.followUpsDue, 3);
     assert.equal(overview.body.data.counts.documentsPendingReview, 2);
+    assert.equal(overview.body.data.counts.quotesAwaitingApproval, 1);
+    assert.equal(overview.body.data.counts.quotesExpiringSoon, 2);
     assert.equal(overview.body.data.paymentsDue.items[0].clientName, 'Today Overview Client');
+    assert.equal(overview.body.data.quotesAwaitingApproval.items[0].inquiryId, chain.quotes.inquiry.inquiry_id);
 
     const search = await post({ action: 'globalSearch', input: { query: 'sapporo' }, actor: 'staff' });
     assert.equal(search.status, 200);
@@ -306,4 +341,12 @@ test('operations workspace ships the Today tab and the header search covers expo
   assert.match(source, /today: renderToday/);
   assert.match(source, /function loadTodayOverview\(/);
   assert.match(source, /list\('ExpoLead'\)/);
+  assert.match(source, /quotesAwaitingApproval/);
+  assert.match(source, /quotesExpiringSoon/);
+  assert.match(source, /function renderDashboard\(/);
+  assert.match(source, /dashboard: renderDashboard/);
+  assert.match(source, /function loadSalesOverview\(/);
+  assert.match(source, /getSalesOverview/);
+  assert.doesNotMatch(source, /dashboardQueuesMarkup/);
+  assert.match(source, /function inquiryWorkQueueMarkup\(/);
 });
