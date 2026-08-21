@@ -92,6 +92,7 @@ function createOperationsMvp(options) {
     clock: runtime.clock || opts.clock
   });
   const hrPayrollOfficer = opts.hrPayrollOfficer || new HrPayrollOfficer({ attendanceService });
+  const nowIso = () => runtime.clock().toISOString();
 
   function list(entityType) {
     return repositories[entityType].list();
@@ -101,7 +102,7 @@ function createOperationsMvp(options) {
     try {
       const value = input || {};
       return ok(serviceCall(services.Lead, 'create', Object.assign({}, value, {
-        received_at: value.received_at || new Date().toISOString(),
+        received_at: value.received_at || nowIso(),
         lead_type: value.lead_type || 'B2C',
         currency: value.currency || runtime.config.defaultCurrency
       }), context));
@@ -299,7 +300,7 @@ function createOperationsMvp(options) {
         quotation_id: quotation.quotation_id,
         client_id: value.client_id || quotation.client_id,
         contact_id: value.contact_id || quotation.contact_id,
-        booking_date: value.booking_date || new Date().toISOString().slice(0, 10),
+        booking_date: value.booking_date || nowIso().slice(0, 10),
         travel_start: quotation.travel_start,
         travel_end: quotation.travel_end,
         destination: quotation.destination,
@@ -380,7 +381,7 @@ function createOperationsMvp(options) {
         booking_id: booking.booking_id,
         client_id: booking.client_id,
         contact_id: booking.contact_id,
-        invoice_date: value.invoice_date || new Date().toISOString().slice(0, 10),
+        invoice_date: value.invoice_date || nowIso().slice(0, 10),
         due_date: value.due_date,
         currency: value.currency || booking.currency,
         subtotal: decimalStringToNumber(totals.subtotal),
@@ -417,7 +418,7 @@ function createOperationsMvp(options) {
     try {
       const value = input || {};
       const invoice = serviceGet(services.Invoice, value.invoice_id);
-      const paymentDate = value.payment_date || new Date().toISOString().slice(0, 10);
+      const paymentDate = value.payment_date || nowIso().slice(0, 10);
       const paymentCurrency = value.currency || value.payment_currency || invoice.currency;
       let prepared;
       try {
@@ -514,7 +515,7 @@ function createOperationsMvp(options) {
         supplier_id: value.supplier_id || supplierBooking.supplier_id,
         supplier_booking_id: supplierBooking.supplier_booking_id,
         booking_id: supplierBooking.booking_id,
-        payment_date: value.payment_date || new Date().toISOString().slice(0, 10),
+        payment_date: value.payment_date || nowIso().slice(0, 10),
         amount: decimalStringToNumber(fromMinorUnits(paymentMinor)),
         currency: paymentCurrency,
         method: value.method,
@@ -544,7 +545,7 @@ function createOperationsMvp(options) {
   }
 
   function dashboard() {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = nowIso().slice(0, 10);
     const leads = list('Lead');
     const quotations = list('Quotation');
     const bookings = list('Booking');
