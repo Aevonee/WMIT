@@ -67,6 +67,27 @@ test('expo registry: multiple expos, per-expo capture/import/templates, ended ex
   assert.equal(service.currentExpo().expo_tag, 'EXPO-2026', 'soonest upcoming still wins after reopen');
 });
 
+test('a running expo keeps the kiosk and badge imports even when a future fair is pre-created', () => {
+  const clock = () => new Date('2026-09-05T10:00:00Z');
+  const { service } = buildService({ clock });
+  service.ensureDefaultExpo();
+  const future = service.createExpo({ name: 'PTA Travel Fair 2027', start_date: '2027-03-05', end_date: '2027-03-07' }, 'USER:owner');
+  assert.equal(future.ok, true, JSON.stringify(future.error));
+
+  assert.equal(service.currentExpo().expo_tag, 'EXPO-2026', 'day 2 of the live expo must win over the pre-created 2027 fair');
+  assert.equal(service.getPublicConfig({}).data.expo_tag, 'EXPO-2026', 'the unpinned kiosk form serves the running expo');
+
+  const imported = service.importLeads({ text: 'Booth Visitor,09181119999,Bali,2026-12', default_destination: '', default_travel_month: '' });
+  assert.equal(imported.ok, true, JSON.stringify(imported.error));
+  assert.equal(service.listLeads({ expo_tag: 'EXPO-2026' }).length, 1, 'badge imports taken during the expo tag the running event');
+  assert.equal(service.listLeads({ expo_tag: future.data.expo_tag }).length, 0, 'the pre-created future fair receives nothing');
+
+  const captured = service.captureLead({ name: 'Kiosk Visitor', mobile: '09175550001', destination: 'Tokyo', travel_month: '2026-12' });
+  assert.equal(captured.ok, true, JSON.stringify(captured.error));
+  const stored = service.listLeads({ expo_tag: 'EXPO-2026' }).find((lead) => lead.name === 'Kiosk Visitor');
+  assert.ok(stored, 'unpinned kiosk captures tag the running event');
+});
+
 test('quotes use only the lead expo templates and carry its tag; the dashboard scopes by expo', async () => {
   const { service } = buildService();
   service.ensureDefaultExpo();

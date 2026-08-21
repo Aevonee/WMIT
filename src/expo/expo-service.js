@@ -138,7 +138,8 @@ class ExpoService {
     return this.runtime.list('ExpoEvent', (event) => event.expo_tag === tag)[0] || null;
   }
 
-  // The expo the kiosk uses when no ?expo= is given: the soonest upcoming
+  // The expo the kiosk uses when no ?expo= is given: a LIVE event (today
+  // falls inside its date window) always wins, then the soonest upcoming
   // ACTIVE event (so pre-creating next year's fair never steals the kiosk),
   // falling back to the most recently started one. Legacy fallback keeps
   // EXPO-2026 working before the boot seeding has run (e.g. direct service
@@ -151,9 +152,12 @@ class ExpoService {
     if (!active.length) return { expo_tag: EXPO_TAG, name: EXPO_NAME, status: 'ACTIVE', start_date: null, end_date: null };
     const today = this.now().slice(0, 10);
     const dated = active.filter((event) => event.start_date);
-    const upcoming = dated.filter((event) => event.start_date >= today).sort((a, b) => String(a.start_date).localeCompare(String(b.start_date)));
+    const live = dated.filter((event) => event.start_date <= today && (!event.end_date || event.end_date >= today))
+      .sort((a, b) => String(b.start_date || '').localeCompare(String(a.start_date || '')));
+    if (live.length) return live[0];
+    const upcoming = dated.filter((event) => event.start_date >= today).sort((a, b) => String(a.start_date || '').localeCompare(String(b.start_date || '')));
     if (upcoming.length) return upcoming[0];
-    if (dated.length) return dated.sort((a, b) => String(b.start_date).localeCompare(String(a.start_date)))[0];
+    if (dated.length) return dated.sort((a, b) => String(b.start_date || '').localeCompare(String(a.start_date || '')))[0];
     return active[0];
   }
 
