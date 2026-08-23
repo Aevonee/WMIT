@@ -2846,6 +2846,165 @@ class Phase1Runtime {
       return fail(error);
     }
   }
+  // ------------------------------------------ sales agent proposals
+  //
+  // Deterministic, draft-only suggestions from the Sales agent role. The
+  // agent proposes; humans decide. Rules scan Inquiries and Quotations and
+  // raise Task records (task_type 'AGENT_PROPOSAL') that a human accepts or
+  // dismisses. v1 is proposal-only: resolving a suggestion changes nothing
+  // except the suggestion task itself — acting on it happens through the
+  // normal workspace screens. No LLM, no adapter, no external calls.
+  agentProposalSummary(task) {
+    return {
+      task_id: task.task_id,
+      state: task.state || 'OPEN',
+      rule: task.rule || null,
+      target_id: task.target_id || null,
+      suggested_action: task.suggested_action || task.title || null,
+      rationale: task.rationale || null,
+      confidence: typeof task.confidence === 'number' ? task.confidence : null,
+      automation_key: task.automation_key || null,
+      generated_at: task.created_at || null
+    };
+  }
+  clientDisplayName(clientId) {
+    const client = this.list('Client', (record) => record.client_id === clientId)[0];
+    return client && String(client.display_name || '').trim() || clientId;
+  }
+  raiseAgentProposal(key, fields, ctx) {
+    // Natural-key dedupe mirroring reminder drafts: one open proposal per
+    // rule+target. Dismissed (CANCELLED) proposals can be raised again on a
+    // later scan; accepted (COMPLETED) ones stay suppressed — accepting means
+    // the suggestion was acknowledged, not snoozed.
+    const existing = this.list('Task', (task) => task.automation_key === key && ['OPEN', 'IN_PROGRESS', 'BLOCKED', 'COMPLETED'].includes(String(task.state || 'OPEN').toUpperCase()));
+    if (existing.length) return { skipped: true, task: null };
+    const created = this.createTask({
+      automation_key: key,
+      task_type: 'AGENT_PROPOSAL',
+      title: 'Sales agent: ' + fields.suggested_action,
+      description: fields.rationale + ' Confidence: ' + Math.round(fields.confidence * 100) + '%.',
+      rule: fields.rule,
+      target_id: fields.target_id,
+      suggested_action: fields.suggested_action,
+      rationale: fields.rationale,
+      confidence: fields.confidence,
+      inquiry_id: fields.inquiry_id || null,
+      quotation_id: fields.quotation_id || null,
+      client_id: fields.client_id || null,
+      related_type: fields.related_type || null,
+      related_id: fields.related_id || null,
+      priority: 'NORMAL',
+      state: 'OPEN',
+      source: 'SALES_AGENT'
+    }, ctx);
+    return { skipped: false, task: created.ok ? created.data : null };
+  }
+  generateSalesProposals(input, context) {
+    const ctx = this.context(context);
+    try {
+      const value = input || {};
+      const asOf = todayOverview.resolveAsOf(value.asOf, this.now());
+      const proposals = [];
+      let skippedExisting = 0;
+      const raise = (key, fields) => {
+        const result = this.raiseAgentProposal(key, fields, ctx);
+        if (result.skipped) { skippedExisting += 1; return; }
+        if (result.task) proposals.push(result.task);
+      };
+      // Rule FOLLOW_UP_OVERDUE: early-stage inquiries with no client contact
+      // recorded in the last 7 days (Communications link by client).
+      const followUpCutoff = dateOnlyPlusDays(asOf, -7);
+      this.list('Inquiry', (inquiry) => ['NEW', 'RESEARCHING'].includes(String(inquiry.state || 'NEW').toUpperCase())).forEach((inquiry) => {
+        const communications = this.list('CommunicationActivity', (record) => record.client_id === inquiry.client_id || record.inquiry_id === inquiry.inquiry_id);
+        const latest = communications
+          .sort((a, b) => String(a.occurred_at || a.created_at || '').localeCompare(String(b.occurred_at || b.created_at || '')))
+          .pop();
+        const latestDate = latest ? String(latest.occurred_at || latest.created_at || '').slice(0, 10) : null;
+        if (latestDate && latestDate >= followUpCutoff) return;
+        const destination = inquiry.current_requirements && inquiry.current_requirements.destination || 'their trip';
+        raise('AGENT_PROPOSAL:FOLLOW_UP_OVERDUE:' + inquiry.inquiry_id, {
+          rule: 'FOLLOW_UP_OVERDUE',
+          target_id: inquiry.inquiry_id,
+          inquiry_id: inquiry.inquiry_id,
+          client_id: inquiry.client_id,
+          related_type: 'Inquiry',
+          related_id: inquiry.inquiry_id,
+          suggested_action: 'Follow up with ' + this.clientDisplayName(inquiry.client_id) + ' about ' + destination,
+          rationale: 'No client contact recorded in the last 7 days',
+          confidence: 0.8
+        });
+      });
+      // Rule QUOTE_STALLED: quotations still in DRAFT/APPROVED (the runtime's
+      // in-flight statuses; approval = with the client for acceptance) with no
+      // QuotationAcceptance, older than 3 days from quotation_date.
+      const quoteCutoff = dateOnlyPlusDays(asOf, -3);
+      this.list('Quotation', (quote) => ['DRAFT', 'APPROVED'].includes(String(quote.status || '').toUpperCase())).forEach((quote) => {
+        if (this.list('QuotationAcceptance', (record) => record.quotation_id === quote.quotation_id && record.state === 'ACCEPTED').length) return;
+        const quotationDate = String(quote.quotation_date || quote.created_at || '').slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(quotationDate) || quotationDate >= quoteCutoff) return;
+        raise('AGENT_PROPOSAL:QUOTE_STALLED:' + quote.quotation_id, {
+          rule: 'QUOTE_STALLED',
+          target_id: quote.quotation_id,
+          quotation_id: quote.quotation_id,
+          inquiry_id: quote.inquiry_id || null,
+          client_id: quote.client_id,
+          related_type: 'Quotation',
+          related_id: quote.quotation_id,
+          suggested_action: 'Chase quotation ' + quote.quotation_id + ' with ' + this.clientDisplayName(quote.client_id),
+          rationale: 'Quotation has been with the client for over 3 days without acceptance',
+          confidence: 0.7
+        });
+      });
+      this.audit('AGENT_PROPOSALS_GENERATED', 'AgentProposal', null, ctx, {
+        asOf,
+        raised: proposals.length,
+        skipped_existing: skippedExisting
+      });
+      return ok({
+        version: 1,
+        asOf,
+        raised: proposals.length,
+        skipped_existing: skippedExisting,
+        proposals: proposals.map((task) => ({
+          task_id: task.task_id,
+          rule: task.rule,
+          target_id: task.target_id,
+          suggested_action: task.suggested_action,
+          confidence: task.confidence
+        }))
+      }, { action: 'AGENT_PROPOSALS_GENERATED', drafts_only: true });
+    } catch (error) {
+      this.auditFailure('AGENT_PROPOSALS_GENERATED', 'AgentProposal', input, ctx, error);
+      return fail(error);
+    }
+  }
+  resolveAgentProposal(input, context) {
+    const ctx = this.context(context);
+    try {
+      const value = input || {};
+      const task = this.must('Task', requireValue(value.task_id, 'task_id'));
+      if (task.task_type !== 'AGENT_PROPOSAL') {
+        throw new WmitError('AGENT_PROPOSAL_INVALID', 'That task is not a sales agent proposal.', { task_id: task.task_id, task_type: task.task_type || null });
+      }
+      if (String(task.state || 'OPEN').toUpperCase() !== 'OPEN') {
+        throw new WmitError('AGENT_PROPOSAL_STATE_INVALID', 'Only an open sales agent proposal can be resolved.', { task_id: task.task_id, current_state: task.state });
+      }
+      const resolution = String(value.resolution || '').trim().toUpperCase();
+      if (!['ACCEPTED', 'DISMISSED'].includes(resolution)) {
+        throw new WmitError('AGENT_PROPOSAL_RESOLUTION_INVALID', 'Resolution must be ACCEPTED or DISMISSED.', { field: 'resolution', resolution: value.resolution === undefined || value.resolution === null ? null : String(value.resolution) });
+      }
+      const note = value.note === undefined || value.note === null || String(value.note).trim() === '' ? null : String(value.note).trim();
+      const completionNote = (resolution === 'ACCEPTED' ? 'Accepted' : 'Dismissed') + ' by ' + ctx.actor + (note ? ': ' + note : '');
+      // Accepting closes the suggestion only — v1 performs no other action.
+      const updated = this.updateTask({ task_id: task.task_id, state: resolution === 'ACCEPTED' ? 'COMPLETED' : 'CANCELLED', completion_note: completionNote }, ctx);
+      if (!updated.ok) return updated;
+      this.audit('RESOLVE_AGENT_PROPOSAL', 'Task', updated.data, ctx, { resolution, rule: task.rule || null, target_id: task.target_id || null });
+      return ok(this.agentProposalSummary(updated.data), { action: 'RESOLVE_AGENT_PROPOSAL' });
+    } catch (error) {
+      this.auditFailure('RESOLVE_AGENT_PROPOSAL', 'Task', input, ctx, error);
+      return fail(error);
+    }
+  }
   // ------------------------------------------ departure readiness runner
   //
   // Read-only checklist projection plus (for the run action) idempotent

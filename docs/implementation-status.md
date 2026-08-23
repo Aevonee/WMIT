@@ -65,6 +65,12 @@ feature by feature, with where to find it. Test suite reference:
 | Quotation from package | `createQuotationFromPackage` | Built. CONFIRMED packages only; creates a DRAFT quotation with package itinerary/inclusions/exclusions + one Tour Package line (qty = pax or 1 by basis; selling-price override honoured); rolls back cleanly if the item fails. |
 | Flyer upload + AI intake | Packages tab upload; `uploadFlyer` / `extractFlyerDraft`; `src/adapters/flyer-extraction-adapter.js` | Built. Flyer documents (`source_type WHOLESALER_FLYER`, 700KB, PNG/JPEG/WebP/PDF). AI adapter is optional and config-gated (`FLYER_AI_PROVIDER` openai/gemini/openrouter, `FLYER_AI_API_KEY`, `FLYER_AI_MODEL`; openrouter defaults to `stealth/ox-alpha` — free preview, multimodal; OpenRouter stealth models are run by an anonymous provider that retains prompts, acceptable for wholesaler promo flyers only); unconfigured = clean EXTRACTION_UNAVAILABLE and the manual form. Extraction validates flyer source BEFORE the adapter is called - client sensitive documents can never reach an external API. Extraction drafts store on the document; humans always confirm the package. |
 
+## Agent layer
+
+| Feature | Where | Status |
+|---|---|---|
+| Sales proposal agent v1 | Today tab, "Sales agent suggestions" card; `generateSalesProposals` / `resolveAgentProposal` actions; `tests/integration/agent-proposals.test.js` | Built, draft-only. Two deterministic rules (no LLM, no adapter — that is v2): FOLLOW_UP_OVERDUE (NEW/RESEARCHING inquiry with no client Communication in 7 days, confidence 0.8) and QUOTE_STALLED (DRAFT/APPROVED quotation with no QuotationAcceptance and quotation_date over 3 days old, confidence 0.7). Proposals are Task records (`task_type AGENT_PROPOSAL`, `source SALES_AGENT`), deduped by `automation_key` so re-scanning never duplicates an open suggestion. Staff Accept or Dismiss; Accept = audited COMPLETED, Dismiss = audited CANCELLED. **Automation stops at the suggestion** - accepting executes nothing (no emails, no bookings, no status changes); acting on a suggestion happens through the normal workspace screens. |
+
 ## Deliberately not built
 
 - **Payment gateway** - blocked on merchant onboarding paperwork, not code. Revisit when the owner has PSP documents ready.

@@ -848,6 +848,8 @@ function actionLabel(action) {
     createDocument: 'Supporting document recorded',
     createTask: 'Task created',
     updateTask: 'Task updated',
+    generateSalesProposals: 'Sales agent scan complete',
+    resolveAgentProposal: 'Sales agent suggestion resolved',
     createCommunication: 'Communication logged',
     createSubAgent: 'Sub-agent created',
     updateSubAgent: 'Sub-agent updated',
@@ -903,6 +905,8 @@ function actionDetail(action, data) {
   if (action === 'executeSupplierPayment') return data && data.supplier_payment_id ? 'Supplier Payment executed for ' + data.amount + ' ' + data.currency + '.' : 'Supplier Payment was not executed.';
   if (action === 'requestRefund') return 'Refund/adjustment request is a draft and still requires authorization.';
   if (action === 'executeRefund') return 'Refund/adjustment execution was recorded by the authorized local actor.';
+  if (action === 'generateSalesProposals') return 'Scan raised ' + (data && data.raised || 0) + ' suggestion(s)' + (data && data.skipped_existing ? '; ' + data.skipped_existing + ' already open' : '') + '. Suggestions are drafts — nothing was sent or changed.';
+  if (action === 'resolveAgentProposal') return 'The suggestion was closed. Nothing else was executed — act on it through the normal workspace screens.';
   if (action === 'resetSyntheticTestCase') return 'Only local synthetic Phase 1 state was reset.';
   return (id ? 'Record ' + id + ' was updated.' : 'The operation returned an updated state. Review the affected workspace below.');
 }
@@ -1648,7 +1652,7 @@ function renderToday() {
   }, 'open the Quotations tab');
   const quoteExpiryCard = '<div class="card today-card"><div class="today-card-head"><h3>Quotes expiring soon</h3><span class="today-count">' + data.quotesExpiringSoon.count + '</span></div>' + (quoteExpiryRows || '<p class="muted">No approved quotes expiring within ' + data.windows.quoteExpiryDays + ' days.</p>') + '</div>';
 
-  target.innerHTML = meta + '<div class="today-grid">' + paymentsCard + departuresCard + suppliersCard + followUpsCard + documentsCard + quoteApprovalCard + quoteExpiryCard + '</div>';
+  target.innerHTML = meta + '<div class="today-grid">' + paymentsCard + departuresCard + suppliersCard + followUpsCard + documentsCard + quoteApprovalCard + quoteExpiryCard + salesAgentCard() + '</div>';
 }
 
 let salesOverviewData = null;
@@ -5235,6 +5239,49 @@ async function copyReminderDraft(taskId) {
   document.body.removeChild(area);
   if (copied) showMessage('✓ Reminder copied', 'Paste it into your mail client, review it, and send it manually.', 'ok');
   else failLocal('Copying is not available in this browser. Open the draft and copy the text manually.');
+}
+
+function openAgentProposals() {
+  return list('Task', (task) => task.task_type === 'AGENT_PROPOSAL' && ['OPEN', 'IN_PROGRESS', 'BLOCKED'].includes(String(task.state || 'OPEN').toUpperCase()))
+    .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
+}
+
+function agentProposalAge(task) {
+  const created = Date.parse(task.created_at || '');
+  if (Number.isNaN(created)) return 'age unknown';
+  const days = Math.max(0, Math.floor((Date.now() - created) / 86400000));
+  return days === 0 ? 'raised today' : days + ' day' + (days === 1 ? '' : 's') + ' old';
+}
+
+function salesAgentCard() {
+  const proposals = openAgentProposals();
+  const rows = proposals.map(function (task) {
+    const confidence = typeof task.confidence === 'number' ? Math.round(task.confidence * 100) + '%' : '—';
+    return '<div class="today-item">'
+      + '<div class="t-main"><b>' + esc(task.suggested_action || task.title || 'Suggestion') + '</b>'
+      + '<div class="t-sub">' + esc(readableState(task.rule || 'RULE')) + ' · confidence ' + esc(confidence) + ' · ' + esc(agentProposalAge(task)) + '</div>'
+      + '<div class="t-sub">' + esc(task.rationale || '') + '</div></div>'
+      + '<div class="row-actions"><button class="secondary compact" onclick="acceptAgentProposal(\'' + esc(task.task_id) + '\')">Accept</button>'
+      + '<button class="danger compact" onclick="dismissAgentProposal(\'' + esc(task.task_id) + '\')">Dismiss</button></div>'
+      + '</div>';
+  }).join('');
+  return '<div class="card today-card"><div class="today-card-head"><h3>Sales agent suggestions</h3><span class="today-count">' + proposals.length + '</span></div>'
+    + '<p class="muted">Suggestions are drafts from fixed rules — no AI acts on its own, and automation stops at the suggestion. Accepting only closes the suggestion; act on it through the normal workspace screens.</p>'
+    + '<div class="row-actions"><button class="secondary compact" onclick="scanSalesProposals()">Scan now</button></div>'
+    + (rows || '<p class="muted">No open suggestions. Scan to check for overdue follow-ups and stalled quotations.</p>')
+    + '</div>';
+}
+
+async function scanSalesProposals() {
+  await api('generateSalesProposals', {}, 'LOCAL_STAFF');
+}
+
+async function acceptAgentProposal(taskId) {
+  await api('resolveAgentProposal', { task_id: taskId, resolution: 'ACCEPTED' }, 'LOCAL_STAFF');
+}
+
+async function dismissAgentProposal(taskId) {
+  await api('resolveAgentProposal', { task_id: taskId, resolution: 'DISMISSED' }, 'LOCAL_STAFF');
 }
 
 async function createGlobalTask() {
