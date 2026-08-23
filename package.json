@@ -9,8 +9,12 @@
     "start:local": "node scripts/run-mvp.js",
     "start:mvp": "node scripts/run-mvp.js",
     "acceptance": "node scripts/run-acceptance.js",
+    "test:e2e": "node tests/e2e/run-e2e.js",
     "backup": "node scripts/backup.js",
     "restore": "node scripts/restore.js",
     "admin:reset": "node scripts/admin-reset.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1"
   }
 }
