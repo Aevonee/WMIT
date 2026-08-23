@@ -1,11 +1,17 @@
 # Implementation Status
 
-Last updated: Aug 21 2026 (after the 8-feature platform build).
+Last updated: Aug 23 2026 (design overhaul + manual quotation builder).
 
 This page tracks what is actually built and running on the hosted server,
 feature by feature, with where to find it. Test suite reference:
-412 tests, 405 passing, 7 pre-existing failures isolated to
-`tests/integration/quotation-editor.test.js` (unrelated to the features below).
+417 tests, all passing.
+
+## Design (Aug 22–23 2026)
+
+| Feature | Where | Status |
+|---|---|---|
+| Workspace design overhaul | `app/public/operations.html` + `operations.js` + `tokens.css` / `styles.css`; approved mockups in `docs/mockups/` | Built. Design tokens, system fonts, component restyle across all workspace views (Today cockpit, case command center, quotations, bookings/payments, departures, documents/privacy, remaining tabs) and the Events console (`expo-console.css`). Browser-verified at desktop and 375px. |
+| Manual quotation builder | Quotations tab ("Build quotation" from a selected Inquiry) and Inquiries queue ("Build quote"); `#quote-builder` view | Built, additive - the classic quotation editor is untouched and stays the default for editing. Item-by-item builder with internal unit cost, optional supplier, flights and itinerary days, live totals (subtotal, service fee, grand total, internal margin) and a live client preview sheet. Cost, supplier and margin never render on the client sheet. Guards: below-cost items and missing destination block the save; drafts save through the existing audited actions (`createQuotation` / `createQuotationItem` / `updateQuotation`), which require signed-in staff authority (`EDIT_DRAFT_PRICING`); partial failures keep the saved lines and open the draft with a warning. |
 
 ## Daily operations
 
