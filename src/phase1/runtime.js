@@ -14,6 +14,7 @@ const departureReadiness = require('./departure-readiness');
 const reminderDrafts = require('./reminder-drafts');
 const accountantExport = require('./accountant-export');
 const commissionRules = require('./commission-rules');
+const csv = require('../imports/csv');
 const privacy = require('../privacy/privacy');
 
 const DEFAULT_BANK_DETAILS = [
@@ -93,6 +94,21 @@ const FLYER_UPLOAD_LIMIT_BYTES = 700 * 1024;
 const INTERN_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // Must stay in sync with USERNAME_PATTERN in src/server/auth.js.
 const WMIT_USERNAME_PATTERN = /^[a-z0-9][a-z0-9._-]{2,39}$/;
+const CLIENT_IMPORT_COLUMNS = Object.freeze(['display_name', 'email', 'mobile', 'landline', 'notes']);
+const CLIENT_IMPORT_MAX_ROWS = 2000;
+const CLIENT_IMPORT_MAX_BYTES = 512 * 1024;
+const CLIENT_IMPORT_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const CLIENT_IMPORT_PHONE_PATTERN = /^[0-9+()\-\s]+$/;
+
+function clientImportPhoneDigits(value) { return String(value || '').replace(/[^0-9]/g, ''); }
+function clientImportPhoneProblem(value) {
+  const text = String(value).trim();
+  if (text.length > 40) return 'longer than 40 characters';
+  if (!CLIENT_IMPORT_PHONE_PATTERN.test(text)) return 'only digits, +, spaces, dashes, and parentheses are allowed';
+  const digits = clientImportPhoneDigits(text);
+  if (digits.length < 7 || digits.length > 15) return digits.length + ' of the required 7-15 digits';
+  return null;
+}
 
 function ok(data, meta) { return { ok: true, data, meta: meta || {} }; }
 function fail(error) { return errorResult(error); }
@@ -299,6 +315,157 @@ class Phase1Runtime {
         display_name: displayName,
         legal_name: String(next.legal_name || displayName).trim()
       }), context);
+    } catch (error) { return fail(error); }
+  }
+  // Shared validation pass; commit always re-runs it from scratch and never trusts a prior preview.
+  analyzeClientImport(input) {
+    const value = input || {};
+    if (typeof value.csv_text !== 'string' || value.csv_text === '') {
+      throw new WmitError('REQUIRED_FIELD', 'csv_text with the CSV content is required.', { field: 'csv_text' });
+    }
+    const byteLength = Buffer.byteLength(value.csv_text, 'utf8');
+    if (byteLength > CLIENT_IMPORT_MAX_BYTES) {
+      throw new WmitError('IMPORT_CSV_TOO_LARGE', 'The client import limit is 512 KB of CSV text; this input is ' + byteLength + ' bytes.', { limit_bytes: CLIENT_IMPORT_MAX_BYTES, actual_bytes: byteLength });
+    }
+    const parsed = csv.parseCsv(value.csv_text);
+    if (!parsed.records.length) {
+      throw new WmitError('IMPORT_CSV_EMPTY', 'The CSV text is empty or contains only blank lines.', {});
+    }
+    const header = parsed.records[0];
+    const dataRecords = parsed.records.slice(1);
+    if (dataRecords.length > CLIENT_IMPORT_MAX_ROWS) {
+      throw new WmitError('IMPORT_CSV_TOO_MANY_ROWS', 'The client import limit is ' + CLIENT_IMPORT_MAX_ROWS + ' data rows; this file has ' + dataRecords.length + '.', { limit_rows: CLIENT_IMPORT_MAX_ROWS, actual_rows: dataRecords.length });
+    }
+    const columnAt = {};
+    const unknownColumns = [];
+    const duplicateColumns = [];
+    header.cells.forEach((cell, index) => {
+      const name = String(cell).trim().toLowerCase();
+      if (!name) return;
+      if (!CLIENT_IMPORT_COLUMNS.includes(name)) {
+        if (!unknownColumns.includes(name)) unknownColumns.push(name);
+        return;
+      }
+      if (columnAt[name] === undefined) columnAt[name] = index;
+      else if (!duplicateColumns.includes(name)) duplicateColumns.push(name);
+    });
+    if (columnAt.display_name === undefined) {
+      throw new WmitError('IMPORT_CSV_HEADER_INVALID', 'The CSV header must include a display_name column.', { required_columns: CLIENT_IMPORT_COLUMNS.slice(), header: header.cells.slice(0, 20) });
+    }
+    const existingEmail = new Map();
+    const existingPhone = new Map();
+    const existingName = new Map();
+    this.list('Client').forEach((client) => {
+      const email = String(client.primary_email || '').trim().toLowerCase();
+      if (email && !existingEmail.has(email)) existingEmail.set(email, client.client_id);
+      const digits = clientImportPhoneDigits(client.primary_phone);
+      if (digits && !existingPhone.has(digits)) existingPhone.set(digits, client.client_id);
+      const name = String(client.display_name || '').trim().toLowerCase();
+      if (name && !existingName.has(name)) existingName.set(name, client.client_id);
+    });
+    const cellAt = (cells, at) => at === undefined || cells[at] === undefined ? '' : String(cells[at]).trim();
+    const warningReasons = [];
+    unknownColumns.forEach((name) => warningReasons.push('Unknown column "' + name + '" is ignored.'));
+    duplicateColumns.forEach((name) => warningReasons.push('Duplicate column "' + name + '" is ignored; the first occurrence is used.'));
+    const seenEmail = new Map();
+    const seenPhone = new Map();
+    const seenName = new Map();
+    const rows = [];
+    const summary = { total: dataRecords.length, valid: 0, warnings: 0, errors: 0, duplicates_in_file: 0, duplicates_existing: 0 };
+    dataRecords.forEach((record) => {
+      const reasons = [];
+      let duplicateInFile = false;
+      let duplicateExisting = false;
+      const displayName = cellAt(record.cells, columnAt.display_name);
+      const email = cellAt(record.cells, columnAt.email);
+      const mobile = cellAt(record.cells, columnAt.mobile);
+      const landline = cellAt(record.cells, columnAt.landline);
+      const notes = cellAt(record.cells, columnAt.notes);
+      if (!displayName) reasons.push('display_name is required.');
+      else if (displayName.length > 200) reasons.push('display_name is longer than 200 characters.');
+      if (email) {
+        if (!CLIENT_IMPORT_EMAIL_PATTERN.test(email)) reasons.push('Email "' + email.slice(0, 60) + '" is not a valid email address.');
+        else if (email.length > 120) reasons.push('Email is longer than 120 characters.');
+      }
+      if (mobile) {
+        const problem = clientImportPhoneProblem(mobile);
+        if (problem) reasons.push('Mobile "' + mobile.slice(0, 60) + '" is not a valid phone number (' + problem + ').');
+      }
+      if (landline) {
+        const problem = clientImportPhoneProblem(landline);
+        if (problem) reasons.push('Landline "' + landline.slice(0, 60) + '" is not a valid phone number (' + problem + ').');
+      }
+      if (notes.length > 2000) reasons.push('Notes are longer than 2000 characters.');
+      const emailKey = email && CLIENT_IMPORT_EMAIL_PATTERN.test(email) && email.length <= 120 ? email.toLowerCase() : null;
+      const mobileDigits = mobile && !clientImportPhoneProblem(mobile) ? clientImportPhoneDigits(mobile) : null;
+      const nameKey = displayName ? displayName.toLowerCase() : null;
+      if (emailKey && seenEmail.has(emailKey)) { reasons.push('Duplicate email in file (first seen on row ' + seenEmail.get(emailKey) + ').'); duplicateInFile = true; }
+      if (mobileDigits && seenPhone.has(mobileDigits)) { reasons.push('Duplicate mobile in file (first seen on row ' + seenPhone.get(mobileDigits) + ').'); duplicateInFile = true; }
+      if (nameKey && seenName.has(nameKey)) { reasons.push('Duplicate display_name in file (first seen on row ' + seenName.get(nameKey) + '); only the first occurrence is imported.'); duplicateInFile = true; }
+      if (emailKey && existingEmail.has(emailKey)) { reasons.push('Email already belongs to client ' + existingEmail.get(emailKey) + '.'); duplicateExisting = true; }
+      if (mobileDigits && existingPhone.has(mobileDigits)) { reasons.push('Mobile already belongs to client ' + existingPhone.get(mobileDigits) + '.'); duplicateExisting = true; }
+      if (nameKey && existingName.has(nameKey)) { reasons.push('A client with this display_name already exists (' + existingName.get(nameKey) + ').'); duplicateExisting = true; }
+      if (emailKey && !seenEmail.has(emailKey)) seenEmail.set(emailKey, record.row_number);
+      if (mobileDigits && !seenPhone.has(mobileDigits)) seenPhone.set(mobileDigits, record.row_number);
+      if (nameKey && !seenName.has(nameKey)) seenName.set(nameKey, record.row_number);
+      const row = {
+        row_number: record.row_number,
+        status: reasons.length ? 'ERROR' : (warningReasons.length ? 'WARNING' : 'OK'),
+        reasons: reasons.concat(reasons.length ? [] : warningReasons)
+      };
+      if (row.status !== 'ERROR') {
+        row.suggested_client = {
+          display_name: displayName,
+          legal_name: displayName,
+          primary_email: email || undefined,
+          primary_phone: mobile || undefined,
+          landline: landline || undefined,
+          notes: notes || undefined
+        };
+      }
+      if (row.status === 'OK') summary.valid += 1;
+      else if (row.status === 'WARNING') summary.warnings += 1;
+      else summary.errors += 1;
+      if (duplicateInFile) summary.duplicates_in_file += 1;
+      if (duplicateExisting) summary.duplicates_existing += 1;
+      rows.push(row);
+    });
+    return { rows, summary };
+  }
+  previewClientImport(input, context) {
+    try {
+      // Pure validation: nothing is written, so there is no audit entry.
+      const report = this.analyzeClientImport(input);
+      return ok(report, { action: 'PREVIEW_CLIENT_IMPORT', read_only: true });
+    } catch (error) { return fail(error); }
+  }
+  commitClientImport(input, context) {
+    try {
+      const report = this.analyzeClientImport(input);
+      const ctx = this.context(context);
+      const rows = [];
+      const reasonCounts = {};
+      let created = 0;
+      let skipped = 0;
+      report.rows.forEach((row) => {
+        if (row.status === 'ERROR') {
+          skipped += 1;
+          row.reasons.forEach((reason) => { reasonCounts[reason] = (reasonCounts[reason] || 0) + 1; });
+          rows.push({ row_number: row.row_number, status: 'SKIPPED', reasons: row.reasons });
+          return;
+        }
+        const result = this.createClient(row.suggested_client, ctx);
+        if (result.ok) {
+          created += 1;
+          rows.push({ row_number: row.row_number, status: 'CREATED', client_id: result.data.client_id, reasons: [] });
+          return;
+        }
+        skipped += 1;
+        const reason = result.error.message;
+        reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
+        rows.push({ row_number: row.row_number, status: 'SKIPPED', reasons: [reason] });
+      });
+      return ok({ rows, summary: { created, skipped, reasons: reasonCounts } }, { action: 'COMMIT_CLIENT_IMPORT', created, skipped });
     } catch (error) { return fail(error); }
   }
   createSupplier(input, context) {

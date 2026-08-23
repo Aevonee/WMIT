@@ -1907,6 +1907,7 @@ function renderClients() {
   const selectedId = selectedWorkspaceId('client');
   const selected = selectedId && latest('Client', (client) => client.client_id === selectedId);
   const clientForm = '<div class="card"><h3>Add client</h3><p class="muted">Create the client master record first, then create one or more Inquiries against it.</p><div class="grid3"><div class="field"><label>Name *</label><input id="client-name" placeholder="Client or organization name"></div><div class="field"><label>Client type</label><select id="client-type"><option>Individual</option><option>Family</option><option>Company</option><option>Agency</option><option>Organization</option></select></div><div class="field"><label>Country</label><input id="client-country" value="Philippines"></div><div class="field"><label>Legal name</label><input id="client-legal-name"></div><div class="field"><label>Email</label><input id="client-email" type="email"></div><div class="field"><label>Phone</label><input id="client-phone"></div></div><div class="field"><label>Notes</label><textarea id="client-notes" rows="2"></textarea></div><button onclick="createClientRecord()">Save client</button></div>';
+  const clientImportCard = '<div class="card"><h3>Import clients (CSV)</h3><p class="muted">Paste CSV text or load a .csv/.txt file (max 512 KB, up to 2000 rows). Columns: display_name (required), email, mobile, landline, notes. Nothing is saved until you preview it and import.</p><div class="field"><label>CSV text</label><textarea id="client-import-text" rows="6" placeholder="display_name,email,mobile,landline,notes"></textarea></div><div class="field"><label>Load from file</label><input id="client-import-file" type="file" accept=".csv,.txt,text/csv,text/plain" onchange="clientImportPickFile(this)"></div><div class="row-actions"><button id="client-import-preview-btn" onclick="previewClientImportForm()">Preview</button><button id="client-import-commit-btn" class="secondary" onclick="commitClientImportForm()" disabled>Import</button></div><div id="client-import-report"></div></div>';
   if (selected) {
     const inquiries = list('Inquiry', (inquiry) => inquiry.client_id === selected.client_id);
     const bookings = list('Booking', (booking) => booking.client_id === selected.client_id);
@@ -1916,7 +1917,7 @@ function renderClients() {
     return;
   }
   const clientFilterBar = '<div class="supplier-filters"><div class="field"><label for="client-search">Search clients</label><input id="client-search" type="search" placeholder="Name, email, phone, client ID…" value="' + esc(clientFilters.q) + '" oninput="setClientFilter(\'q\', this.value)"></div></div>';
-  $('clients-content').innerHTML = clientForm + '<div class="panel"><div class="panel-head"><div><h3>Client master directory</h3><p class="muted">An Inquiry is a request/history record. A Client is the linked master record. Client records can be edited without changing Inquiry history.</p></div></div>' + clientFilterBar + '<div id="client-list-body">' + clientListBody() + '</div></div>';
+  $('clients-content').innerHTML = clientForm + clientImportCard + '<div class="panel"><div class="panel-head"><div><h3>Client master directory</h3><p class="muted">An Inquiry is a request/history record. A Client is the linked master record. Client records can be edited without changing Inquiry history.</p></div></div>' + clientFilterBar + '<div id="client-list-body">' + clientListBody() + '</div></div>';
   const pendingName = sessionStorage.getItem('wmit.pendingClientName');
   if (pendingName && $('client-name')) {
     $('client-name').value = pendingName;
@@ -1948,6 +1949,87 @@ function setClientFilter(key, value) {
 function clearClientFilters() {
   clientFilters.q = '';
   render();
+}
+
+let clientImportPreview = null;
+let clientImportCsvText = '';
+
+async function fetchClientImport(actionName, input) {
+  try {
+    const response = await wmitGuard401(await fetch('/api/phase1/action', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, wmitAuthHeaders()), body: JSON.stringify({ action: actionName, input, actor: 'LOCAL_STAFF' }) }));
+    const result = await response.json();
+    if (!result.ok) {
+      showMessage('✕ Client import — NOT EXECUTED', result.error && result.error.message || 'The import request was blocked.', 'error');
+      return null;
+    }
+    return result.data;
+  } catch (error) {
+    showMessage('✕ Client import — NOT EXECUTED', error.message || 'The local API could not be reached.', 'error');
+    return null;
+  }
+}
+
+function clientImportPickFile(input) {
+  const file = input.files && input.files[0];
+  input.value = '';
+  if (!file) return;
+  if (!/\.(csv|txt)$/i.test(file.name)) return failLocal('Choose a .csv or .txt file.');
+  if (file.size > 512 * 1024) return failLocal('The client import limit is 512 KB of CSV text.');
+  const reader = new FileReader();
+  reader.onload = () => {
+    const textarea = $('client-import-text');
+    if (!textarea) return;
+    textarea.value = String(reader.result || '');
+    clientImportPreview = null;
+    clientImportCsvText = '';
+    renderClientImportReport();
+    showMessage('CSV file loaded', file.name + ' is ready to preview.', 'ok');
+  };
+  reader.onerror = () => failLocal('The selected file could not be read.');
+  reader.readAsText(file);
+}
+
+async function previewClientImportForm() {
+  const textarea = $('client-import-text');
+  const text = textarea ? textarea.value : '';
+  if (!text.trim()) return failLocal('Paste CSV text or choose a CSV file first.', 'client-import-text');
+  if (text.length > 512 * 1024) return failLocal('The client import limit is 512 KB of CSV text.');
+  const report = await fetchClientImport('previewClientImport', { csv_text: text });
+  clientImportPreview = report;
+  clientImportCsvText = report ? text : '';
+  renderClientImportReport();
+}
+
+async function commitClientImportForm() {
+  if (!clientImportPreview || !(clientImportPreview.summary && clientImportPreview.summary.valid > 0)) return failLocal('Preview the CSV first; Import unlocks when at least one row is fully valid.');
+  const textarea = $('client-import-text');
+  if (!textarea || textarea.value !== clientImportCsvText) return failLocal('The CSV text changed after the preview. Preview it again before importing.', 'client-import-text');
+  const creatable = clientImportPreview.summary.valid + clientImportPreview.summary.warnings;
+  if (!window.confirm('Import ' + creatable + ' client record' + (creatable === 1 ? '' : 's') + ' from this CSV? Rows with errors are skipped; duplicates are never merged.')) return;
+  const result = await fetchClientImport('commitClientImport', { csv_text: clientImportCsvText });
+  if (!result) return;
+  clientImportPreview = null;
+  clientImportCsvText = '';
+  await refreshState();
+  showMessage('✓ Client import finished', result.summary.created + ' client record' + (result.summary.created === 1 ? '' : 's') + ' created, ' + result.summary.skipped + ' skipped. Duplicates were never merged.', 'ok');
+}
+
+function renderClientImportReport() {
+  const container = $('client-import-report');
+  const commitButton = $('client-import-commit-btn');
+  if (!container) return;
+  if (!clientImportPreview) {
+    container.innerHTML = '';
+    if (commitButton) commitButton.disabled = true;
+    return;
+  }
+  const summary = clientImportPreview.summary;
+  const rows = (clientImportPreview.rows || []).map((row) => {
+    const client = row.suggested_client ? [row.suggested_client.display_name, row.suggested_client.primary_email, row.suggested_client.primary_phone, row.suggested_client.landline].filter(Boolean).join(' · ') : '';
+    return '<tr><td>' + esc(row.row_number) + '</td><td>' + esc(row.status) + '</td><td>' + esc((row.reasons || []).join(' ') || 'Ready to import') + '</td><td>' + esc(client) + '</td></tr>';
+  }).join('');
+  container.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Row</th><th>Status</th><th>Reason</th><th>Client</th></tr></thead><tbody>' + rows + '</tbody></table></div><p class="muted">' + esc(summary.total) + ' row' + (summary.total === 1 ? '' : 's') + ': ' + esc(summary.valid) + ' valid, ' + esc(summary.warnings) + ' warning' + (summary.warnings === 1 ? '' : 's') + ', ' + esc(summary.errors) + ' error' + (summary.errors === 1 ? '' : 's') + ' — ' + esc(summary.duplicates_in_file) + ' duplicate' + (summary.duplicates_in_file === 1 ? '' : 's') + ' in file, ' + esc(summary.duplicates_existing) + ' matching existing client' + (summary.duplicates_existing === 1 ? '' : 's') + '.</p>';
+  if (commitButton) commitButton.disabled = !(summary.valid > 0);
 }
 
 function exportPaymentsCsv() {

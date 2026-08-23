@@ -15,7 +15,7 @@ const LOCAL_AUTH = {
 // dispatcher. Infrastructure internals (createRecord, updateRecord, list,
 // snapshot, calculation helpers) must never be callable by action name.
 const RUNTIME_ACTION_WHITELIST = new Set([
-  'createClient', 'updateClient', 'createPerson', 'createSupplier', 'createSupplierContact', 'updateSupplier', 'deleteSupplier', 'createSubAgent', 'updateSubAgent', 'createInquiry', 'updateInquiry',
+  'createClient', 'updateClient', 'previewClientImport', 'commitClientImport', 'createPerson', 'createSupplier', 'createSupplierContact', 'updateSupplier', 'deleteSupplier', 'createSubAgent', 'updateSubAgent', 'createInquiry', 'updateInquiry',
   'uploadTariff', 'reviewTariff', 'deleteTariff',
   'createManualTariff', 'addTariffRate', 'removeTariffRate',
   'matchOptions', 'findMoreOptions', 'selectOption', 'calculateOptionCost',
