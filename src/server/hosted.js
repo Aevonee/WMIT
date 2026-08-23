@@ -15,6 +15,7 @@ const { DocumentsIngestionService } = require('../documents/ingestion-service');
 const { createPdfTariffUploadAdapter } = require('../adapters/pdf-tariff-upload-adapter');
 const { createPasteTariffUploadAdapter } = require('../adapters/paste-tariff-upload-adapter');
 const { createFlyerExtractionAdapter } = require('../adapters/flyer-extraction-adapter');
+const { createInquiryParsingAdapter } = require('../adapters/inquiry-parsing-adapter');
 const { createPhase1Runtime, ENTITY_DEFS } = require('../phase1/runtime');
 const { createPhase1Application } = require('../application/phase1');
 const { createMvpServer } = require('../../app/server');
@@ -54,6 +55,7 @@ function createHostedServer(options) {
     auditLog,
     repositoryFactory,
     flyerAdapter: createFlyerExtractionAdapter({ provider: config.flyerAi.provider, apiKey: config.flyerAi.apiKey, model: config.flyerAi.model }),
+    inquiryAdapter: createInquiryParsingAdapter({ provider: config.inquiryAi.provider, apiKey: config.inquiryAi.apiKey, model: config.inquiryAi.model }),
     config: Object.assign({ trustedActors: {}, baseUrl: config.baseUrl }, persistedSettings),
     onSettingsChanged: (settings) => {
       upsertConfiguration.run('runtime_settings', JSON.stringify({ quotationDefaults: settings.quotationDefaults, messageTemplates: settings.messageTemplates, commissionRules: settings.commissionRules }), new Date().toISOString());

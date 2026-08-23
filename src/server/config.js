@@ -88,6 +88,13 @@ function loadConfig(overrides) {
       apiKey: read('FLYER_AI_API_KEY', ''),
       model: read('FLYER_AI_MODEL', '')
     },
+    // Optional AI adapter for client-message inquiry parsing (never required;
+    // inquiry intake falls back to manual entry when unset).
+    inquiryAi: {
+      provider: String(read('INQUIRY_AI_PROVIDER', 'none')).trim().toLowerCase(),
+      apiKey: read('INQUIRY_AI_API_KEY', ''),
+      model: read('INQUIRY_AI_MODEL', '')
+    },
     smtpConfigured() {
       const smtp = this.smtp;
       return Boolean(smtp.host && smtp.username && smtp.password && smtp.fromEmail);

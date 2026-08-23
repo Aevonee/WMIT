@@ -91,6 +91,7 @@ const PACKAGE_SOURCE_VALUES = Object.freeze(['MANUAL', 'FLYER_IMPORT']);
 const PACKAGE_PAX_BASIS_VALUES = Object.freeze(['PER_PERSON', 'PER_GROUP']);
 const FLYER_MIME_PATTERN = /^(image\/(png|jpeg|jpg|webp)|application\/pdf)$/i;
 const FLYER_UPLOAD_LIMIT_BYTES = 700 * 1024;
+const INQUIRY_TEXT_LIMIT = 8000;
 const INTERN_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // Must stay in sync with USERNAME_PATTERN in src/server/auth.js.
 const WMIT_USERNAME_PATTERN = /^[a-z0-9][a-z0-9._-]{2,39}$/;
@@ -189,6 +190,9 @@ class Phase1Runtime {
     this.onSettingsChanged = typeof opts.onSettingsChanged === 'function' ? opts.onSettingsChanged : null;
     // Optional flyer AI adapter; null means manual intake only — never a dependency.
     this.flyerAdapter = opts.flyerAdapter || null;
+    // Optional client-message AI parsing adapter; null means manual inquiry
+    // entry only — never a dependency.
+    this.inquiryAdapter = opts.inquiryAdapter || null;
     this.repos = {};
     // Hosted deployments inject SQLite-backed repositories; local and test
     // runs keep the in-memory default. The interface is identical.
@@ -3771,6 +3775,50 @@ class Phase1Runtime {
       }, { action: 'EXTRACT_FLYER_DRAFT' });
     } catch (error) {
       this.auditFailure('EXTRACT_FLYER_DRAFT', 'Document', input, ctx, error);
+      return fail(error);
+    }
+  }
+  // Pure read (like a preview): parses a pasted client message into proposed
+  // inquiry fields. Never writes a record or audit entry — the human confirms
+  // by submitting the normal inquiry form.
+  async parseInquiryMessage(input, context) {
+    const ctx = this.context(context);
+    try {
+      const value = input || {};
+      const text = String(requireValue(value.text, 'text')).trim();
+      if (text.length > INQUIRY_TEXT_LIMIT) {
+        throw new WmitError('TEXT_TOO_LONG', 'The client message is limited to ' + INQUIRY_TEXT_LIMIT + ' characters. Trim the message and try again.', { limit: INQUIRY_TEXT_LIMIT, actual_length: text.length });
+      }
+      let parsed = {
+        provider: 'none',
+        model: null,
+        available: false,
+        message: 'AI inquiry parsing is not configured on this server. Fill the form manually from the client message.',
+        fields: {},
+        notes: []
+      };
+      if (this.inquiryAdapter && typeof this.inquiryAdapter.extract === 'function') {
+        try {
+          const result = await this.inquiryAdapter.extract({ text });
+          if (result && result.ok) {
+            parsed = { provider: result.provider || 'unknown', model: result.model || null, available: true, message: 'Draft requirements ready — review every field, then save the inquiry form.', fields: result.fields || {}, notes: result.notes || [] };
+          } else {
+            parsed.message = (result && result.message) || parsed.message;
+          }
+        } catch (error) {
+          parsed.message = 'The inquiry AI adapter failed (' + String(error && error.message || 'unknown error').slice(0, 160) + '). Fill the form manually from the client message.';
+        }
+      }
+      return ok({
+        parse_available: parsed.available,
+        reason_code: parsed.available ? null : 'PARSE_UNAVAILABLE',
+        message: parsed.message,
+        provider: parsed.provider,
+        model: parsed.model,
+        fields: parsed.fields,
+        notes: parsed.notes
+      }, { action: 'PARSE_INQUIRY_MESSAGE', read_only: true });
+    } catch (error) {
       return fail(error);
     }
   }

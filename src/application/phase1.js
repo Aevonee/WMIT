@@ -43,13 +43,13 @@ const RUNTIME_ACTION_WHITELIST = new Set([
   'issueBookingStatusLink',
   'createIntern', 'updateIntern', 'listInterns', 'assignInternTask', 'submitInternTask', 'reviewInternTask',
   'createPackage', 'updatePackage', 'confirmPackage', 'archivePackage', 'listPackages', 'createQuotationFromPackage',
-  'uploadFlyer', 'extractFlyerDraft'
+  'uploadFlyer', 'extractFlyerDraft', 'parseInquiryMessage'
 ]);
 
 function createPhase1Application(options) {
   const opts = options || {};
   const sourceAdapters = opts.sourceAdapters || {};
-  const runtimeOptions = { clock: opts.clock, config: Object.assign({ trustedActors: LOCAL_AUTH }, opts.config || {}), flyerAdapter: opts.flyerAdapter || null };
+  const runtimeOptions = { clock: opts.clock, config: Object.assign({ trustedActors: LOCAL_AUTH }, opts.config || {}), flyerAdapter: opts.flyerAdapter || null, inquiryAdapter: opts.inquiryAdapter || null };
   const seededRuntime = () => opts.runtime || createPhase1Runtime(runtimeOptions);
   let runtime = seededRuntime();
   const seedSynthetic = (target) => {
