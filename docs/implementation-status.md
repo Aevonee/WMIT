@@ -20,6 +20,9 @@ feature by feature, with where to find it. Test suite reference:
 | Today overview (owner's cockpit) | Operations workspace, first tab; `getTodayOverview` action | Built. Payments due (+7d), departures (+30d), unconfirmed supplier bookings, overdue follow-ups, documents pending review. |
 | Global search | Topbar search box; `globalSearch` action | Built. Client / Inquiry / Quotation / Booking / ExpoLead, top 8 per group. |
 | Mobile workspace | Responsive CSS in operations.html | Built. Tabs, Today cards, tables usable at 375px. |
+| Client CSV import | Clients tab, "Import clients (CSV)" card; `previewClientImport` / `commitClientImport` | Built. Dry-run first: preview validates and reports (row-level OK/WARNING/ERROR, duplicates by email/phone/name in file and vs existing clients) without writing; commit re-validates from scratch and creates Client records through the audited path only - duplicates are never merged. Strict RFC 4180 parser (BOM, CRLF, quoted fields). Limits: 2000 rows, 512 KB. |
+| AI inquiry pre-fill | Inquiries tab, "Paste client message (AI pre-fill)" card; `parseInquiryMessage` | Built. Staff paste a client email/chat text; an optional adapter (`INQUIRY_AI_PROVIDER` openai/gemini/openrouter, `INQUIRY_AI_API_KEY`, `INQUIRY_AI_MODEL` - same env-gating as the flyer adapter) returns sanitized trip requirements that fill only empty form fields. Pure read - no records, no audit entries; unconfigured or failed adapters degrade to a clean notice. The inquiry is created only when staff save the form. |
+| Owner morning digest | Scheduler job `digest`, daily 08:00 Manila; `WMIT_DIGEST_TO` + `WMIT_SMTP_*` env | Built. Text email: reminder drafts awaiting review lead the action section, then documents pending review (worst-first, mirroring the ingestion queue), departure readiness alerts, privacy retention queue, payments awaiting verification, overdue receivables, trips in 14 days, expo funnel (24h). Empty sections are omitted. Unconfigured SMTP lands as .eml in the outbox and the run is recorded as skipped. |
 
 ## Client chasing (drafts, never auto-send)
 
@@ -69,7 +72,14 @@ feature by feature, with where to find it. Test suite reference:
 
 | Feature | Where | Status |
 |---|---|---|
-| Sales proposal agent v1 | Today tab, "Sales agent suggestions" card; `generateSalesProposals` / `resolveAgentProposal` actions; `tests/integration/agent-proposals.test.js` | Built, draft-only. Two deterministic rules (no LLM, no adapter — that is v2): FOLLOW_UP_OVERDUE (NEW/RESEARCHING inquiry with no client Communication in 7 days, confidence 0.8) and QUOTE_STALLED (DRAFT/APPROVED quotation with no QuotationAcceptance and quotation_date over 3 days old, confidence 0.7). Proposals are Task records (`task_type AGENT_PROPOSAL`, `source SALES_AGENT`), deduped by `automation_key` so re-scanning never duplicates an open suggestion. Staff Accept or Dismiss; Accept = audited COMPLETED, Dismiss = audited CANCELLED. **Automation stops at the suggestion** - accepting executes nothing (no emails, no bookings, no status changes); acting on a suggestion happens through the normal workspace screens. |
+| Sales proposal agent v1 | Today tab, "Sales agent suggestions" card; `generateSalesProposals` / `resolveAgentProposal` actions; `tests/integration/agent-proposals.test.js` | Built, draft-only. Two deterministic rules (no LLM, no adapter — that is v2): FOLLOW_UP_OVERDUE (NEW/RESEARCHING inquiry with no client Communication in 7 days, confidence 0.8) and QUOTE_STALLED (DRAFT/APPROVED quotation with no QuotationAcceptance and quotation_date over 3 days old, confidence 0.7). Proposals are Task records (`task_type AGENT_PROPOSAL`, `source SALES_AGENT`), deduped by `automation_key` so re-scanning never duplicates an open suggestion. Staff Accept or Dismiss; Accept = audited COMPLETED (stays suppressed on later scans), Dismiss = audited CANCELLED (can re-raise). **Automation stops at the suggestion** - accepting executes nothing (no emails, no bookings, no status changes); acting on a suggestion happens through the normal workspace screens. |
+
+## Development and verification
+
+| Feature | Where | Status |
+|---|---|---|
+| Unit + integration suite | `npm test` | 452 tests, all passing. |
+| Playwright e2e smoke suite | `npm run test:e2e` (separate from `npm test`) | Built. Own port (3999) and temp database - never touches the dev instance or repo data/. Six scenarios: login surface, real UI admin login, signed-in workspace with zero console errors, quote-builder regression with server-state assertions, expo console load, 375px no-overflow. Uses installed Edge/Chrome channels (no browser download); skips cleanly when no browser is present. |
 
 ## Deliberately not built
 
