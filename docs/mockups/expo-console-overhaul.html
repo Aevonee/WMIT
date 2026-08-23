@@ -1,0 +1,1226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Expo Console — UI Overhaul Proposal (Mockup) · WMIT</title>
+<meta name="description" content="Mockup proposal for the WMIT Expo Console overhaul. Self-contained, synthetic data, not wired to the server.">
+<style>
+/* ============================================================
+   WMIT Expo Console — UI overhaul proposal (self-contained mockup)
+   Design lineage: app/public/tokens.css "Operations Ledger" system.
+   Evolved one generation: navy #14334f authority band, manifest
+   green #177245 primary actions, passage blue #3679b6 data accent,
+   chart-paper #f5f7fb ground, rule-line borders, stamped pills.
+   System font stack only — no external requests of any kind.
+   ============================================================ */
+:root{
+  --navy:#14334f; --navy-deep:#102a40; --navy-line:#2a4d6d;
+  --ink:#172334; --fog:#607085; --label:#56677a;
+  --paper:#fff; --tint:#fbfcfe; --well:#f1f5f9; --chart:#f5f7fb;
+  --rule:#d9e2ec; --rule-hair:#e6ebf0; --rule-input:#c8d2df;
+  --green:#177245; --green-deep:#14603c;
+  --slate:#34526f; --slate-deep:#2b455d;
+  --blue:#3679b6; --blue-deep:#245c89; --blue-fill:#4d87bf; --blue-mid:#6f9fd0; --blue-soft:#93b9dc;
+  --good-bg:#dcf3e3; --good-text:#176237; --good-wash:#eef9f1; --good-rule:#add9b7;
+  --warn-bg:#fff1c6; --warn-text:#70530b; --warn-wash:#fff8df; --warn-rule:#e3c777;
+  --bad-bg:#f9dddd; --bad-text:#8d2c2c; --bad-wash:#fff5f5; --bad-rule:#e3aaaa;
+  --info-bg:#dcecfb; --info-text:#245c89;
+  --neutral-bg:#edf2f7; --neutral-text:#4e6175;
+  --wa-bg:#e7f6ec; --wa-text:#116936; --wa-line:#b9e2c6;
+  --vb-bg:#ece7f6; --vb-text:#553099; --vb-line:#d4c8ee;
+  --sh-1:0 1px 2px rgba(23,35,52,.05),0 1px 6px rgba(23,35,52,.05);
+  --sh-2:0 6px 18px rgba(23,35,52,.12);
+  --sh-head:0 2px 10px rgba(23,35,52,.16);
+  --r-sm:6px; --r-md:8px; --r-lg:12px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif;font-size:13px;line-height:1.5;color:var(--ink);background:var(--chart)}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+::selection{background:var(--info-bg);color:var(--ink)}
+h1,h2,h3,h4,p{margin:0}
+h2{font-size:17px;font-weight:750;letter-spacing:-.01em}
+h3{font-size:14px;font-weight:700}
+.eyebrow{font-size:10.5px;font-weight:750;text-transform:uppercase;letter-spacing:.09em;color:var(--label)}
+.muted{color:var(--fog);font-size:12.5px}
+svg.i{width:14px;height:14px;flex:none;stroke:currentColor;stroke-width:1.9;fill:none;stroke-linecap:round;stroke-linejoin:round}
+
+/* ---------- proposal banner ---------- */
+.proposal-banner{display:flex;gap:12px;align-items:flex-start;background:var(--warn-wash);border-bottom:1px solid var(--warn-rule);padding:10px 20px;color:#5a430f;font-size:12.5px}
+.proposal-banner .i{margin-top:2px;color:var(--warn-text);width:16px;height:16px}
+.proposal-banner .pb-body{flex:1}
+.proposal-banner .pb-body b{font-weight:750}
+.banner-dismiss{border:0;background:none;font:inherit;font-size:12px;font-weight:700;color:#7a5c12;cursor:pointer;padding:4px 8px;border-radius:6px;display:inline-flex;align-items:center;gap:4px}
+.banner-dismiss:hover{background:var(--warn-bg)}
+
+/* ---------- top bar ---------- */
+.topbar{position:sticky;top:0;z-index:40;background:linear-gradient(180deg,#17395a,var(--navy));color:#eaf2fa;transition:box-shadow .2s}
+.topbar.scrolled{box-shadow:var(--sh-head)}
+.topbar-inner{max-width:1240px;margin:0 auto;padding:10px 20px 8px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:9px;text-decoration:none;color:#fff}
+.brand .mark{width:30px;height:30px;border-radius:8px;background:#ffffff1f;border:1px solid #ffffff2e;display:flex;align-items:center;justify-content:center}
+.brand .mark svg{width:17px;height:17px}
+.brand-name{font-size:15px;font-weight:800;letter-spacing:.02em}
+.brand-sub{font-size:11px;color:#bcd2e4;display:block;margin-top:-3px;font-weight:600}
+.scope{display:flex;align-items:center;gap:10px;flex:1;min-width:260px;flex-wrap:wrap}
+.scope-select{display:flex;align-items:center;gap:8px}
+.scope-select label{font-size:10px;font-weight:750;text-transform:uppercase;letter-spacing:.08em;color:#a9c3d9}
+.select-wrap select{appearance:none;-webkit-appearance:none;font:inherit;font-size:12.5px;color:var(--ink);background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2356677a' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 10px center;border:1px solid var(--rule-input);border-radius:var(--r-sm);padding:7px 30px 7px 10px;cursor:pointer;max-width:100%}
+.live-chip{display:inline-flex;align-items:center;gap:5px;background:#1d5f8a;border:1px solid #2f76a5;color:#d7ecfb;font-size:10.5px;font-weight:750;border-radius:999px;padding:3px 9px;letter-spacing:.04em}
+.live-chip::before{content:"";width:6px;height:6px;border-radius:50%;background:#59c98b;box-shadow:0 0 0 3px #59c98b33}
+.scope-links{display:flex;align-items:center;gap:8px;min-width:0}
+.kiosk-url{font-size:11.5px;color:#a9c3d9;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip-btn{display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:12px;font-weight:700;color:#dbe8f4;background:#ffffff14;border:1px solid #ffffff2b;border-radius:var(--r-sm);padding:6px 10px;cursor:pointer;white-space:nowrap}
+.chip-btn:hover{background:#ffffff24}
+.chip-btn .i{width:13px;height:13px}
+.staff{display:flex;align-items:center;gap:10px;margin-left:auto}
+.avatar{width:32px;height:32px;border-radius:50%;background:#315877;border:1px solid #4a7699;display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:800;color:#fff;letter-spacing:.03em}
+.staff-meta{line-height:1.25}
+.staff-meta b{display:block;font-size:12.5px;color:#fff}
+.staff-meta span{font-size:11px;color:#a9c3d9}
+/* tabs */
+.tabs{max-width:1240px;margin:0 auto;padding:0 12px;display:flex;gap:4px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{border:0;background:none;font:inherit;font-size:13px;font-weight:600;color:#c6d9e9;padding:9px 14px;border-radius:8px 8px 0 0;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:7px}
+.tab:hover{color:#fff;background:#ffffff12}
+.tab.active{background:var(--chart);color:var(--navy);font-weight:750;box-shadow:0 -1px 0 #ffffff26 inset}
+.tab-badge{background:#c94848;color:#fff;font-size:10.5px;font-weight:800;border-radius:999px;padding:1px 6px;line-height:1.5}
+.tab.active .tab-badge{background:#b03a3a}
+
+/* ---------- layout ---------- */
+main{max-width:1240px;margin:0 auto;padding:20px}
+.view{display:none}
+.view.active{display:block;animation:fade .25s ease-out}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.view-head{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;margin-bottom:14px;flex-wrap:wrap}
+.view-head .muted{margin-top:2px;max-width:640px}
+.panel{background:var(--paper);border:1px solid var(--rule);border-radius:var(--r-lg);box-shadow:var(--sh-1);padding:16px 18px;margin-bottom:16px}
+.panel-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:12px}
+.panel-head .muted{font-size:12px}
+
+/* ---------- buttons ---------- */
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid transparent;border-radius:var(--r-sm);padding:8px 12px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer;color:#fff;background:var(--slate)}
+.btn:hover{background:var(--slate-deep)}
+.btn:disabled{opacity:.55;cursor:default}
+.btn-primary{background:var(--green)}
+.btn-primary:hover{background:var(--green-deep)}
+.btn-ghost{background:#fff;color:var(--slate);border-color:var(--rule-input)}
+.btn-ghost:hover{background:var(--tint);border-color:var(--slate);color:var(--slate-deep)}
+.btn-sm{padding:5px 9px;font-size:12px}
+.btn-wa{display:inline-flex;align-items:center;gap:6px;text-decoration:none;font-size:12px;font-weight:750;padding:6px 10px;border-radius:var(--r-sm);background:var(--wa-bg);color:var(--wa-text);border:1px solid var(--wa-line)}
+.btn-wa:hover{background:#d9f0e1}
+.btn-vb{display:inline-flex;align-items:center;gap:6px;text-decoration:none;font-size:12px;font-weight:750;padding:6px 10px;border-radius:var(--r-sm);background:var(--vb-bg);color:var(--vb-text);border:1px solid var(--vb-line)}
+.btn-vb:hover{background:#e2daf6}
+
+/* ---------- pills & chips ---------- */
+.pill{display:inline-block;border-radius:999px;padding:2px 9px;font-size:10.5px;font-weight:800;letter-spacing:.03em;background:var(--neutral-bg);color:var(--neutral-text);text-transform:uppercase}
+.pill-good{background:var(--good-bg);color:var(--good-text)}
+.pill-warn{background:var(--warn-bg);color:var(--warn-text)}
+.pill-bad{background:var(--bad-bg);color:var(--bad-text)}
+.pill-info{background:var(--info-bg);color:var(--info-text)}
+.pill-solid{background:var(--green);color:#fff}
+.needs-mobile{color:#8c5b00;font-weight:750;font-size:10.5px;border:1px solid var(--warn-rule);background:var(--warn-wash);border-radius:4px;padding:1px 6px;text-transform:uppercase;letter-spacing:.03em}
+.src{display:inline-block;border:1px solid var(--rule);border-radius:4px;padding:0 6px;font-size:10.5px;font-weight:700;color:var(--label);letter-spacing:.04em}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--rule-input);background:#fff;border-radius:999px;padding:5px 12px;font:inherit;font-size:12px;font-weight:700;color:var(--label);cursor:pointer}
+.chip:hover{border-color:var(--slate)}
+.chip.active{background:var(--navy);border-color:var(--navy);color:#fff}
+.chip .cnt{font-weight:800;font-size:11px;opacity:.75}
+
+/* ---------- metric cells ---------- */
+.metrics{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin-bottom:16px}
+.metric{background:var(--paper);border:1px solid var(--rule);border-radius:10px;box-shadow:var(--sh-1);padding:12px 14px;min-width:0}
+.metric-label{display:block;font-size:10.5px;font-weight:750;text-transform:uppercase;letter-spacing:.08em;color:var(--label)}
+.metric-value{display:block;font-size:clamp(20px,2.1vw,27px);font-weight:800;letter-spacing:-.01em;margin-top:3px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.metric-sub{display:block;font-size:11px;color:var(--fog);margin-top:2px}
+.metric-hero{background:var(--good-wash);border-color:var(--good-rule)}
+.metric-hero .metric-value{color:var(--green-deep)}
+
+/* ---------- funnel ---------- */
+.dash-grid{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:16px;align-items:stretch}
+.stage{display:grid;grid-template-columns:86px minmax(0,1fr) 44px;gap:10px;align-items:center;margin-bottom:9px}
+.stage-label{font-size:11.5px;font-weight:750;color:var(--label);text-align:right}
+.stage-track{background:var(--well);border-radius:5px;height:24px;overflow:hidden}
+.stage-fill{height:100%;border-radius:5px 3px 3px 5px;background:var(--blue-fill);animation:grow .7s cubic-bezier(.2,.7,.3,1) both}
+.stage:nth-child(1) .stage-fill{background:var(--blue-soft)}
+.stage:nth-child(2) .stage-fill{background:var(--blue-mid)}
+.stage:nth-child(3) .stage-fill{background:var(--blue-fill)}
+.stage:nth-child(4) .stage-fill{background:var(--blue-deep)}
+.stage:nth-child(5) .stage-fill{background:var(--green)}
+@keyframes grow{from{width:0}}
+.stage:nth-child(1) .stage-fill{animation-delay:.02s}
+.stage:nth-child(2) .stage-fill{animation-delay:.1s}
+.stage:nth-child(3) .stage-fill{animation-delay:.18s}
+.stage:nth-child(4) .stage-fill{animation-delay:.26s}
+.stage:nth-child(5) .stage-fill{animation-delay:.34s}
+.stage-value{font-size:14px;font-weight:800;font-variant-numeric:tabular-nums}
+.funnel-convs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;border-top:1px solid var(--rule-hair);margin-top:12px;padding-top:11px}
+.funnel-convs div{text-align:center}
+.funnel-convs b{display:block;font-size:15px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--blue-deep)}
+.funnel-convs div:last-child b{color:var(--green-deep)}
+.funnel-convs span{font-size:10.5px;color:var(--fog);text-transform:uppercase;letter-spacing:.05em;font-weight:650}
+
+/* ---------- day chart ---------- */
+.chart-legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px}
+.chart-legend span{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--label);font-weight:650}
+.chart-legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
+.day-chart{width:100%;height:auto;display:block}
+
+/* ---------- tables ---------- */
+.table-wrap{overflow:auto;border:1px solid var(--rule);border-radius:10px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule-hair);vertical-align:top}
+thead th{background:var(--well);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--label);font-weight:750;position:sticky;top:0}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover{background:var(--tint)}
+.num{font-variant-numeric:tabular-nums}
+.win-track{height:5px;background:var(--well);border-radius:3px;overflow:hidden;min-width:70px}
+.win-fill{height:100%;background:var(--blue);border-radius:3px}
+.win-cell{display:flex;align-items:center;gap:8px}
+.win-cell span{font-size:11px;color:var(--fog);white-space:nowrap}
+
+/* ---------- follow-ups ---------- */
+.fu-summary{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.fu{display:grid;grid-template-columns:120px minmax(0,1fr) auto;gap:14px;align-items:center;background:var(--paper);border:1px solid var(--rule);border-radius:10px;box-shadow:var(--sh-1);padding:12px 14px;margin-bottom:10px}
+.fu.is-overdue{border-color:var(--bad-rule);background:linear-gradient(0deg,var(--bad-wash),var(--bad-wash)) #fff}
+.fu.is-done{opacity:.55}
+.fu-when{line-height:1.5}
+.fu-date{display:block;font-size:12px;font-weight:750}
+.fu-step{display:block;font-size:11px;color:var(--fog)}
+.fu-when .pill{margin:2px 0}
+.fu-name{font-size:13.5px;font-weight:750;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.fu-sub{font-size:11.5px;color:var(--fog);margin-top:1px}
+.fu-note{font-size:12px;color:#43566c;margin-top:5px;background:var(--well);border-radius:6px;padding:5px 8px}
+.fu.is-overdue .fu-note{background:#fff}
+.fu-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end;align-items:center}
+.queue-note{margin-top:4px}
+
+/* ---------- leads ---------- */
+.add-lead{border-left:none}
+.add-lead-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:2px}
+.add-lead-head .muted{font-size:12px}
+.lead-form{display:grid;grid-template-columns:1.7fr 1.3fr 1.5fr 1fr .8fr;gap:10px;margin-top:10px}
+.lf-field label{display:block;font-size:10.5px;font-weight:750;text-transform:uppercase;letter-spacing:.06em;color:var(--label);margin-bottom:3px}
+.lf-field input{width:100%;padding:9px 10px;border:1px solid var(--rule-input);border-radius:var(--r-sm);font:inherit;background:#fff;color:var(--ink)}
+.lf-field input:focus-visible{outline-offset:0}
+.lf-notes{grid-column:span 3}
+.lf-submit{display:flex;align-items:end}
+.lf-submit .btn{min-height:40px}
+.form-result{display:none;margin-top:10px;border-radius:var(--r-md);padding:9px 12px;font-size:12.5px}
+.form-result.is-ok{display:block;background:var(--good-wash);border:1px solid var(--good-rule);color:var(--good-text)}
+.form-result.is-error{display:block;background:var(--bad-wash);border:1px solid var(--bad-rule);color:var(--bad-text)}
+.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:14px 0 10px}
+.toolbar .search{display:inline-flex;align-items:center;gap:7px;background:#fff;border:1px solid var(--rule-input);border-radius:999px;padding:6px 12px;color:var(--fog)}
+.toolbar .search input{border:0;font:inherit;font-size:12.5px;color:var(--ink);outline:none;width:170px;background:none}
+.toolbar .spacer{flex:1}
+.result-note{margin-top:8px}
+.lead-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.lead-actions select{font:inherit;font-size:11.5px;border:1px solid var(--rule-input);border-radius:5px;padding:4px 6px;background:#fff;color:var(--ink)}
+.converted-note{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--good-text);font-weight:700}
+
+/* ---------- packages ---------- */
+.pkg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:14px}
+.pkg{background:var(--paper);border:1px solid var(--rule);border-radius:var(--r-lg);box-shadow:var(--sh-1);padding:15px 16px;display:flex;flex-direction:column;transition:box-shadow .15s,transform .15s}
+.pkg:hover{box-shadow:0 3px 12px rgba(23,35,52,.1);transform:translateY(-1px)}
+.pkg-top{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}
+.pkg h3{font-size:14.5px;letter-spacing:-.01em}
+.pkg-dur{display:inline-block;font-size:10.5px;font-weight:750;color:var(--blue-deep);background:var(--info-bg);border-radius:4px;padding:1px 6px;letter-spacing:.05em;margin-left:6px;vertical-align:2px}
+.pkg-price{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums;margin:7px 0 2px;color:var(--navy)}
+.pkg-price span{font-size:11px;color:var(--fog);font-weight:600}
+.pkg-inc{list-style:none;margin:9px 0 12px;padding:0;flex:1}
+.pkg-inc li{display:flex;gap:7px;align-items:flex-start;font-size:12px;color:#43566c;padding:2.5px 0}
+.pkg-inc .i{width:13px;height:13px;color:var(--green);margin-top:2.5px}
+.pkg-actions{display:flex;gap:8px;flex-wrap:wrap}
+.pkg.is-archived{background:var(--tint)}
+.pkg.is-archived .pkg-price{color:var(--fog)}
+.pkg.is-archived .pkg-inc li{color:var(--fog)}
+
+/* ---------- quotes ---------- */
+.quote{display:grid;grid-template-columns:170px minmax(0,1fr) 120px auto;gap:14px;align-items:center;background:var(--paper);border:1px solid var(--rule);border-radius:10px;box-shadow:var(--sh-1);padding:12px 14px;margin-bottom:10px}
+.q-id{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11.5px;font-weight:700;color:var(--slate)}
+.q-id span{display:block;font-family:inherit;font-weight:500;color:var(--fog);font-size:11px;margin-top:2px}
+.q-client b{font-size:13px;font-weight:750}
+.q-opts{display:block;font-size:11.5px;color:var(--fog);margin-top:2px}
+.q-sent{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--fog);margin-top:3px}
+.q-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+.quote.state-hero{border-color:var(--good-rule);background:var(--good-wash)}
+.opt-pick{display:flex;gap:10px;align-items:center;border:1px solid var(--rule);border-radius:var(--r-md);padding:8px 10px;margin-top:7px;background:var(--tint);font-size:12.5px}
+.opt-pick input[type=checkbox]{width:16px;height:16px;accent-color:var(--green)}
+.opt-pick .ov{margin-left:auto;width:120px;font:inherit;font-size:12px;padding:5px 8px;border:1px solid var(--rule-input);border-radius:5px}
+
+/* ---------- disclosures ---------- */
+.disc{border:1px solid var(--rule);border-radius:var(--r-md);background:var(--tint);margin:12px 0}
+.disc summary{cursor:pointer;font-weight:700;font-size:12.5px;color:var(--blue-deep);padding:10px 14px;list-style:none;display:flex;align-items:center;gap:8px}
+.disc summary::-webkit-details-marker{display:none}
+.disc summary .i{transition:transform .15s}
+.disc[open] summary .i{transform:rotate(90deg)}
+.disc .disc-body{padding:2px 14px 14px}
+.disc .disc-body .btn{margin-top:10px}
+.mini-grid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px}
+.mini-grid label{display:block;font-size:10.5px;font-weight:750;text-transform:uppercase;letter-spacing:.06em;color:var(--label);margin-bottom:3px}
+.mini-grid input,.mini-grid textarea,.mini-grid select{width:100%;padding:8px 10px;border:1px solid var(--rule-input);border-radius:var(--r-sm);font:inherit;background:#fff;color:var(--ink)}
+
+/* ---------- changelog ---------- */
+.changelog{background:var(--paper);border:1px solid var(--rule);border-radius:var(--r-lg);box-shadow:var(--sh-1);margin-top:26px}
+.changelog summary{cursor:pointer;list-style:none;padding:16px 18px;display:flex;align-items:center;gap:14px}
+.changelog summary::-webkit-details-marker{display:none}
+.changelog summary .cl-head{flex:1}
+.changelog summary h3{font-size:15px;margin-top:2px}
+.changelog summary .i{color:var(--label);transition:transform .2s}
+.changelog[open] summary .i{transform:rotate(90deg)}
+.cl{margin:0;padding:0 18px 18px 52px;display:grid;gap:11px}
+.cl li{font-size:12.5px;color:#43566c}
+.cl li b{color:var(--ink)}
+.foot{margin:18px 2px 30px}
+
+/* ---------- toast ---------- */
+.toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,14px);background:var(--navy);color:#eaf2fa;font-size:12.5px;font-weight:650;border-radius:var(--r-md);padding:10px 16px;box-shadow:var(--sh-2);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;max-width:min(92vw,480px);text-align:center;z-index:60}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+/* ---------- responsive ---------- */
+@media(max-width:1020px){
+  .dash-grid{grid-template-columns:1fr}
+  .metrics{grid-template-columns:repeat(3,1fr)}
+}
+@media(max-width:860px){
+  .kiosk-url{display:none}
+  .fu{grid-template-columns:104px minmax(0,1fr)}
+  .fu-actions{grid-column:1/-1;justify-content:flex-start}
+  .quote{grid-template-columns:minmax(0,1fr) auto;row-gap:8px}
+  .q-id{grid-column:1/-1;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+  .q-id span{margin:0}
+  .lead-form{grid-template-columns:1fr 1fr 1fr}
+  .lf-notes{grid-column:span 3}
+  .lf-submit{grid-column:span 3;justify-content:start}
+  .mini-grid{grid-template-columns:1fr 1fr}
+}
+@media(max-width:720px){
+  .metrics{grid-template-columns:repeat(2,1fr)}
+  .staff-meta{display:none}
+  .stage{grid-template-columns:64px minmax(0,1fr) 40px;gap:8px}
+  .stage-label{font-size:10.5px}
+  .funnel-convs{grid-template-columns:repeat(2,1fr);row-gap:10px}
+  /* tables reflow to labeled cards */
+  .cards thead{display:none}
+  .cards,.cards tbody{display:block}
+  .cards tr{display:block;border:1px solid var(--rule);border-radius:10px;background:#fff;box-shadow:var(--sh-1);padding:6px 12px;margin-bottom:10px}
+  .cards tr:hover{background:#fff}
+  .cards td{display:flex;justify-content:space-between;gap:14px;border:0;border-bottom:1px dashed var(--rule-hair);padding:7px 0;text-align:right;align-items:baseline}
+  .cards td:last-child{border-bottom:0}
+  .cards td::before{content:attr(data-label);flex:1;font-size:10.5px;font-weight:750;text-transform:uppercase;letter-spacing:.06em;color:var(--label);text-align:left}
+  .cards .lead-actions,.cards .fu-actions{justify-content:flex-end;flex-wrap:wrap}
+  .cards-wrap{border:0;overflow:visible}
+  .win-cell{justify-content:flex-end}
+  .lead-form{grid-template-columns:1fr 1fr}
+  .lf-notes,.lf-submit{grid-column:span 2}
+  .lf-submit .btn{width:100%;justify-content:center}
+  .mini-grid{grid-template-columns:1fr}
+}
+@media(max-width:480px){
+  main{padding:14px}
+  .topbar-inner{padding:8px 14px 6px;gap:10px}
+  .scope{order:3;min-width:100%}
+  .scope-select{flex:1;min-width:0}
+  .scope-select .select-wrap{min-width:0;flex:1}
+  .scope-select select{width:100%}
+  .btn-label-sm{display:none}
+  .metrics{grid-template-columns:1fr 1fr}
+  .metric-hero{grid-column:span 2}
+  .fu{grid-template-columns:1fr}
+  .fu-when{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .pkg-grid{grid-template-columns:1fr}
+  .q-actions{justify-content:flex-start}
+}
+@media(prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+}
+</style>
+</head>
+<body>
+
+<!-- ======================= proposal banner ======================= -->
+<div class="proposal-banner" role="note" id="proposalBanner">
+  <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.3 3.8 1.8 18.5a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0z"/><path d="M12 9v4.5"/><path d="M12 17.5v.01"/></svg>
+  <div class="pb-body"><b>UI overhaul proposal — mockup only, not wired to the server.</b>
+  Every number, lead, package and quote below is synthetic demo data. Click around: tabs switch and a few demo interactions respond, but nothing is saved anywhere.</div>
+  <button class="banner-dismiss" id="bannerDismiss" type="button">
+    Dismiss
+    <svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width:12px;height:12px"><path d="M5 5l14 14"/><path d="M19 5 5 19"/></svg>
+  </button>
+</div>
+
+<!-- ======================= top bar ======================= -->
+<header class="topbar" id="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="#dashboard" onclick="return false">
+      <span class="mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" style="stroke:#d7ecfb;stroke-width:1.7;fill:none;stroke-linecap:round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.7 2.6 3.9 5.7 3.9 9s-1.2 6.4-3.9 9c-2.7-2.6-3.9-5.7-3.9-9s1.2-6.4 3.9-9z"/></svg>
+      </span>
+      <span><span class="brand-name">WMIT</span><span class="brand-sub">Expo Console</span></span>
+    </a>
+
+    <div class="scope">
+      <div class="scope-select">
+        <label for="expoSelect">Event</label>
+        <span class="select-wrap">
+          <select id="expoSelect">
+            <option selected>PTA Travel Fair 2026 · Sep 4–6 · EXPO-2026-SEP</option>
+            <option>Cebu Travel Expo 2026 · Aug 15–17 · EXPO-2026-CEB (ended)</option>
+            <option>Add a new event…</option>
+          </select>
+        </span>
+        <span class="live-chip">Live · Day 3</span>
+      </div>
+      <div class="scope-links">
+        <span class="kiosk-url" title="Client-facing sign-up form for this event">wmit.ph/expo?tag=EXPO-2026-SEP</span>
+        <button class="chip-btn" type="button" data-demo="Demo: form link copied — nothing left this mockup.">
+          <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>
+          Copy form link</button>
+        <button class="chip-btn" type="button" data-demo="Demo: would open the client sign-up form in a new tab.">
+          <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6"/><path d="M20 4 11 13"/><path d="M19 14v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>
+          <span class="btn-label-sm">Open form</span></button>
+      </div>
+    </div>
+
+    <div class="staff">
+      <div class="avatar" aria-hidden="true">MR</div>
+      <div class="staff-meta"><b>Marites Reyes</b><span>Sales · booth team</span></div>
+      <button class="chip-btn" type="button" data-demo="Demo: sign out — not wired.">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>
+        <span class="btn-label-sm">Sign out</span></button>
+    </div>
+  </div>
+
+  <nav class="tabs" role="tablist" aria-label="Expo console sections">
+    <button class="tab active" role="tab" aria-selected="true" data-tab="dashboard" type="button">Dashboard</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="followups" type="button">Follow-ups <span class="tab-badge" title="6 overdue follow-ups">6</span></button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="leads" type="button">Leads</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="packages" type="button">Packages</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="quotes" type="button">Quotes</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ======================= DASHBOARD ======================= -->
+<section class="view active" id="tab-dashboard" role="tabpanel" aria-label="Dashboard">
+  <div class="view-head">
+    <div>
+      <div class="eyebrow">EXPO-2026-SEP · PTA Travel Fair 2026 · Sep 4–6</div>
+      <h2>Dashboard</h2>
+      <p class="muted">Leads → quotes → acceptances → bookings for the selected event. Updated as the booth works.</p>
+    </div>
+    <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: would reload live numbers — not wired.">
+      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>
+      Refresh</button>
+  </div>
+
+  <div class="metrics">
+    <div class="metric"><span class="metric-label">Leads</span><span class="metric-value">128</span><span class="metric-sub">peak Sep 4 · 52 captured</span></div>
+    <div class="metric"><span class="metric-label">Contacted</span><span class="metric-value">94</span><span class="metric-sub">73% of all leads</span></div>
+    <div class="metric"><span class="metric-label">Quotes sent</span><span class="metric-value">61</span><span class="metric-sub">14 still in draft</span></div>
+    <div class="metric"><span class="metric-label">Accepted</span><span class="metric-value">18</span><span class="metric-sub">awaiting booking: 7</span></div>
+    <div class="metric"><span class="metric-label">Booked</span><span class="metric-value">11</span><span class="metric-sub">8.6% of all leads</span></div>
+    <div class="metric metric-hero"><span class="metric-label">Booked revenue</span><span class="metric-value">PHP 1,284,500</span><span class="metric-sub">11 bookings · avg PHP 116,773</span></div>
+  </div>
+
+  <div class="dash-grid">
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Conversion funnel</h3>
+        <span class="muted">128 leads became 11 bookings — 8.6% end to end.</span>
+      </div>
+      <div class="stage"><span class="stage-label">Leads</span><div class="stage-track"><div class="stage-fill" style="width:100%"></div></div><span class="stage-value">128</span></div>
+      <div class="stage"><span class="stage-label">Contacted</span><div class="stage-track"><div class="stage-fill" style="width:73%"></div></div><span class="stage-value">94</span></div>
+      <div class="stage"><span class="stage-label">Quotes sent</span><div class="stage-track"><div class="stage-fill" style="width:48%"></div></div><span class="stage-value">61</span></div>
+      <div class="stage"><span class="stage-label">Accepted</span><div class="stage-track"><div class="stage-fill" style="width:14%"></div></div><span class="stage-value">18</span></div>
+      <div class="stage"><span class="stage-label">Booked</span><div class="stage-track"><div class="stage-fill" style="width:9%"></div></div><span class="stage-value">11</span></div>
+      <div class="funnel-convs">
+        <div><b>47.7%</b><span>lead → quote</span></div>
+        <div><b>29.5%</b><span>quote → accept</span></div>
+        <div><b>61.1%</b><span>accept → book</span></div>
+        <div><b>8.6%</b><span>lead → booked</span></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Daily activity</h3>
+        <span class="muted">Sep 4–6, 2026</span>
+      </div>
+      <svg class="day-chart" viewBox="0 0 340 168" role="img" aria-label="Grouped bar chart: leads, quotes sent and bookings per expo day. Sep 4: 52 leads, 18 quotes, 2 booked. Sep 5: 47 leads, 24 quotes, 4 booked. Sep 6: 29 leads, 19 quotes, 5 booked.">
+        <g stroke="#e6ebf0" stroke-dasharray="3 3">
+          <line x1="24" y1="38" x2="336" y2="38"/>
+          <line x1="24" y1="84" x2="336" y2="84"/>
+        </g>
+        <g font-family="inherit" font-size="9" fill="#8a99ab">
+          <text x="2" y="41">50</text>
+          <text x="2" y="87">25</text>
+          <text x="2" y="133">0</text>
+        </g>
+        <line x1="24" y1="130" x2="336" y2="130" stroke="#c8d2df" stroke-width="1"/>
+        <!-- Sep 4 -->
+        <g>
+          <rect x="41" y="34" width="20" height="96" rx="2" fill="#93b9dc"><title>Sep 4 — 52 leads</title></rect>
+          <rect x="66" y="97" width="20" height="33" rx="2" fill="#3679b6"><title>Sep 4 — 18 quotes sent</title></rect>
+          <rect x="91" y="126" width="20" height="4" rx="2" fill="#177245"><title>Sep 4 — 2 booked</title></rect>
+          <g font-family="inherit" font-size="9.5" fill="#56677a" text-anchor="middle" font-weight="700">
+            <text x="51" y="29">52</text><text x="76" y="92">18</text><text x="101" y="121">2</text>
+          </g>
+        </g>
+        <!-- Sep 5 -->
+        <g>
+          <rect x="145" y="43" width="20" height="87" rx="2" fill="#93b9dc"><title>Sep 5 — 47 leads</title></rect>
+          <rect x="170" y="86" width="20" height="44" rx="2" fill="#3679b6"><title>Sep 5 — 24 quotes sent</title></rect>
+          <rect x="195" y="123" width="20" height="7" rx="2" fill="#177245"><title>Sep 5 — 4 booked</title></rect>
+          <g font-family="inherit" font-size="9.5" fill="#56677a" text-anchor="middle" font-weight="700">
+            <text x="155" y="38">47</text><text x="180" y="81">24</text><text x="205" y="118">4</text>
+          </g>
+        </g>
+        <!-- Sep 6 -->
+        <g>
+          <rect x="249" y="77" width="20" height="53" rx="2" fill="#93b9dc"><title>Sep 6 — 29 leads</title></rect>
+          <rect x="274" y="95" width="20" height="35" rx="2" fill="#3679b6"><title>Sep 6 — 19 quotes sent</title></rect>
+          <rect x="299" y="121" width="20" height="9" rx="2" fill="#177245"><title>Sep 6 — 5 booked</title></rect>
+          <g font-family="inherit" font-size="9.5" fill="#56677a" text-anchor="middle" font-weight="700">
+            <text x="259" y="72">29</text><text x="284" y="90">19</text><text x="309" y="116">5</text>
+          </g>
+        </g>
+        <g font-family="inherit" font-size="10.5" fill="#172334" text-anchor="middle" font-weight="700">
+          <text x="76" y="146">Sep 4</text><text x="180" y="146">Sep 5</text><text x="284" y="146">Sep 6</text>
+        </g>
+        <g font-family="inherit" font-size="9" fill="#8a99ab" text-anchor="middle">
+          <text x="76" y="158">Day 1</text><text x="180" y="158">Day 2</text><text x="284" y="158">Day 3</text>
+        </g>
+      </svg>
+      <div class="chart-legend" aria-hidden="true">
+        <span><i style="background:#93b9dc"></i>Leads</span>
+        <span><i style="background:#3679b6"></i>Quotes sent</span>
+        <span><i style="background:#177245"></i>Booked</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <h3>By package</h3>
+      <span class="muted">Where the 61 sent quotes went, and what closed.</span>
+    </div>
+    <div class="table-wrap cards-wrap">
+      <table class="cards">
+        <thead><tr><th>Package</th><th>Price / pax</th><th class="num">Offered</th><th class="num">Sent</th><th class="num">Accepted</th><th>Accept rate</th></tr></thead>
+        <tbody>
+          <tr><td data-label="Package"><b>Bangkok City Break 4D3N</b></td><td data-label="Price / pax" class="num">PHP 18,500</td><td data-label="Offered" class="num">41</td><td data-label="Sent" class="num">26</td><td data-label="Accepted" class="num">7</td>
+            <td data-label="Accept rate"><div class="win-cell"><div class="win-track"><div class="win-fill" style="width:27%"></div></div><span>7 of 26 · 27%</span></div></td></tr>
+          <tr><td data-label="Package"><b>Seoul Discovery 5D4N</b></td><td data-label="Price / pax" class="num">PHP 32,000</td><td data-label="Offered" class="num">33</td><td data-label="Sent" class="num">19</td><td data-label="Accepted" class="num">6</td>
+            <td data-label="Accept rate"><div class="win-cell"><div class="win-track"><div class="win-fill" style="width:32%"></div></div><span>6 of 19 · 32%</span></div></td></tr>
+          <tr><td data-label="Package"><b>HCMC &amp; Mekong 3D2N</b></td><td data-label="Price / pax" class="num">PHP 24,500</td><td data-label="Offered" class="num">28</td><td data-label="Sent" class="num">16</td><td data-label="Accepted" class="num">3</td>
+            <td data-label="Accept rate"><div class="win-cell"><div class="win-track"><div class="win-fill" style="width:19%"></div></div><span>3 of 16 · 19%</span></div></td></tr>
+          <tr><td data-label="Package"><b>Japan Golden Route 6D5N</b></td><td data-label="Price / pax" class="num">PHP 68,900</td><td data-label="Offered" class="num">14</td><td data-label="Sent" class="num">8</td><td data-label="Accepted" class="num">2</td>
+            <td data-label="Accept rate"><div class="win-cell"><div class="win-track"><div class="win-fill" style="width:25%"></div></div><span>2 of 8 · 25%</span></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= FOLLOW-UPS ======================= -->
+<section class="view" id="tab-followups" role="tabpanel" aria-label="Follow-ups">
+  <div class="view-head">
+    <div>
+      <div class="eyebrow">Day 1 · 3 · 7 cadence</div>
+      <h2>Follow-ups</h2>
+      <p class="muted">Every captured lead gets a day-1, day-3 and day-7 touch. Overdue first — clear the red rows before the day ends.</p>
+    </div>
+    <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: would reload the queue — not wired.">
+      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>
+      Refresh</button>
+  </div>
+
+  <div class="fu-summary">
+    <span class="chip" style="border-color:var(--bad-rule);color:var(--bad-text);cursor:default"><span class="cnt">6</span> overdue</span>
+    <span class="chip" style="cursor:default"><span class="cnt">17</span> due today or later</span>
+    <span class="chip" style="border-color:var(--good-rule);color:var(--good-text);cursor:default"><span class="cnt">12</span> done today</span>
+  </div>
+
+  <div class="fu is-overdue">
+    <div class="fu-when">
+      <span class="fu-date">Due Sep 5</span>
+      <span class="pill pill-bad">Overdue</span>
+      <span class="fu-step">Day 1 touch</span>
+    </div>
+    <div>
+      <div class="fu-name">Carlo Mendoza <span class="pill pill-info">Quoted</span></div>
+      <div class="fu-sub">Bangkok · 2026-11 · 6 pax · badge scan · +63 906 234 7781</div>
+      <p class="fu-note">Asked for a group price for 6 — quote was sent, follow up on the answer.</p>
+    </div>
+    <div class="fu-actions">
+      <a class="btn-wa" href="#" onclick="return false"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5z"/></svg>WhatsApp</a>
+      <a class="btn-vb" href="#" onclick="return false"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.1 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>Viber</a>
+      <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: would open the message composer — not wired.">Message</button>
+      <button class="btn btn-sm" type="button" data-done><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg>Done</button>
+    </div>
+  </div>
+
+  <div class="fu is-overdue">
+    <div class="fu-when">
+      <span class="fu-date">Due Sep 5</span>
+      <span class="pill pill-bad">Overdue</span>
+      <span class="fu-step">Day 1 touch</span>
+    </div>
+    <div>
+      <div class="fu-name">Roberto Aguilar <span class="pill">New</span></div>
+      <div class="fu-sub">Ho Chi Minh City · 2026-12 · 2 pax · booth entry · +63 919 446 8823</div>
+      <p class="fu-note">Walk-up at the booth — wants December dates and a visa rundown.</p>
+    </div>
+    <div class="fu-actions">
+      <a class="btn-wa" href="#" onclick="return false"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5z"/></svg>WhatsApp</a>
+      <a class="btn-vb" href="#" onclick="return false"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.1 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>Viber</a>
+      <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: would open the message composer — not wired.">Message</button>
+      <button class="btn btn-sm" type="button" data-done><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg>Done</button>
+    </div>
+  </div>
+
+  <div class="fu is-overdue">
+    <div class="fu-when">
+      <span class="fu-date">Due Sep 6</span>
+      <span class="pill pill-bad">Overdue</span>
+      <span class="fu-step">Day 1 touch</span>
+    </div>
+    <div>
+      <div class="fu-name">Nesta Dizon <span class="pill pill-warn">Contacted</span></div>
+      <div class="fu-sub">Seoul · 2026-11 · 2 adults · 1 child · kiosk sign-up</div>
+      <p class="fu-note">Signed up on the kiosk but left no mobile — first task is collecting the number.</p>
+    </div>
+    <div class="fu-actions">
+      <span class="needs-mobile">No mobile yet</span>
+      <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: would prompt for a +63 mobile — not wired.">Add mobile</button>
+      <button class="btn btn-sm" type="button" data-done><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg>Done</button>
+    </div>
+  </div>
+
+  <div class="fu">
+    <div class="fu-when">
+      <span class="fu-date">Due today · Sep 6</span>
+      <span class="pill pill-info">Day 1</span>
+      <span class="fu-step">Day 1 touch</span>
+    </div>
+    <div>
+      <div class="fu-name">Miguel Torres <span class="pill">New</span></div>
+      <div class="fu-sub">Bangkok · 2026-12 · 2 pax · badge scan · +63 905 331 9027</div>
+      <p class="fu-note">Mentioned a December wedding anniversary trip — lead with the Bangkok promo.</p>
+    </div>
+    <div class="fu-actions">
+      <a class="btn-wa" href="#" onclick="return false"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5z"/></svg>WhatsApp</a>
+      <a class="btn-vb" href="#" onclick="return false"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.1 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>Viber</a>
+      <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: would open the message composer — not wired.">Message</button>
+      <button class="btn btn-sm" type="button" data-done><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg>Done</button>
+    </div>
+  </div>
+
+  <div class="fu">
+    <div class="fu-when">
+      <span class="fu-date">Due today · Sep 6</span>
+      <span class="pill pill-info">Day 1</span>
+      <span class="fu-step">Day 1 touch</span>
+    </div>
+    <div>
+      <div class="fu-name">Cherry Uy <span class="pill pill-info">Quoted</span></div>
+      <div class="fu-sub">Japan · 2026-11 · 3 pax · kiosk sign-up · +63 916 772 5518</div>
+      <p class="fu-note">Draft quote for Japan Golden Route is waiting — nudge before the valid-until date.</p>
+    </div>
+    <div class="fu-actions">
+      <a class="btn-wa" href="#" onclick="return false"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5z"/></svg>WhatsApp</a>
+      <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: would open the message composer — not wired.">Message</button>
+      <button class="btn btn-sm" type="button" data-done><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg>Done</button>
+    </div>
+  </div>
+
+  <div class="fu">
+    <div class="fu-when">
+      <span class="fu-date">Due Sep 7</span>
+      <span class="pill">Day 3</span>
+      <span class="fu-step">Day 3 touch</span>
+    </div>
+    <div>
+      <div class="fu-name">Liza Bautista <span class="pill pill-warn">Contacted</span></div>
+      <div class="fu-sub">Seoul · 2026-11 · 2 pax · badge scan · +63 908 654 1179</div>
+      <p class="fu-note">Comparing Seoul against Bangkok — send the side-by-side quote today.</p>
+    </div>
+    <div class="fu-actions">
+      <a class="btn-wa" href="#" onclick="return false"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5z"/></svg>WhatsApp</a>
+      <a class="btn-vb" href="#" onclick="return false"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.1 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>Viber</a>
+      <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: would open the message composer — not wired.">Message</button>
+      <button class="btn btn-sm" type="button" data-done><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg>Done</button>
+    </div>
+  </div>
+
+  <p class="queue-note muted">Showing 6 of 23 open follow-ups — sorted overdue first. Synthetic demo data.</p>
+</section>
+
+<!-- ======================= LEADS ======================= -->
+<section class="view" id="tab-leads" role="tabpanel" aria-label="Leads">
+  <div class="view-head">
+    <div>
+      <div class="eyebrow">Kiosk · badge import · booth entry</div>
+      <h2>Leads</h2>
+      <p class="muted">128 leads so far for EXPO-2026-SEP. Add booth conversations by hand — day-1/3/7 follow-ups schedule themselves.</p>
+    </div>
+    <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: would reload the lead list — not wired.">
+      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>
+      Refresh</button>
+  </div>
+
+  <div class="panel add-lead">
+    <div class="add-lead-head">
+      <h3>Add a lead by hand</h3>
+      <span class="muted">For conversations at the booth — the follow-up cadence starts automatically.</span>
+    </div>
+    <form class="lead-form" id="leadForm" novalidate>
+      <div class="lf-field"><label for="lfName">Name *</label><input id="lfName" placeholder="e.g. Maria Santos" autocomplete="off"></div>
+      <div class="lf-field"><label for="lfMobile">Mobile</label><input id="lfMobile" placeholder="+63 917 000 0000" autocomplete="off"></div>
+      <div class="lf-field"><label for="lfEmail">Email</label><input id="lfEmail" placeholder="name@email.com" autocomplete="off"></div>
+      <div class="lf-field"><label for="lfDest">Destination *</label><input id="lfDest" placeholder="Bangkok" list="destList" autocomplete="off">
+        <datalist id="destList">
+          <option value="Bangkok"></option><option value="Pattaya"></option><option value="Seoul"></option>
+          <option value="Ho Chi Minh City"></option><option value="Japan"></option>
+        </datalist>
+      </div>
+      <div class="lf-field"><label for="lfMonth">Travel month *</label><input id="lfMonth" placeholder="2026-11" autocomplete="off"></div>
+      <div class="lf-field lf-notes"><label for="lfNotes">Notes — how you met, what they asked</label><input id="lfNotes" placeholder="e.g. stopped by the booth, asked about the November Bangkok promo" autocomplete="off"></div>
+      <div class="lf-submit"><button class="btn btn-primary" type="button" id="lfAdd">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>Add lead</button></div>
+    </form>
+    <div class="form-result" id="lfResult" role="status"></div>
+  </div>
+
+  <details class="disc">
+    <summary><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>Import scanned badges</summary>
+    <div class="disc-body">
+      <div class="mini-grid">
+        <div style="grid-column:1/-1"><label for="impText">Paste lines — name, mobile, destination, travel month, email</label>
+          <textarea id="impText" rows="4" placeholder="Juan Dela Cruz,+63 918 123 4567,Bangkok,2026-11&#10;Maria Santos&#10;Ana Reyes,+63 915 555 0192,Seoul,2026-12,ana@example.test"></textarea></div>
+        <div><label for="impDest">Default destination (name-only lines)</label><input id="impDest" placeholder="e.g. Bangkok"></div>
+        <div><label for="impMonth">Default travel month</label><input id="impMonth" placeholder="2026-11"></div>
+      </div>
+      <button class="btn" type="button" data-demo="Demo: badge import — not wired.">Import badges</button>
+    </div>
+  </details>
+
+  <div class="toolbar">
+    <span class="search">
+      <svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width:13px;height:13px"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="leadSearch" type="search" placeholder="Filter leads…" aria-label="Filter leads" autocomplete="off">
+    </span>
+    <button class="chip active" type="button" data-src="ALL">All <span class="cnt">128</span></button>
+    <button class="chip" type="button" data-src="KIOSK">Kiosk <span class="cnt">57</span></button>
+    <button class="chip" type="button" data-src="BADGE">Badge <span class="cnt">41</span></button>
+    <button class="chip" type="button" data-src="BOOTH">Booth <span class="cnt">30</span></button>
+    <span class="spacer"></span>
+    <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: would download expo-leads-2026-09-06.csv — not wired.">
+      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M4 21h16"/></svg>
+      Export CSV</button>
+  </div>
+
+  <div class="table-wrap cards-wrap">
+    <table class="cards" id="leadTable">
+      <thead><tr><th>Lead</th><th>Mobile</th><th>Destination</th><th>Month</th><th>Trip brief</th><th>Status</th><th>Source</th><th>Actions</th></tr></thead>
+      <tbody>
+        <tr data-src="KIOSK">
+          <td data-label="Lead"><b>Maria Santos</b><br><span class="muted">…3E91 · maria.santos@mail.com</span></td>
+          <td data-label="Mobile" class="num">+63 917 812 4455</td>
+          <td data-label="Destination">Bangkok</td>
+          <td data-label="Month" class="num">2026-11</td>
+          <td data-label="Trip brief">2 pax · 4D</td>
+          <td data-label="Status"><span class="pill pill-info">Quoted</span></td>
+          <td data-label="Source"><span class="src">KIOSK</span></td>
+          <td data-label="Actions"><div class="lead-actions">
+            <select aria-label="Set status"><option>Set status</option><option selected>QUOTED</option><option>CONTACTED</option><option>ACCEPTED</option><option>BOOKED</option><option>LOST</option></select>
+            <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: message composer — not wired.">Message</button>
+            <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: would create client + inquiry records — not wired.">Convert</button>
+          </div></td>
+        </tr>
+        <tr data-src="BADGE">
+          <td data-label="Lead"><b>Juan Dela Cruz</b><br><span class="muted">…7C22 · juan.delacruz@mail.com</span></td>
+          <td data-label="Mobile" class="num">+63 918 123 4567</td>
+          <td data-label="Destination">Seoul</td>
+          <td data-label="Month" class="num">2026-12</td>
+          <td data-label="Trip brief">4A · 2K · 5D</td>
+          <td data-label="Status"><span class="pill pill-good">Accepted</span></td>
+          <td data-label="Source"><span class="src">BADGE</span></td>
+          <td data-label="Actions"><div class="lead-actions">
+            <select aria-label="Set status"><option>Set status</option><option selected>ACCEPTED</option><option>BOOKED</option><option>QUOTED</option></select>
+            <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: message composer — not wired.">Message</button>
+            <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: would create client + inquiry records — not wired.">Convert</button>
+          </div></td>
+        </tr>
+        <tr data-src="BOOTH">
+          <td data-label="Lead"><b>Dina Diaz</b> <span class="needs-mobile">Needs mobile</span><br><span class="muted">…A905 · booth note: asked about the Mekong cruise</span></td>
+          <td data-label="Mobile"><span class="muted">—</span></td>
+          <td data-label="Destination">Ho Chi Minh City</td>
+          <td data-label="Month" class="num">2026-11</td>
+          <td data-label="Trip brief">2 pax</td>
+          <td data-label="Status"><span class="pill">New</span></td>
+          <td data-label="Source"><span class="src">BOOTH</span></td>
+          <td data-label="Actions"><div class="lead-actions">
+            <select aria-label="Set status"><option>Set status</option><option selected>NEW</option><option>CONTACTED</option><option>QUOTED</option></select>
+            <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: would prompt for a +63 mobile — not wired.">Add mobile</button>
+          </div></td>
+        </tr>
+        <tr data-src="KIOSK">
+          <td data-label="Lead"><b>Ana Reyes</b><br><span class="muted">…51B7 · ana.reyes@mail.com</span></td>
+          <td data-label="Mobile" class="num">+63 915 555 0192</td>
+          <td data-label="Destination">Japan</td>
+          <td data-label="Month" class="num">2026-12</td>
+          <td data-label="Trip brief">2 pax · 6D</td>
+          <td data-label="Status"><span class="pill pill-warn">Contacted</span></td>
+          <td data-label="Source"><span class="src">KIOSK</span></td>
+          <td data-label="Actions"><div class="lead-actions">
+            <select aria-label="Set status"><option>Set status</option><option selected>CONTACTED</option><option>QUOTED</option><option>LOST</option></select>
+            <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: message composer — not wired.">Message</button>
+            <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: would create client + inquiry records — not wired.">Convert</button>
+          </div></td>
+        </tr>
+        <tr data-src="BADGE">
+          <td data-label="Lead"><b>Carlo Mendoza</b><br><span class="muted">…2F6A · group of 6, office trip</span></td>
+          <td data-label="Mobile" class="num">+63 906 234 7781</td>
+          <td data-label="Destination">Bangkok</td>
+          <td data-label="Month" class="num">2026-11</td>
+          <td data-label="Trip brief">6 pax · group</td>
+          <td data-label="Status"><span class="pill pill-info">Quoted</span></td>
+          <td data-label="Source"><span class="src">BADGE</span></td>
+          <td data-label="Actions"><div class="lead-actions">
+            <select aria-label="Set status"><option>Set status</option><option selected>QUOTED</option><option>ACCEPTED</option><option>LOST</option></select>
+            <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: message composer — not wired.">Message</button>
+            <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: would create client + inquiry records — not wired.">Convert</button>
+          </div></td>
+        </tr>
+        <tr data-src="KIOSK">
+          <td data-label="Lead"><b>Grace Lim</b><br><span class="muted">…88D4 · grace.lim@mail.com</span></td>
+          <td data-label="Mobile" class="num">+63 927 881 2340</td>
+          <td data-label="Destination">Seoul</td>
+          <td data-label="Month" class="num">2026-11</td>
+          <td data-label="Trip brief">2A · 1K · 3★</td>
+          <td data-label="Status"><span class="pill pill-solid">Booked</span></td>
+          <td data-label="Source"><span class="src">KIOSK</span></td>
+          <td data-label="Actions"><div class="lead-actions">
+            <span class="converted-note"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width:12px;height:12px"><path d="M4 12l5 5L20 7"/></svg>Converted · BOOKING-2026-000187</span>
+          </div></td>
+        </tr>
+        <tr data-src="BOOTH">
+          <td data-label="Lead"><b>Roberto Aguilar</b><br><span class="muted">…C41E · walk-up, December dates</span></td>
+          <td data-label="Mobile" class="num">+63 919 446 8823</td>
+          <td data-label="Destination">Ho Chi Minh City</td>
+          <td data-label="Month" class="num">2026-12</td>
+          <td data-label="Trip brief">2 pax</td>
+          <td data-label="Status"><span class="pill">New</span></td>
+          <td data-label="Source"><span class="src">BOOTH</span></td>
+          <td data-label="Actions"><div class="lead-actions">
+            <select aria-label="Set status"><option>Set status</option><option selected>NEW</option><option>CONTACTED</option><option>QUOTED</option></select>
+            <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: message composer — not wired.">Message</button>
+            <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: would create client + inquiry records — not wired.">Convert</button>
+          </div></td>
+        </tr>
+        <tr data-src="BOOTH">
+          <td data-label="Lead"><b>Katrina Villanueva</b><br><span class="muted">…B07F · returning client since 2024</span></td>
+          <td data-label="Mobile" class="num">+63 916 772 5518</td>
+          <td data-label="Destination">Japan</td>
+          <td data-label="Month" class="num">2026-11</td>
+          <td data-label="Trip brief">3 pax · 6D</td>
+          <td data-label="Status"><span class="pill pill-warn">Contacted</span></td>
+          <td data-label="Source"><span class="src">BOOTH</span></td>
+          <td data-label="Actions"><div class="lead-actions">
+            <select aria-label="Set status"><option>Set status</option><option selected>CONTACTED</option><option>QUOTED</option><option>LOST</option></select>
+            <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: message composer — not wired.">Message</button>
+            <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: would create client + inquiry records — not wired.">Convert</button>
+          </div></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="result-note muted">Showing 8 of 128 leads. Synthetic demo data.</p>
+</section>
+
+<!-- ======================= PACKAGES ======================= -->
+<section class="view" id="tab-packages" role="tabpanel" aria-label="Packages">
+  <div class="view-head">
+    <div>
+      <div class="eyebrow">Quote on the floor in minutes</div>
+      <h2>Packages</h2>
+      <p class="muted">Manual pricing — update as suppliers confirm. These feed the multi-option quotes.</p>
+    </div>
+    <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: would open the add-package form — not wired.">
+      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+      New package</button>
+  </div>
+
+  <div class="pkg-grid">
+    <div class="pkg">
+      <div class="pkg-top"><span class="eyebrow">Bangkok · Thailand</span><span class="pill pill-good">Active</span></div>
+      <h3>Bangkok City Break<span class="pkg-dur">4D3N</span></h3>
+      <div class="pkg-price">PHP 18,500 <span>per pax</span></div>
+      <ul class="pkg-inc">
+        <li><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg>Round-trip airfare from Manila</li>
+        <li><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg>3-star hotel with breakfast</li>
+        <li><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg>Half-day city &amp; temple tour</li>
+        <li><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg>Airport transfers</li>
+      </ul>
+      <div class="pkg-actions">
+        <button class="btn btn-sm" type="button" data-quote-from>Quote from this</button>
+        <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: price update — not wired.">Update price</button>
+      </div>
+    </div>
+
+    <div class="pkg">
+      <div class="pkg-top"><span class="eyebrow">Seoul · South Korea</span><span class="pill pill-good">Active</span></div>
+      <h3>Seoul Discovery<span class="pkg-dur">5D4N</span></h3>
+      <div class="pkg-price">PHP 32,000 <span>per pax</span></div>
+      <ul class="pkg-inc">
+        <li><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg>Round-trip airfare from Manila</li>
+        <li><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg>4-star Myeongdong-area hotel</li>
+        <li><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg>DMZ half-day tour</li>
+        <li><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg>Daily breakfast</li>
+      </ul>
+      <div class="pkg-actions">
+        <button class="btn btn-sm" type="button" data-quote-from>Quote from this</button>
+        <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: price update — not wired.">Update price</button>
+      </div>
+    </div>
+
+    <div class="pkg">
+      <div class="pkg-top"><span class="eyebrow">Ho Chi Minh City · Vietnam</span><span class="pill pill-good">Active</span></div>
+      <h3>HCMC &amp; Mekong<span class="pkg-dur">3D2N</span></h3>
+      <div class="pkg-price">PHP 24,500 <span>per pax</span></div>
+      <ul class="pkg-inc">
+        <li><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg>Round-trip airfare from Manila</li>
+        <li><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg>City-center hotel with breakfast</li>
+        <li><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg>Mekong Delta day cruise</li>
+      </ul>
+      <div class="pkg-actions">
+        <button class="btn btn-sm" type="button" data-quote-from>Quote from this</button>
+        <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: price update — not wired.">Update price</button>
+      </div>
+    </div>
+
+    <div class="pkg">
+      <div class="pkg-top"><span class="eyebrow">Japan · Golden Route</span><span class="pill pill-good">Active</span></div>
+      <h3>Japan Golden Route<span class="pkg-dur">6D5N</span></h3>
+      <div class="pkg-price">PHP 68,900 <span>per pax</span></div>
+      <ul class="pkg-inc">
+        <li><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg>Tokyo – Kyoto – Osaka rail pass</li>
+        <li><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg>4-star hotels, daily breakfast</li>
+        <li><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg>Airport transfers &amp; tours</li>
+      </ul>
+      <div class="pkg-actions">
+        <button class="btn btn-sm" type="button" data-quote-from>Quote from this</button>
+        <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: price update — not wired.">Update price</button>
+      </div>
+    </div>
+
+    <div class="pkg">
+      <div class="pkg-top"><span class="eyebrow">Pattaya + Bangkok</span><span class="pill pill-good">Active</span></div>
+      <h3>Beach &amp; City Combo<span class="pkg-dur">5D4N</span></h3>
+      <div class="pkg-price">PHP 27,900 <span>per pax</span></div>
+      <ul class="pkg-inc">
+        <li><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg>Round-trip airfare from Manila</li>
+        <li><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg>2 nights Pattaya + 2 nights Bangkok</li>
+        <li><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg>Breakfast &amp; transfers</li>
+      </ul>
+      <div class="pkg-actions">
+        <button class="btn btn-sm" type="button" data-quote-from>Quote from this</button>
+        <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: price update — not wired.">Update price</button>
+      </div>
+    </div>
+
+    <div class="pkg is-archived">
+      <div class="pkg-top"><span class="eyebrow">Seoul · winter rates</span><span class="pill">Archived</span></div>
+      <h3>Seoul Winter Special<span class="pkg-dur">5D4N</span></h3>
+      <div class="pkg-price">PHP 29,500 <span>per pax</span></div>
+      <ul class="pkg-inc">
+        <li><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg>2025 winter supplier rates — expired</li>
+        <li><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg>Kept for reference and re-pricing</li>
+      </ul>
+      <div class="pkg-actions">
+        <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: restore — not wired.">Restore &amp; re-price</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= QUOTES ======================= -->
+<section class="view" id="tab-quotes" role="tabpanel" aria-label="Quotes">
+  <div class="view-head">
+    <div>
+      <div class="eyebrow">Create → send → accept → book</div>
+      <h2>Quotes</h2>
+      <p class="muted">Pick 2–3 packages per quote; email the link or send it over WhatsApp. Clients see a public page at /q/&lt;token&gt;.</p>
+    </div>
+    <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: would reload the quote list — not wired.">
+      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>
+      Refresh</button>
+  </div>
+
+  <details class="disc">
+    <summary><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>Create a quote</summary>
+    <div class="disc-body">
+      <div class="mini-grid">
+        <div><label for="qLead">Lead</label>
+          <select id="qLead">
+            <option>Miguel Torres — Bangkok (+63 905 331 9027)</option>
+            <option>Dina Diaz — Ho Chi Minh City (no mobile)</option>
+            <option>Katrina Villanueva — Japan (+63 916 772 5518)</option>
+          </select></div>
+        <div><label for="qValid">Valid until</label><input id="qValid" value="2026-09-20"></div>
+      </div>
+      <div class="opt-pick"><input type="checkbox" id="op1" checked><label for="op1" style="flex:1"><b>Bangkok City Break 4D3N</b> · PHP 18,500/pax</label><input class="ov" placeholder="override price" aria-label="Override price"></div>
+      <div class="opt-pick"><input type="checkbox" id="op2" checked><label for="op2" style="flex:1"><b>Seoul Discovery 5D4N</b> · PHP 32,000/pax</label><input class="ov" placeholder="override price" aria-label="Override price"></div>
+      <div class="opt-pick"><input type="checkbox" id="op3"><label for="op3" style="flex:1"><b>Japan Golden Route 6D5N</b> · PHP 68,900/pax</label><input class="ov" placeholder="override price" aria-label="Override price"></div>
+      <button class="btn btn-primary" type="button" data-demo="Demo: draft quote created — not wired.">Create draft quote</button>
+    </div>
+  </details>
+
+  <div class="quote state-hero">
+    <div class="q-id">EXPO-Q-2026-0026<span>Created Sep 6 · valid to Sep 20</span></div>
+    <div class="q-client">
+      <b>Juan Dela Cruz</b>
+      <span class="q-opts">Seoul Discovery 5D4N · PHP 32,000/pax · 4A 2K = PHP 192,000</span>
+      <span class="q-sent"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width:11px;height:11px"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>emailed to juan.delacruz@mail.com · accepted Sep 6, 11:42</span>
+    </div>
+    <div class="q-status"><span class="pill pill-good">Accepted</span></div>
+    <div class="q-actions">
+      <button class="btn btn-primary btn-sm" type="button" data-book>
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg>Mark booked</button>
+    </div>
+  </div>
+
+  <div class="quote">
+    <div class="q-id">EXPO-Q-2026-0034<span>Created Sep 6 · draft</span></div>
+    <div class="q-client">
+      <b>Cherry Uy</b>
+      <span class="q-opts">Japan Golden Route 6D5N · PHP 68,900/pax</span>
+      <span class="q-sent">not sent yet</span>
+    </div>
+    <div class="q-status"><span class="pill">Draft</span></div>
+    <div class="q-actions">
+      <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: email quote — not wired.">Email quote</button>
+      <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: issues a fresh /q/token link — not wired.">Get link</button>
+    </div>
+  </div>
+
+  <div class="quote">
+    <div class="q-id">EXPO-Q-2026-0031<span>Sep 5 · valid to Sep 19</span></div>
+    <div class="q-client">
+      <b>Maria Santos</b>
+      <span class="q-opts">Bangkok City Break 4D3N · HCMC &amp; Mekong 3D2N</span>
+      <span class="q-sent"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width:11px;height:11px"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>emailed to maria.santos@mail.com · opened 3× on the public page</span>
+    </div>
+    <div class="q-status"><span class="pill pill-info">Sent</span></div>
+    <div class="q-actions">
+      <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: re-email quote — not wired.">Email again</button>
+      <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: issues a fresh /q/token link — not wired.">Get link</button>
+    </div>
+  </div>
+
+  <div class="quote">
+    <div class="q-id">EXPO-Q-2026-0028<span>Sep 5 · valid to Sep 19</span></div>
+    <div class="q-client">
+      <b>Carlo Mendoza</b>
+      <span class="q-opts">Bangkok City Break 4D3N · 6 pax group · PHP 111,000 total</span>
+      <span class="q-sent"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width:11px;height:11px"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>emailed to carlo.mendoza@mail.com</span>
+    </div>
+    <div class="q-status"><span class="pill pill-info">Sent</span></div>
+    <div class="q-actions">
+      <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: re-email quote — not wired.">Email again</button>
+      <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: issues a fresh /q/token link — not wired.">Get link</button>
+    </div>
+  </div>
+
+  <div class="quote">
+    <div class="q-id">EXPO-Q-2026-0022<span>Sep 4 · booked Sep 6</span></div>
+    <div class="q-client">
+      <b>Grace Lim</b>
+      <span class="q-opts">Seoul Discovery 5D4N · 2A 1K = PHP 96,000</span>
+      <span class="q-sent"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width:11px;height:11px"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>emailed to grace.lim@mail.com · accepted &amp; booked</span>
+    </div>
+    <div class="q-status"><span class="pill pill-solid">Booked</span></div>
+    <div class="q-actions">
+      <span class="converted-note"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width:12px;height:12px"><path d="M4 12l5 5L20 7"/></svg>BOOKING-2026-000187</span>
+    </div>
+  </div>
+
+  <div class="quote">
+    <div class="q-id">EXPO-Q-2026-0014<span>Sep 4 · expired Sep 2</span></div>
+    <div class="q-client">
+      <b>Liza Bautista</b>
+      <span class="q-opts">Seoul Discovery 5D4N · Seoul Winter Special 5D4N</span>
+      <span class="q-sent">emailed to liza.bautista@mail.com · never opened</span>
+    </div>
+    <div class="q-status"><span class="pill">Expired</span></div>
+    <div class="q-actions">
+      <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: would re-issue with a new valid-until date — not wired.">Re-issue</button>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= WHAT CHANGED & WHY ======================= -->
+<details class="changelog" open>
+  <summary>
+    <svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width:18px;height:18px"><path d="m9 6 6 6-6 6"/></svg>
+    <span class="cl-head">
+      <span class="eyebrow">For the owner — react to specifics</span>
+      <h3>What changed &amp; why — 8 decisions in this proposal</h3>
+    </span>
+  </summary>
+  <ol class="cl">
+    <li><b>One command bar, not two.</b> The event selector, sign-up form link, staff identity and sign-out now live in a single navy header. Today a separate blue event strip sits under the header and duplicates its job; merging them frees roughly 70px of vertical space on phones — one more follow-up row visible at the booth.</li>
+    <li><b>The funnel is drawn as a funnel.</b> Ten look-alike metric boxes made staff compute the story themselves. Stage bars with proportional widths plus stage-to-stage conversion rates say it directly: 128 leads → 11 bookings, 8.6% — readable from a metre away on the tablet.</li>
+    <li><b>Numbers get a display register.</b> Metric values step up to 20–27px tabular figures while working text stays at 12–13px, as in the current ledger. Money and counts read instantly without inflating the whole page.</li>
+    <li><b>Two quiet elevation levels.</b> Panels lift a hairline off the chart-paper background and the sticky header casts a soft shadow once you scroll. This replaces the strictly flat surfaces — sections now separate by depth instead of heavier borders, and it stays subtle enough for an operations tool.</li>
+    <li><b>Follow-up urgency you can see from a distance.</b> Overdue items sort first, take a red rule and wash (words + colour, never colour alone), and the overdue count rides the tab itself. WhatsApp and Viber keep their brand colours but become thumb-sized buttons with icons.</li>
+    <li><b>Manual lead capture is promoted to the page's hero form.</b> It is always open — no disclosure to unfold — with 40px-plus touch targets and destination suggestions drawn from the package templates. This is the action staff repeat most at the booth; the badge import moves into a collapsed secondary panel.</li>
+    <li><b>Accent discipline.</b> Passage Blue becomes the single data accent (funnel, chart, links, progress bars). Manifest Green stays reserved for the one primary action in view and for booked/success states — the same green the BOOKED pill uses today.</li>
+    <li><b>Phone-first tables.</b> Leads and quotes reflow into labelled cards below 720px instead of forcing horizontal scroll, and every control keeps a comfortable touch target. The console is used on phones at the booth as much as on the tablet.</li>
+  </ol>
+</details>
+
+<p class="foot muted">Mockup for evaluation only — tab switching and the marked demo interactions (mark done, mark booked, add lead, filters) run locally in the browser; there are no server calls and nothing is saved. Feature set mirrors the live Expo Console (event selector, dashboard, day-1/3/7 follow-ups, leads &amp; import, packages, multi-option quotes); the Events and Analytics tabs would keep their current design in this proposal.</p>
+
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- tabs ---------- */
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
+  function activate(id) {
+    tabs.forEach(function (t) {
+      var on = t.getAttribute('data-tab') === id;
+      t.classList.toggle('active', on);
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    Array.prototype.slice.call(document.querySelectorAll('.view')).forEach(function (v) {
+      v.classList.toggle('active', v.id === 'tab-' + id);
+    });
+  }
+  tabs.forEach(function (t) {
+    t.addEventListener('click', function () { activate(t.getAttribute('data-tab')); });
+  });
+  var initial = (location.hash || '').replace('#', '');
+  if (['dashboard', 'followups', 'leads', 'packages', 'quotes'].indexOf(initial) !== -1) activate(initial);
+
+  /* ---------- toast ---------- */
+  var toastEl = document.getElementById('toast');
+  var toastTimer = null;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove('show'); }, 2800);
+  }
+
+  /* ---------- banner dismiss ---------- */
+  document.getElementById('bannerDismiss').addEventListener('click', function () {
+    var b = document.getElementById('proposalBanner');
+    b.parentNode.removeChild(b);
+  });
+
+  /* ---------- header shadow on scroll ---------- */
+  var topbar = document.getElementById('topbar');
+  window.addEventListener('scroll', function () {
+    topbar.classList.toggle('scrolled', window.scrollY > 4);
+  }, { passive: true });
+
+  /* ---------- event selector (demo) ---------- */
+  document.getElementById('expoSelect').addEventListener('change', function () {
+    toast('Demo: numbers would reload for the selected event — not wired.');
+  });
+
+  /* ---------- generic demo actions ---------- */
+  document.addEventListener('click', function (e) {
+    var el = e.target.closest('[data-demo]');
+    if (el) toast(el.getAttribute('data-demo'));
+  });
+
+  /* ---------- follow-up: mark done (visual only) ---------- */
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-done]');
+    if (!btn || btn.disabled) return;
+    var row = btn.closest('.fu');
+    row.classList.add('is-done');
+    var when = row.querySelector('.fu-when');
+    var done = document.createElement('span');
+    done.className = 'pill pill-good';
+    done.textContent = 'Done today';
+    when.appendChild(done);
+    btn.disabled = true;
+    toast('Demo: follow-up marked done — nothing was saved.');
+  });
+
+  /* ---------- quote: mark booked (visual only) ---------- */
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-book]');
+    if (!btn || btn.disabled) return;
+    var quote = btn.closest('.quote');
+    var pill = quote.querySelector('.q-status .pill');
+    if (pill) { pill.className = 'pill pill-solid'; pill.textContent = 'Booked'; }
+    quote.classList.remove('state-hero');
+    quote.querySelector('.q-actions').innerHTML =
+      '<span class="converted-note"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width:12px;height:12px"><path d="M4 12l5 5L20 7"/></svg>BOOKING-2026-000188 (demo)</span>';
+    toast('Demo: quote marked booked — nothing was saved.');
+  });
+
+  /* ---------- package → quote handoff (demo) ---------- */
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-quote-from]');
+    if (!btn) return;
+    activate('quotes');
+    toast('Demo: switched to Quotes — the package would arrive pre-checked.');
+  });
+
+  /* ---------- add lead by hand (demo validation) ---------- */
+  document.getElementById('lfAdd').addEventListener('click', function () {
+    var name = document.getElementById('lfName');
+    var dest = document.getElementById('lfDest');
+    var month = document.getElementById('lfMonth');
+    var res = document.getElementById('lfResult');
+    if (!name.value.trim() || !dest.value.trim() || !month.value.trim()) {
+      res.className = 'form-result is-error';
+      res.textContent = 'Name, destination and travel month are required (travel month looks like 2026-11).';
+      return;
+    }
+    res.className = 'form-result is-ok';
+    res.textContent = 'Added ' + name.value.trim() + ' to EXPO-2026-SEP — day-1/3/7 follow-ups scheduled. (Demo only: nothing was saved.)';
+    name.value = '';
+    month.value = '';
+    toast('Demo: lead added to the queue — nothing was saved.');
+  });
+
+  /* ---------- lead source chips (demo filter) ---------- */
+  var chips = Array.prototype.slice.call(document.querySelectorAll('.chip[data-src]'));
+  var rows = Array.prototype.slice.call(document.querySelectorAll('#leadTable tbody tr'));
+  chips.forEach(function (chip) {
+    chip.addEventListener('click', function () {
+      chips.forEach(function (c) { c.classList.remove('active'); });
+      chip.classList.add('active');
+      var src = chip.getAttribute('data-src');
+      rows.forEach(function (row) {
+        var show = src === 'ALL' || row.getAttribute('data-src') === src;
+        row.style.display = show ? '' : 'none';
+      });
+    });
+  });
+
+  /* ---------- lead search (demo filter) ---------- */
+  document.getElementById('leadSearch').addEventListener('input', function (e) {
+    var q = e.target.value.trim().toLowerCase();
+    rows.forEach(function (row) {
+      row.style.display = (!q || row.textContent.toLowerCase().indexOf(q) !== -1) ? '' : 'none';
+    });
+  });
+})();
+</script>
+</body>
+</html>

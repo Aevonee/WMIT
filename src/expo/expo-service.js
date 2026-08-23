@@ -2,7 +2,7 @@
 
 // WMIT expo increment: lead capture, follow-up queue, package templates,
 // multi-option quote delivery over public token links, and the conversion
-// dashboard â€” all on top of the Phase 1 runtime (immutable IDs, audit,
+// dashboard — all on top of the Phase 1 runtime (immutable IDs, audit,
 // idempotency) and the hosted-server mailer.
 //
 // Public-facing entry points (kiosk capture, quote view/accept) carry their
@@ -17,7 +17,7 @@ const { RateLimiter } = require('../server/rate-limiter');
 const expoAnalytics = require('./expo-analytics');
 
 const EXPO_TAG = 'EXPO-2026';
-const EXPO_NAME = 'Worldmaster International Travel â€” Expo 2026';
+const EXPO_NAME = 'Worldmaster International Travel — Expo 2026';
 // Data-privacy consent (docs/data-privacy.md section 3): the sign-up form
 // states this purpose near the submit button and the lead record carries it
 // with the capture timestamp. Badge imports carry no explicit consent and
@@ -100,8 +100,8 @@ class ExpoService {
     this.limiter = opts.limiter || new RateLimiter({
       clock: this.clock,
       cooldownMs: 60 * 1000,          // one kiosk submission per mobile per minute
-      globalLimit: 30,                // and at most 30 submissions per windowâ€¦
-      globalWindowMs: 10 * 60 * 1000  // â€¦across all mobiles (port of the Apps Script caps)
+      globalLimit: 30,                // and at most 30 submissions per window…
+      globalWindowMs: 10 * 60 * 1000  // …across all mobiles (port of the Apps Script caps)
     });
     this.publicActionLimiter = opts.publicActionLimiter || new RateLimiter({
       clock: this.clock,
@@ -339,10 +339,14 @@ class ExpoService {
       const text = String(value.text || '');
       const defaultDestination = value.default_destination ? String(value.default_destination).trim() : '';
       const defaultTravelMonth = value.default_travel_month ? String(value.default_travel_month).trim() : '';
+      const defaultEmail = value.default_email ? String(value.default_email).trim().toLowerCase() : '';
+      if (defaultEmail && !EMAIL_PATTERN.test(defaultEmail)) throw new WmitError('EMAIL_INVALID', 'default_email must be a valid email address.');
       if (!text.trim()) throw new WmitError('REQUIRED_FIELD', 'Paste at least one line to import.');
       const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
       if (lines.length > 500) throw new WmitError('IMPORT_TOO_LARGE', 'Import at most 500 lines at a time.', { lines: lines.length });
       const importExpoTag = this.resolveExpoTag(value.expo_tag);
+      const source = value.source === 'BOOTH' ? 'BOOTH' : 'IMPORT';
+      const sourceLabel = source === 'BOOTH' ? ' MANUAL ENTRY' : ' BADGE IMPORT';
       const existingMobiles = new Set(this.listLeads().map((lead) => lead.mobile));
       const created = [];
       const failed = [];
@@ -362,7 +366,7 @@ class ExpoService {
           const travelMonth = cells[3] || defaultTravelMonth;
           if (!travelMonth) throw new WmitError('REQUIRED_FIELD', 'Line ' + (index + 1) + ': travel month is required.');
           if (!TRAVEL_MONTH_PATTERN.test(travelMonth)) throw new WmitError('TRAVEL_MONTH_INVALID', 'Line ' + (index + 1) + ': travel month must look like 2026-10.');
-          const email = cells[4] ? cells[4].toLowerCase() : '';
+          const email = cells[4] ? cells[4].toLowerCase() : defaultEmail;
           if (email && !EMAIL_PATTERN.test(email)) throw new WmitError('EMAIL_INVALID', 'Line ' + (index + 1) + ': invalid email.');
           const result = this.runtime.createRecord('ExpoLead', {
             name,
@@ -374,9 +378,9 @@ class ExpoService {
             pax_count: null,
             notes: value.note ? String(value.note).slice(0, 500) : null,
             status: 'NEW',
-            source: 'IMPORT',
+            source,
             expo_tag: importExpoTag,
-            imported_from: importExpoTag + ' BADGE IMPORT'
+            imported_from: importExpoTag + sourceLabel
           }, this.ctx(actor || this.actor));
           if (!result.ok) throw new WmitError(result.error.code, 'Line ' + (index + 1) + ': ' + result.error.message, result.error.details);
           if (msisdn) existingMobiles.add(msisdn);
@@ -538,7 +542,7 @@ class ExpoService {
         related_type: 'ExpoLead',
         related_id: lead.expo_lead_id,
         expo_lead_id: lead.expo_lead_id,
-        title: 'Day ' + days + ' follow-up â€” ' + lead.name,
+        title: 'Day ' + days + ' follow-up — ' + lead.name,
         description,
         due_date: dateOnlyPlusDays(capturedAt, days),
         state: 'OPEN',
@@ -611,7 +615,7 @@ class ExpoService {
     const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     const parts = String(lead.travel_month || '').split('-');
     const monthLabel = parts.length === 2 ? monthNames[Number(parts[1]) - 1] + ' ' + parts[0] : 'your travel month';
-    return 'Hi ' + firstName(lead.name) + '! This is Worldmaster International Travel. We met at the expo â€” thank you for asking about ' + lead.destination + ' for ' + monthLabel + '. Here is your quotation link: {QUOTE_LINK}';
+    return 'Hi ' + firstName(lead.name) + '! This is Worldmaster International Travel. We met at the expo — thank you for asking about ' + lead.destination + ' for ' + monthLabel + '. Here is your quotation link: {QUOTE_LINK}';
   }
 
   completeFollowUp(input, actor) {
@@ -734,19 +738,19 @@ class ExpoService {
     const placeholders = [
       {
         destination: 'Bangkok', name: 'Bangkok City Break 4D3N', duration_days: 4, price_per_person: '18500.00',
-        description: 'Round-trip airfare, 3-night hotel with breakfast, airport transfers, half-day city tour. Placeholder pricing â€” confirm before quoting.',
+        description: 'Round-trip airfare, 3-night hotel with breakfast, airport transfers, half-day city tour. Placeholder pricing — confirm before quoting.',
         inclusions: ['Round-trip economy airfare', '3 nights hotel with breakfast', 'Airport transfers', 'Half-day city tour'],
         exclusions: ['Travel tax and terminal fees', 'Visa fees (if applicable)', 'Personal expenses', 'Tips']
       },
       {
         destination: 'Seoul', name: 'Seoul Discovery 5D4N', duration_days: 5, price_per_person: '32900.00',
-        description: 'Round-trip airfare, 4-night hotel with breakfast, airport transfers, palace and Nami Island day tour. Placeholder pricing â€” confirm before quoting.',
+        description: 'Round-trip airfare, 4-night hotel with breakfast, airport transfers, palace and Nami Island day tour. Placeholder pricing — confirm before quoting.',
         inclusions: ['Round-trip economy airfare', '4 nights hotel with breakfast', 'Airport transfers', 'Palace tour', 'Nami Island day tour'],
         exclusions: ['Korea visa fee', 'Travel tax and terminal fees', 'Personal expenses', 'Travel insurance']
       },
       {
         destination: 'Ho Chi Minh City', name: 'Vietnam Essentials 4D3N', duration_days: 4, price_per_person: '21750.00',
-        description: 'Round-trip airfare, 3-night hotel with breakfast, airport transfers, Mekong Delta day tour. Placeholder pricing â€” confirm before quoting.',
+        description: 'Round-trip airfare, 3-night hotel with breakfast, airport transfers, Mekong Delta day tour. Placeholder pricing — confirm before quoting.',
         inclusions: ['Round-trip economy airfare', '3 nights hotel with breakfast', 'Airport transfers', 'Mekong Delta day tour'],
         exclusions: ['Travel tax and terminal fees', 'Personal expenses', 'Tips', 'Travel insurance']
       }
@@ -897,7 +901,7 @@ class ExpoService {
       if (!issued.ok) return issued;
       const leadName = (quote.lead_snapshot && quote.lead_snapshot.name) || 'Traveller';
       const url = issued.data.url;
-      const optionLines = quote.options.map((option, index) => (index + 1) + '. ' + option.name + ' â€” ' + option.duration_days + ' days, ' + option.price_per_person + ' ' + option.currency + ' per person').join('\n');
+      const optionLines = quote.options.map((option, index) => (index + 1) + '. ' + option.name + ' — ' + option.duration_days + ' days, ' + option.price_per_person + ' ' + option.currency + ' per person').join('\n');
       const text = [
         'Hi ' + firstName(leadName) + ',',
         '',
@@ -910,7 +914,7 @@ class ExpoService {
         '',
         'Worldmaster International Travel'
       ].join('\r\n');
-      const optionRows = quote.options.map((option) => '<tr><td style="padding:8px 12px;border-bottom:1px solid #dce3ea;"><b>' + escapeHtml(option.name) + '</b><br><span style="color:#637083;font-size:12px;">' + escapeHtml(option.destination) + ' Â· ' + escapeHtml(String(option.duration_days)) + ' days</span></td><td style="padding:8px 12px;border-bottom:1px solid #dce3ea;text-align:right;white-space:nowrap;"><b>' + escapeHtml(option.price_per_person) + ' ' + escapeHtml(option.currency) + '</b><br><span style="color:#637083;font-size:12px;">per person</span></td></tr>').join('');
+      const optionRows = quote.options.map((option) => '<tr><td style="padding:8px 12px;border-bottom:1px solid #dce3ea;"><b>' + escapeHtml(option.name) + '</b><br><span style="color:#637083;font-size:12px;">' + escapeHtml(option.destination) + ' · ' + escapeHtml(String(option.duration_days)) + ' days</span></td><td style="padding:8px 12px;border-bottom:1px solid #dce3ea;text-align:right;white-space:nowrap;"><b>' + escapeHtml(option.price_per_person) + ' ' + escapeHtml(option.currency) + '</b><br><span style="color:#637083;font-size:12px;">per person</span></td></tr>').join('');
       const html = [
         '<div style="font-family:system-ui,Segoe UI,sans-serif;max-width:560px;margin:0 auto;color:#17212b;">',
         '<div style="background:#102a43;color:#fff;padding:18px 22px;border-radius:10px 10px 0 0;"><div style="font-size:19px;font-weight:800;letter-spacing:.08em;">WORLDMASTER</div><div style="font-size:11px;letter-spacing:.12em;color:#a9c4dd;">INTERNATIONAL TRAVEL</div></div>',
@@ -1132,7 +1136,7 @@ class ExpoService {
       const accepted = ['ACCEPTED', 'BOOKED'].includes(quote.status);
       const chosen = accepted ? quote.accepted_option_id : null;
       quote.options.forEach((option) => {
-        const key = option.name + ' Â· ' + option.destination;
+        const key = option.name + ' · ' + option.destination;
         byPackage[key] = byPackage[key] || { offered: 0, sent: 0, accepted: 0 };
         byPackage[key].offered += 1;
         if (sent) byPackage[key].sent += 1;

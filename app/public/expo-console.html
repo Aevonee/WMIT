@@ -6,52 +6,43 @@
   <title>Events — WMIT Workspace</title>
   <link rel="stylesheet" href="/tokens.css">
   <link rel="stylesheet" href="/events-base.css">
-  <style>
-    .event-bar{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;background:#eef5fb;border:1px solid #c8dceb;border-radius:7px;padding:10px 12px;margin-bottom:14px;font-size:13px}
-    .event-bar label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#56677a;margin-bottom:3px}
-    .event-bar select{padding:8px;border:1px solid #c8d3de;border-radius:6px;font:inherit;background:#fff;min-width:280px}
-    .event-bar .kiosk-link{flex:1;min-width:240px;font-size:12px;color:#56677a}
-    .event-bar .kiosk-link a{color:#245c89;font-weight:700;word-break:break-all}
-    .event-bar>div{min-width:0}
-    .event-bar select{max-width:100%}
-    .chat-actions a{display:inline-block;margin-right:6px;text-decoration:none;font-weight:700;font-size:12px;padding:5px 9px;border-radius:6px}
-    .chat-whatsapp{background:#e7f6ec;color:#116936}
-    .chat-viber{background:#ece7f6;color:#553099}
-    .overdue{background:#fff5f0}
-    .pill-NEW{background:#e9f2f9}.pill-CONTACTED{background:#fff6df;color:#70530b}.pill-QUOTED{background:#e8f0fb;color:#0b4775}
-    .pill-ACCEPTED{background:#eaf7f0;color:#176237}.pill-BOOKED{background:#176b48;color:#fff}
-    .pill-LOST,.pill-UNREACHABLE,.pill-DECLINED{background:#f6e8e8;color:#8d2c2c}
-    .pill-DRAFT{background:#f1f3f5;color:#5b6673}.pill-SENT{background:#e8f0fb;color:#0b4775}
-    .pill-ACTIVE{background:#eaf7f0;color:#176237}.pill-ENDED{background:#f1f3f5;color:#5b6673}
-    .needs-mobile{color:#8c5b00;font-weight:700;font-size:11px}
-    .ended-note{color:#8c5b00;font-size:12px;font-weight:700}
-    .option-pick{display:flex;gap:10px;align-items:flex-start;border:1px solid #d9e2ec;border-radius:7px;padding:10px;margin-top:8px;background:#fbfcfe}
-    .option-pick input[type="checkbox"]{width:18px;height:18px;margin-top:2px}
-    .mini-input{max-width:130px}
-    .form-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
-    .form-grid label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#56677a;margin-bottom:3px}
-    .form-grid input,.form-grid select,.form-grid textarea{width:100%;padding:8px;border:1px solid #c8d3de;border-radius:6px;font:inherit;background:#fff}
-    .card{border:1px solid #d9e2ec;border-radius:9px;padding:14px;background:#fff;margin-top:14px}
-    details.compact-form{margin:0 0 14px;padding:10px 12px;border:1px solid #d9e2ec;border-radius:7px;background:#fbfcfe}
-    details.compact-form summary{cursor:pointer;font-weight:700;color:#245c89}
-    .metric-row{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
-    .metric{background:#fff;border:1px solid #d9e2ec;border-radius:8px;padding:12px}
-    .metric small{color:#68788a;display:block;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
-    .metric strong{display:block;font-size:24px;margin-top:4px}
-    @media(max-width:900px){.form-grid,.metric-row{grid-template-columns:1fr 1fr}.event-bar select{min-width:200px}}
-    @media(max-width:620px){.form-grid,.metric-row{grid-template-columns:1fr}}
-  </style>
+  <link rel="stylesheet" href="/expo-console.css">
 </head>
 <body>
-  <header>
-    <div class="header-row">
-      <div><h1>Events</h1></div>
-      <div class="actions">
-        <input id="wmit-global-search" type="search" placeholder="Search leads, quotes, packages…" autocomplete="off" aria-label="Search leads, quotes, packages" style="background:#fff;color:#172334;border:1px solid #c8d2df;border-radius:6px;padding:8px 10px;font:inherit;font-size:13px;min-width:200px;">
-        <button class="secondary" onclick="window.open(kioskUrlForSelected ? kioskUrlForSelected() : '/expo.html', '_blank', 'noopener')">Open sign-up form</button>
-        <button class="secondary" id="nav-logout">Sign out</button>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="#dashboard" aria-label="WMIT Expo Console">
+        <span class="mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" style="stroke:#d7ecfb;stroke-width:1.7;fill:none;stroke-linecap:round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.7 2.6 3.9 5.7 3.9 9s-1.2 6.4-3.9 9c-2.7-2.6-3.9-5.7-3.9-9s1.2-6.4 3.9-9z"/></svg>
+        </span>
+        <span><span class="brand-name">WMIT</span><span class="brand-sub">Expo Console</span></span>
+      </a>
+
+      <div class="scope">
+        <div class="scope-select">
+          <label for="expo-select">Event</label>
+          <select id="expo-select"></select>
+        </div>
+        <div class="scope-links">
+          <span class="kiosk-url" id="expo-kiosk-url"></span>
+          <button class="chip-btn" id="expo-kiosk-copy" type="button" title="Copy the client-facing sign-up form link for this event">
+            <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>
+            Copy form link</button>
+          <button class="chip-btn" type="button" onclick="window.open(kioskUrlForSelected ? kioskUrlForSelected() : '/expo.html', '_blank', 'noopener')">
+            <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6"/><path d="M20 4 11 13"/><path d="M19 14v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>
+            <span class="btn-label-sm">Open form</span></button>
+        </div>
+      </div>
+
+      <div class="staff">
+        <input id="wmit-global-search" type="search" class="topbar-search" placeholder="Search leads, quotes, packages…" autocomplete="off" aria-label="Search leads, quotes, packages">
+        <div class="avatar" aria-hidden="true">WM</div>
+        <button class="chip-btn" id="nav-logout" type="button">
+          <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>
+          <span class="btn-label-sm">Sign out</span></button>
       </div>
     </div>
+
     <nav class="nav" aria-label="Events workspaces">
       <a data-tab="dashboard" href="#dashboard" class="active">Dashboard</a>
       <a data-tab="followups" href="#followups">Follow-ups</a>
@@ -66,15 +57,6 @@
 
   <main>
     <div id="message" class="message"></div>
-
-    <div class="event-bar">
-      <div>
-        <label for="expo-select">Event</label>
-        <select id="expo-select"></select>
-      </div>
-      <button class="secondary" id="expo-kiosk-copy" title="Copy the client-facing sign-up form link for this event">Copy form link</button>
-      <div class="kiosk-link" id="expo-kiosk-url"></div>
-    </div>
 
     <section id="tab-dashboard" class="workspace-view panel">
       <div class="panel-head"><div><div class="eyebrow">Results</div><h2>Dashboard</h2><p class="muted">Leads → quotes → acceptances → bookings for the selected event.</p></div><button id="refresh-dashboard">Refresh</button></div>
@@ -92,6 +74,19 @@
 
     <section id="tab-leads" class="workspace-view panel" style="display:none">
       <div class="panel-head"><div><div class="eyebrow">Badge import</div><h2>Leads &amp; import</h2><p class="muted">One lead per line — name only, or name, mobile, destination, travel month (YYYY-MM), email.</p></div><div style="display:flex;gap:8px;align-items:center"><input id="lead-search" type="search" placeholder="Filter leads…" autocomplete="off" aria-label="Filter leads" style="padding:8px 10px;border:1px solid #c8d3de;border-radius:6px;font:inherit;background:#fff;"><button id="refresh-leads">Refresh</button></div></div>
+      <details class="compact-form" open>
+        <summary>Add a lead by hand</summary>
+        <div class="form-grid" style="margin-top:10px">
+          <div><label for="manual-name">Name *</label><input id="manual-name" placeholder="e.g. Maria Santos"></div>
+          <div><label for="manual-mobile">Mobile</label><input id="manual-mobile" placeholder="09xx xxx xxxx"></div>
+          <div><label for="manual-email">Email</label><input id="manual-email" placeholder="name@email.com"></div>
+          <div><label for="manual-destination">Destination *</label><input id="manual-destination" placeholder="e.g. Bangkok"></div>
+          <div><label for="manual-month">Travel month *</label><input id="manual-month" placeholder="2026-11"></div>
+          <div style="align-self:end"><button id="manual-run">Add lead</button></div>
+          <div style="grid-column:1/-1"><label for="manual-notes">Notes (how you met, what they asked)</label><input id="manual-notes" placeholder="e.g. stopped by the booth, asked about November Bangkok promo"></div>
+        </div>
+        <div id="manual-result" class="muted" style="margin-top:8px"></div>
+      </details>
       <details class="compact-form">
         <summary>Import scanned badges</summary>
         <div class="form-grid" style="margin-top:10px">

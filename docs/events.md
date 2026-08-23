@@ -37,6 +37,7 @@ browsable as history.
 | Sign-up form (public, 30-second, per event) | `app/public/expo.html` → `GET /api/public/expo/config`, `POST /api/public/expo/lead` |
 | Event registry (create, list, end/reopen) | `GET /api/expo/expos`; `POST /api/expo/expos/create`, `/status` |
 | Badge bulk import (CSV or name-per-line) | Events console → `POST /api/expo/leads/import` |
+| Manual lead entry ("Add a lead by hand") | Events console, Leads tab → same import endpoint with `source: "BOOTH"` |
 | Follow-up queue (day 1/3/7, WA/Viber links) | `GET /api/expo/followups` + console tab; scheduler job `expo-followups` |
 | Package templates (manual pricing, per event) | `GET/POST /api/expo/templates*` + console tab |
 | Multi-option quotes + branded public page | `POST /api/expo/quotes/create`, `/send`, `/link`; public page `/q/<token>` |
@@ -79,6 +80,14 @@ All list endpoints accept `?expo_tag=`; the console's event selector
    `name,mobile,destination,travel_month,email` CSV or names only with
    defaults. Name-only rows import with `NEEDS MOBILE`; attach the number
    on first contact ("Add mobile") to light up the chat links.
+3b. **People you talked to personally** (never touched the form or a
+   badge): use **Add a lead by hand** in the Leads tab — name, mobile,
+   email, destination, travel month, and a note about the conversation.
+   These leads carry source `BOOTH` / `MANUAL ENTRY` so analytics can tell
+   them apart from badge scans and kiosk sign-ups, and they get the same
+   day-1/3/7 follow-ups. Name-only entries work here too. Manual leads
+   report as `legacy` on consent (like badge imports) — consent recording
+   exists only on the kiosk form.
 4. **Follow-ups:** the scheduler (and each capture) creates day-1/3/7
    tasks. The queue shows overdue items first with one-click WhatsApp
    (prefilled message) and Viber deep links. Completing a follow-up moves a

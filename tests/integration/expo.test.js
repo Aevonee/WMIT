@@ -51,6 +51,13 @@ test('expo registry: multiple expos, per-expo capture/import/templates, ended ex
   assert.equal(taggedImport.data.created_count, 1);
   assert.equal(service.listLeads({ expo_tag: created.data.expo_tag }).length, 2);
 
+  const boothImport = service.importLeads({ text: 'Dina Diaz,09181116666,Bali,2027-04', expo_tag: created.data.expo_tag, source: 'BOOTH', note: 'Walked up to the booth' });
+  assert.equal(boothImport.data.created_count, 1);
+  const boothLead = service.listLeads({ expo_tag: created.data.expo_tag }).find((lead) => lead.name === 'Dina Diaz');
+  assert.equal(boothLead.source, 'BOOTH', 'hand-entered leads are distinguishable from badge scans');
+  assert.equal(boothLead.notes, 'Walked up to the booth');
+  assert.equal(service.listLeads({ expo_tag: created.data.expo_tag }).length, 3);
+
   assert.equal(service.captureLead({ name: 'X Y', mobile: '09181114444', destination: 'Bali', travel_month: '2027-04', expo_tag: 'NOPE-2099' }).error.code, 'EXPO_NOT_FOUND');
   const duplicate = service.createExpo({ name: 'Again', expo_tag: 'EXPO-2026' });
   assert.equal(duplicate.error.code, 'EXPO_DUPLICATE');
@@ -60,7 +67,7 @@ test('expo registry: multiple expos, per-expo capture/import/templates, ended ex
   assert.equal(ended.ok, true);
   assert.equal(service.captureLead({ name: 'Z W', mobile: '09181115555', destination: 'Bali', travel_month: '2027-04', expo_tag: created.data.expo_tag }).error.code, 'EXPO_NOT_ACTIVE');
   assert.equal(service.getPublicConfig({ expo: created.data.expo_tag }).error.code, 'EXPO_NOT_ACTIVE');
-  assert.equal(service.listLeads({ expo_tag: created.data.expo_tag }).length, 2, 'ended expo history stays readable');
+  assert.equal(service.listLeads({ expo_tag: created.data.expo_tag }).length, 3, 'ended expo history stays readable');
 
   const reopened = service.setExpoStatus({ expo_tag: created.data.expo_tag, status: 'ACTIVE' }, 'USER:owner');
   assert.equal(reopened.ok, true);

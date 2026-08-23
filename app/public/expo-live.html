@@ -72,7 +72,7 @@
       var params = new URLSearchParams(location.search);
       var query = params.get('expo') ? '?expo=' + encodeURIComponent(params.get('expo')) : '';
       var response = await fetch('/api/expo/dashboard' + query, { headers: authHeaders() });
-      if (response.status === 401) { sessionStorage.removeItem('wmit_session'); window.location.href = 'login.html?next=expo-live.html'; return; }
+      if (response.status === 401) { sessionStorage.removeItem('wmit_session'); window.location.href = 'login.html?next=/expo-live.html'; return; }
       var body = await response.json();
       if (!body.ok) throw new Error('dashboard unavailable');
       render(body.data);

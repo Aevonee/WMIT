@@ -52,7 +52,7 @@ function authHeaders() {
 
 async function api(path, options) {
   const response = await fetch(path, Object.assign({ headers: authHeaders() }, options || {}));
-  if (response.status === 401) { sessionStorage.removeItem('wmit_session'); window.location.href = 'login.html?next=expo-console.html'; throw new Error('Sign-in required.'); }
+  if (response.status === 401) { sessionStorage.removeItem('wmit_session'); window.location.href = 'login.html?next=/expo-console.html'; throw new Error('Sign-in required.'); }
   const body = await response.json();
   if (!body.ok) throw new Error(body.error && body.error.message || 'The request failed.');
   return body.data;
@@ -115,7 +115,7 @@ setInterval(() => {
   if (token() && Date.now() - lastBoothActivity > BOOTH_IDLE_MS) {
     try { fetch('/api/auth/logout', { method: 'POST', headers: authHeaders() }); } catch (_) { /* best effort */ }
     sessionStorage.removeItem('wmit_session');
-    window.location.href = 'login.html?next=expo-console.html&reason=idle';
+    window.location.href = 'login.html?next=/expo-console.html&reason=idle';
   }
 }, 15000);
 
@@ -127,8 +127,15 @@ async function loadDashboard() {
     ['Leads', data.funnel.leads], ['Contacted', data.funnel.contacted], ['Quotes sent', data.funnel.quotes_sent],
     ['Accepted', data.funnel.accepted], ['Booked', data.funnel.booked], ['Revenue (PHP)', data.revenue.php_total]
   ];
+  const conversion = [
+    ['Lead → quote', data.conversion.lead_to_quote_percent],
+    ['Quote → accept', data.conversion.quote_to_accept_percent],
+    ['Accept → book', data.conversion.accept_to_book_percent],
+    ['Lead → book', data.conversion.lead_to_book_percent]
+  ];
   $('funnel-metrics').innerHTML = metrics.map(([label, value]) => '<div class="metric"><small>' + esc(label) + '</small><strong>' + esc(value) + '</strong></div>').join('') +
-    '<div class="metric" style="grid-column:1/-1"><small>Conversion</small><strong style="font-size:15px">lead→quote ' + esc(data.conversion.lead_to_quote_percent) + '% · quote→accept ' + esc(data.conversion.quote_to_accept_percent) + '% · accept→book ' + esc(data.conversion.accept_to_book_percent) + '% · lead→book ' + esc(data.conversion.lead_to_book_percent) + '%</strong><small>Open follow-ups: ' + esc(data.follow_ups.open) + ' · Lost/Unreachable: ' + esc(data.funnel.lost) + '</small></div>';
+    conversion.map(([label, value]) => '<div class="metric"><small>' + esc(label) + '</small><strong>' + esc(value) + '%</strong></div>').join('') +
+    '<div class="metric metric-wide"><small>Follow-ups</small><strong>' + esc(data.follow_ups.open) + ' open</strong><small>Lost/Unreachable: ' + esc(data.funnel.lost) + '</small></div>';
   const dayRows = (data.by_day || []).map((row) => '<tr><td>' + esc(row.day) + '</td><td>' + esc(row.leads) + '</td><td>' + esc(row.quotes_sent) + '</td><td>' + esc(row.accepted) + '</td><td>' + esc(row.booked) + '</td></tr>').join('');
   const pkgRows = (data.by_package || []).map((row) => '<tr><td>' + esc(row.package) + '</td><td>' + esc(row.offered) + '</td><td>' + esc(row.sent) + '</td><td>' + esc(row.accepted) + '</td></tr>').join('');
   $('by-day-wrap').innerHTML = tableWrap(dayRows, '<th>Day</th><th>Leads</th><th>Quotes</th><th>Accepted</th><th>Booked</th>', 'No activity yet.');
@@ -182,6 +189,29 @@ $('import-run').addEventListener('click', guard(async () => {
     (data.failed.length ? '<br>' + data.failed.map((failure) => 'Line ' + esc(failure.line) + ': ' + esc(failure.message)).join('<br>') : '');
   $('import-text').value = '';
   notify('Import finished: ' + data.created_count + ' created, ' + data.follow_up_tasks_created + ' follow-up tasks scheduled.');
+  await loadLeads();
+}));
+
+$('manual-run').addEventListener('click', guard(async () => {
+  const name = $('manual-name').value.trim();
+  const mobile = $('manual-mobile').value.trim();
+  const email = $('manual-email').value.trim();
+  const destination = $('manual-destination').value.trim();
+  const month = $('manual-month').value.trim();
+  const notes = $('manual-notes').value.trim();
+  if (!name) return notify('The name is required.', 'error');
+  if (!destination) return notify('The destination is required.', 'error');
+  if (!month) return notify('The travel month is required (e.g. 2026-11).', 'error');
+  const line = mobile ? [name, mobile, destination, month].map((cell) => cell.replace(/,/g, ' ')).join(',') : name.replace(/,/g, ' ');
+  const data = await api('/api/expo/leads/import', { method: 'POST', body: JSON.stringify({ text: line, source: 'BOOTH', note: notes || undefined, default_destination: mobile ? undefined : destination, default_travel_month: mobile ? undefined : month, default_email: email || undefined, expo_tag: currentExpoTag || undefined }) });
+  if (!data.created_count) {
+    const reason = data.failed && data.failed[0] ? data.failed[0].message : 'The lead could not be saved.';
+    $('manual-result').textContent = reason;
+    return notify(reason, 'error');
+  }
+  ['manual-name', 'manual-mobile', 'manual-email', 'manual-destination', 'manual-month', 'manual-notes'].forEach((id) => { $(id).value = ''; });
+  $('manual-result').innerHTML = 'Added <b>' + esc(name) + '</b> to ' + esc(currentExpoTag || 'the current expo') + '.';
+  notify('Lead added. Day-1/3/7 follow-ups are scheduled.');
   await loadLeads();
 }));
 

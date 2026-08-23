@@ -50,6 +50,7 @@
       body.print-quotation > main > .workspace-view { display:none !important; }
       body.print-quotation > main > #quotation { display:block !important; border:0 !important; padding:0 !important; margin:0 !important; background:#fff !important; }
       body.print-quotation #quotation > .panel-head,
+      body.print-quotation #quotation > .view-head,
       body.print-quotation #quotation-content > *:not(#quotation-preview) { display:none !important; }
       body.print-quotation #quotation-content { display:block !important; }
       body.print-quotation #quotation-preview { display:block !important; position:static !important; margin:0 !important; border:0 !important; box-shadow:none !important; padding:0 !important; }
@@ -108,34 +109,376 @@
       .case-meta{gap:8px}
     }
   </style>
+  <style id="wmit-overhaul">
+    /* ===================================================================
+       Operations overhaul layer — approved design
+       docs/mockups/operations-overhaul.html. Last in the cascade: the
+       legacy blocks above stay untouched as fallbacks and every selector
+       here targets the existing class vocabulary (nothing renamed).
+       =================================================================== */
+    :root{
+      --navy-deep:#102a40;--navy-line:#2a4d6d;--navy-grad-top:#17395a;
+      --slate-deep:#2b455d;--blue-deep:#245c89;--blue-fill:#4d87bf;--blue-mid:#6f9fd0;--blue-soft:#93b9dc;
+      --green-deep:#14603c;--amber-deep:#7a5006;--red-deep:#802a2a;--amber-flag:#d9a93c;
+      --warn-wash:#fff8df;--warn-rule:#e3c777;--info-text:#245c89;
+      --well:#f1f5f9;--tint:#fbfcfe;--chart:#f5f7fb;
+      --sh-1:0 1px 2px rgba(23,35,52,.05),0 1px 6px rgba(23,35,52,.05);
+      --sh-2:0 6px 18px rgba(23,35,52,.12);
+      --sh-head:0 2px 10px rgba(23,35,52,.16);
+      --r-sm:6px;--r-md:8px;--r-lg:12px;
+    }
+    body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif;font-size:13px;line-height:1.5;background:var(--chart)}
+    .i{width:14px;height:14px;flex:none;stroke:currentColor;stroke-width:1.9;fill:none;stroke-linecap:round;stroke-linejoin:round}
+    .vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+    .skip-link{z-index:60}
+
+    /* ---------- top bar ---------- */
+    header.topbar{position:sticky;top:0;z-index:40;padding:0;color:#eaf2fa;background:linear-gradient(180deg,var(--navy-grad-top),var(--harbor-navy));transition:box-shadow .2s}
+    header.topbar.scrolled{box-shadow:var(--sh-head)}
+    .topbar-inner{max-width:1240px;margin:0 auto;padding:10px 20px 8px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+    .brand{display:flex;align-items:center;gap:9px;text-decoration:none;color:#fff}
+    .brand .mark{width:30px;height:30px;border-radius:8px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;flex:none}
+    .brand .mark svg{width:17px;height:17px}
+    .brand-text{display:flex;flex-direction:column}
+    .brand-name{display:block;font-size:15px;font-weight:800;letter-spacing:.02em;line-height:1.2}
+    .brand-sub{display:block;font-size:11px;color:#bcd2e4;font-weight:600;margin-top:-3px}
+    .gsearch-wrap{position:relative;flex:1;max-width:560px;min-width:210px}
+    .gsearch{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--rule-input);border-radius:999px;padding:7px 12px 7px 14px;box-shadow:0 1px 4px rgba(16,42,64,.25)}
+    .gsearch:focus-within{border-color:var(--blue-mid)}
+    .gsearch .i{color:var(--sea-fog);width:15px;height:15px}
+    .gsearch input{flex:1;border:0;font:inherit;font-size:13px;outline:none;background:none;color:var(--ledger-ink);min-width:0;padding:0}
+    .gsearch input::placeholder{color:#8a99ab}
+    .staff{display:flex;align-items:center;gap:10px;margin-left:auto;min-width:0;flex-wrap:wrap;justify-content:flex-end}
+    #auth-state{display:flex;align-items:center;gap:8px;min-width:0}
+    #auth-state .status{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.28);color:#dbe8f4;font-size:11px;font-weight:700;letter-spacing:.02em;text-transform:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
+    header.topbar button.secondary{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.17);color:#dbe8f4}
+    header.topbar button.secondary:hover{background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.3);color:#fff}
+
+    /* ---------- tab strip ---------- */
+    .tabs-row{width:100%;max-width:none;padding:0 16px;display:flex;gap:6px;align-items:stretch}
+    .tabs-scroll{flex:1;min-width:0;position:relative}
+    .tabs-scroll::after{content:'';position:absolute;top:0;right:0;bottom:0;width:26px;background:linear-gradient(90deg,rgba(16,42,64,0),var(--harbor-navy));pointer-events:none;opacity:0;transition:opacity .15s}
+    .tabs-scroll.has-more::after{opacity:1}
+    header .nav{display:flex;gap:4px;justify-content:flex-start;margin-top:0;overflow-x:auto;scrollbar-width:none}
+    header .nav::-webkit-scrollbar{display:none}
+    header .nav a{color:#c6d9e9;font-size:13px;font-weight:600;padding:9px 14px;border-radius:8px 8px 0 0;white-space:nowrap;flex:none}
+    header .nav a:hover{color:#fff;background:rgba(255,255,255,.07)}
+    header .nav a.active{background:var(--chart);color:var(--harbor-navy);font-weight:750;box-shadow:0 -1px 0 rgba(255,255,255,.15) inset}
+    .tab-ext{display:inline-flex;align-items:center;gap:7px;text-decoration:none;color:#c6d9e9;font-size:13px;font-weight:600;padding:9px 14px;border-radius:8px 8px 0 0;white-space:nowrap;flex:none}
+    .tab-ext:hover{color:#fff;background:rgba(255,255,255,.07)}
+    .tab-ext .i{width:11px;height:11px;opacity:.7}
+
+    /* ---------- layout shell ---------- */
+    main{max-width:1240px;margin:0 auto;padding:20px}
+    section.workspace-view.panel{background:none;border:0;box-shadow:none;border-radius:0;padding:0;margin-bottom:0}
+    .workspace-view.active{animation:wmit-fade .25s ease-out}
+    @keyframes wmit-fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+    .workspace-view>.view-head{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;margin-bottom:14px;flex-wrap:wrap}
+    .workspace-view>.view-head h2{font-size:17px;font-weight:750;letter-spacing:-.01em}
+    .workspace-view>.view-head .muted{font-size:12px;margin-top:2px;max-width:680px}
+    .workspace-view>.view-head .eyebrow{margin-bottom:2px}
+    .workspace-view>.view-head>div{min-width:0}
+    .view-head .row-actions,.view-head>button{flex:none}
+    .workspace-view>.panel-head{align-items:flex-end;margin-bottom:14px;flex-wrap:wrap}
+    .workspace-view>.panel-head h2{font-size:17px;font-weight:750;letter-spacing:-.01em}
+    .workspace-view>.panel-head .muted{font-size:12px;margin-top:2px;max-width:680px}
+    .case-header{background:var(--surface);border:1px solid var(--rule);border-radius:var(--r-lg);padding:16px 18px;margin-bottom:16px;box-shadow:var(--sh-1)}
+
+    /* ---------- panels, cards, today ---------- */
+    .panel{background:var(--surface);border:1px solid var(--rule);border-radius:var(--r-lg);padding:16px 18px;margin-bottom:16px;box-shadow:var(--sh-1)}
+    .panel-head{flex-wrap:wrap}
+    .card{background:var(--surface);border:1px solid var(--rule);border-radius:var(--r-md);padding:14px;box-shadow:var(--sh-1)}
+    .card.warn{background:var(--amber-wash);border-color:var(--amber-rule)}
+    .card.good{background:var(--good-wash);border-color:var(--good-rule)}
+    .card.blocked{background:var(--bad-wash);border-color:var(--bad-rule)}
+    h2{font-size:1.0625rem;font-weight:750;letter-spacing:-.01em}
+    h3{font-size:.875rem;font-weight:700}
+    .eyebrow{font-size:10.5px;font-weight:750;letter-spacing:.09em;opacity:1;color:var(--label-ink)}
+    .muted{color:var(--sea-fog);font-size:12.5px}
+    .today-meta{color:var(--label-ink);font-size:12.5px;margin:0 0 14px}
+    .today-card{background:var(--surface);border:1px solid var(--rule);border-radius:var(--r-lg);box-shadow:var(--sh-1);padding:16px 18px}
+    .today-card-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:6px}
+    .today-card-head h3{margin:0}
+    .today-count{font-size:20px;font-weight:800;color:var(--blue-deep);font-variant-numeric:tabular-nums}
+    .today-grid .today-card{display:flex;flex-direction:column;margin-bottom:0}
+    .today-grid .today-card.wide{grid-column:1/-1}
+    .today-item{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--rule-hair);font-size:12.5px}
+    .today-item:last-of-type{border-bottom:0}
+    .today-item .t-main{flex:1;min-width:0}
+    .today-item .t-main b{font-weight:750}
+    .today-item .t-sub{font-size:11.5px;color:var(--sea-fog);margin-top:1px}
+    .today-item .t-sub .mono{font-size:11px}
+    .today-item .t-side{text-align:right;flex:none}
+    .today-item .t-side .status{margin-top:3px}
+    .today-item .t-amt{font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+    .today-item .t-open{flex:none}
+    .mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11.5px;overflow-wrap:anywhere}
+    .today-more{margin:8px 0 0;color:var(--sea-fog);font-size:11.5px}
+    .money{font-size:1.3125rem;font-weight:800;font-variant-numeric:tabular-nums}
+
+    /* ---------- buttons ---------- */
+    button{border:1px solid transparent;border-radius:var(--r-sm);padding:8px 12px;font-size:12.5px;font-weight:700;background:var(--manifest-green);color:#fff;cursor:pointer;line-height:1.4}
+    button:hover{background:var(--green-deep)}
+    button:disabled{opacity:.55;cursor:default;background:var(--manifest-green)}
+    button.secondary{background:var(--surface);color:var(--ledger-slate);border-color:var(--rule-input)}
+    button.secondary:hover{background:var(--tint);border-color:var(--ledger-slate);color:var(--slate-deep)}
+    button.warning{background:var(--stamp-amber)}
+    button.warning:hover{background:var(--amber-deep)}
+    button.danger{background:var(--ensign-red)}
+    button.danger:hover{background:var(--red-deep)}
+    button.compact{padding:5px 9px;font-size:12px}
+
+    /* ---------- pills ---------- */
+    .status{display:inline-block;border-radius:999px;padding:2px 9px;font-size:10.5px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;background:var(--status-neutral-bg);color:var(--status-neutral-text);white-space:nowrap}
+
+    /* ---------- fields ---------- */
+    .field label{font-size:10.5px;letter-spacing:.06em;margin-bottom:3px}
+    .field input,.field select,.field textarea{padding:7px 9px;font-size:12.5px;border-color:var(--rule-input)}
+    .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--blue-mid)}
+    details.compact-form,.selection-bar,.secondary-details{border-radius:var(--r-md)}
+
+    /* ---------- tables ---------- */
+    .table-wrap{overflow:auto;max-height:430px;border:1px solid var(--rule);border-radius:10px}
+    .card>table,.panel>table{display:block;overflow-x:auto;max-width:100%;border:1px solid var(--rule);border-radius:10px}
+    main th{background:var(--well);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--label-ink);font-weight:750}
+    main td{font-size:12px}
+    main .table-wrap tbody tr:nth-child(even) td{background:transparent}
+    main .table-wrap tbody tr:hover td,main .card>table tbody tr:hover td,main .panel>table tbody tr:hover td{background:var(--tint)}
+    tbody tr:last-child td{border-bottom:0}
+    .empty{border-radius:10px}
+
+    /* ---------- case command ---------- */
+    .booking-band{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+    .booking-band .case-name{font-size:16px;margin:2px 0}
+    .case-band .state-line{font-size:11.5px;color:var(--sea-fog);letter-spacing:.04em;margin-top:8px}
+    .chain{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px}
+    .chain .mono{font-weight:700;color:var(--ledger-slate);background:var(--well);border:1px solid var(--rule-hair);border-radius:5px;padding:2px 7px;white-space:nowrap}
+    .chain .arrow{color:var(--sea-fog);font-size:11px}
+    .case-grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(280px,1fr);gap:14px;align-items:start;margin-top:14px}
+    .case-grid .panel{margin-bottom:14px}
+    .next-hero{background:var(--warn-wash);border:1px solid var(--warn-rule);border-left:4px solid var(--amber-flag);border-radius:var(--r-lg);padding:14px 16px;box-shadow:var(--sh-1);margin-bottom:14px}
+    .next-hero .eyebrow{color:var(--msg-warn-text)}
+    .next-hero h3{font-size:17px;letter-spacing:-.01em;margin:5px 0}
+    .next-hero p{color:var(--why-ink)}
+    .next-hero button{margin-top:11px}
+    .fin-cells{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:2px 0 10px}
+    .fin-cell{background:var(--tint);border:1px solid var(--rule-hair);border-radius:8px;padding:8px 11px;min-width:0}
+    .fin-cell .fl{display:block;font-size:10px;font-weight:750;text-transform:uppercase;letter-spacing:.07em;color:var(--label-ink)}
+    .fin-cell .fv{display:block;font-size:15.5px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:2px;white-space:nowrap}
+    .fin-cell.hero{background:var(--good-wash);border-color:var(--good-rule)}
+    .fin-cell.hero .fv{color:var(--green-deep)}
+    .fin-cell.bad .fv{color:var(--status-bad-text)}
+    .win-cell{display:flex;align-items:center;gap:8px}
+    .win-cell span{font-size:11px;color:var(--sea-fog);white-space:nowrap}
+    .win-track{height:5px;background:var(--well);border-radius:3px;overflow:hidden;min-width:70px;flex:1}
+    .win-fill{height:100%;background:var(--passage-blue);border-radius:3px}
+    .win-fill.green{background:var(--manifest-green)}
+    .soa-hint{margin-top:10px;padding:8px 11px;background:var(--status-info-bg);border:1px solid #b9d4ec;border-radius:8px;color:var(--info-text);font-size:12px}
+    .deadline{border:1px solid var(--rule);border-radius:10px;background:var(--tint);padding:11px 13px;margin-bottom:14px}
+    .deadline .fl{display:block;font-size:10px;font-weight:750;text-transform:uppercase;letter-spacing:.07em;color:var(--label-ink);margin-bottom:3px}
+    .deadline .dl-label{font-size:12.5px;font-weight:750}
+    .deadline .dl-at{display:block;font-size:12px;color:var(--sea-fog);margin-top:2px}
+    .deadline.overdue{background:var(--bad-wash);border-color:var(--bad-rule)}
+    .deadline.overdue .fl,.deadline.overdue .dl-at{color:var(--status-bad-text);font-weight:700}
+    .blockers{margin:8px 0 0;padding-left:19px;color:var(--msg-warn-text);font-size:12.5px}
+    .blockers li{margin:5px 0}
+    .blockers.none{list-style:none;padding-left:0;color:var(--status-good-text)}
+    .trav-list{display:flex;gap:8px;flex-wrap:wrap}
+    .trav{border:1px solid var(--rule-input);background:var(--tint);border-radius:8px;padding:6px 10px;min-width:0}
+    .trav b{display:block;font-size:12.5px;font-weight:750}
+    .trav span{display:block;font-size:10.5px;color:var(--sea-fog)}
+    .task{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--rule-hair);font-size:12.5px;flex-wrap:wrap}
+    .task:last-child{border-bottom:0}
+    .task .t-id{flex:none}
+    .task .t-text{flex:1;min-width:120px}
+    .task .t-due{flex:none}
+    .summary-line{font-size:12.5px}
+
+    /* ---------- misc ---------- */
+    .field select.supplier-combobox-native{width:1px;min-width:0;max-width:1px;position:absolute}
+    .card>h3:first-child,.panel>h3:first-child{margin:0 0 6px}
+    .card>h3:first-child+p.muted,.panel>h3:first-child+dl{margin-top:-2px}
+    .card{margin-bottom:14px}
+    .grid2>.card,.grid3>.card{margin-bottom:0}
+    .optcard{position:relative;border:1px solid var(--rule);border-radius:var(--r-lg);background:var(--surface);box-shadow:var(--sh-1);padding:14px 16px;transition:border-color .15s,box-shadow .15s}
+    .optcard:hover{border-color:var(--blue-mid)}
+    .optcard.is-selected{border-color:var(--good-rule);background:var(--good-wash)}
+    .optcard .opt-top{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:4px;flex-wrap:wrap}
+    .optcard>h3{font-size:14.5px;letter-spacing:-.01em;margin:2px 0}
+    .opt-price{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--harbor-navy);margin:5px 0 3px}
+    .opt-price span{font-size:11px;color:var(--sea-fog);font-weight:600}
+    .opt-check{position:absolute;top:12px;right:12px;width:22px;height:22px;border-radius:50%;background:var(--status-good-bg);border:1px solid var(--good-rule);color:var(--status-good-text);display:none;align-items:center;justify-content:center}
+    .opt-check .i{width:12px;height:12px;stroke-width:2.4}
+    .optcard.is-selected .opt-check{display:flex}
+    .optcard.is-selected .row-actions .status.good{display:none}
+    .q-totals{max-width:340px;margin:12px 0 0 auto}
+    .q-totals div{display:flex;justify-content:space-between;gap:14px;padding:5px 0;font-size:12.5px}
+    .q-totals div span{color:var(--why-ink)}
+    .q-totals div b{font-variant-numeric:tabular-nums;white-space:nowrap}
+    .q-totals .grand{border-top:2px solid var(--harbor-navy);font-size:14px;font-weight:800;margin-top:5px;padding-top:9px}
+    .soa-row{display:flex;justify-content:space-between;gap:14px;padding:7px 0;border-bottom:1px dashed var(--rule-hair);font-size:12.5px}
+    .soa-row span{color:var(--why-ink)}
+    .soa-row b{font-variant-numeric:tabular-nums;white-space:nowrap}
+    .soa-row.total{border-top:2px solid var(--harbor-navy);border-bottom:0;margin-top:5px;padding-top:10px;font-size:14px}
+    .soa-row.total span{color:var(--ledger-ink);font-weight:750}
+    .soa-row.total b{font-weight:800}
+    .message{border-radius:var(--r-md)}
+    .event{border-radius:var(--r-md);background:var(--passage-tint)}
+    .step{border-radius:var(--r-md)}
+
+    /* ---------- departures readiness ---------- */
+    .ready-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:16px;align-items:center;margin-bottom:12px}
+    .ready-score{font-size:clamp(26px,3vw,34px);font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums;color:var(--harbor-navy)}
+    .ready-track{height:8px;background:var(--well);border-radius:4px;overflow:hidden}
+    .ready-fill{height:100%;background:var(--passage-blue);border-radius:4px}
+    .ready-state{align-self:start}
+    .status.unknown{background:#fff;border:1px dashed var(--rule-input);color:var(--sea-fog)}
+    .check-pill{white-space:nowrap}
+    .sens{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--vb-text,#553099);background:var(--vb-bg,#ece7f6);border:1px solid var(--vb-line,#d4c8ee);border-radius:4px;padding:1px 6px;white-space:nowrap;vertical-align:middle}
+    .sens .i{width:11px;height:11px}
+    .lowconf{color:#8c5b00;font-weight:750;font-size:10.5px;border:1px solid var(--warn-rule);background:var(--warn-wash);border-radius:4px;padding:1px 6px;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap;vertical-align:middle}
+    @media(max-width:1020px){
+      .case-grid{grid-template-columns:1fr}
+    }
+    @media(max-width:900px){
+      .ready-head{grid-template-columns:auto minmax(0,1fr)}
+      .ready-head .ready-state{grid-column:1/-1;align-self:auto}
+    }
+    @media(max-width:860px){
+      #auth-state .status{max-width:150px}
+      .today-item .t-side{display:none}
+      .today-item .t-open{margin-left:auto}
+    }
+    @media(max-width:640px){
+      .topbar-inner{padding:8px 14px 6px;gap:10px}
+      .gsearch-wrap{order:5;flex-basis:100%;max-width:none;min-width:0}
+      main{padding:14px}
+      .today-item{flex-direction:row;flex-wrap:wrap}
+    }
+    @media(prefers-reduced-motion:reduce){
+      *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+    }
+
+    /* ---------- quote builder (additive screen — docs/mockups #tab-newquote) ---------- */
+    #quote-builder .num{font-variant-numeric:tabular-nums;white-space:nowrap}
+    #quote-builder{--nq-ring:rgba(54,121,182,.55);--nq-ring-end:rgba(54,121,182,0)}
+    #quote-builder .booking-id{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-weight:700;font-size:13px;color:var(--ledger-slate)}
+    #quote-builder .kv{display:flex;gap:18px;flex-wrap:wrap;margin-top:8px;font-size:12.5px;color:var(--label-ink)}
+    #quote-builder .kv b{color:var(--ledger-ink)}
+    #quote-builder .qb-cur{display:flex;align-items:center;gap:8px;color:var(--label-ink)}
+    #quote-builder .qb-cur select{font:inherit;font-size:12.5px;color:var(--ledger-ink);background:var(--surface);border:1px solid var(--rule-input);border-radius:6px;padding:6px 9px}
+    .nq-grid{display:grid;grid-template-columns:minmax(0,1.16fr) minmax(330px,.84fr);gap:16px;align-items:start}
+    .nq-aside{position:sticky;top:104px;max-height:calc(100vh - 118px);overflow:auto;padding:6px 6px 10px;margin:-6px -6px -10px;scrollbar-width:thin}
+    #qb-sheet-wrap{scroll-margin-top:116px}
+    .nq-form{display:flex;flex-wrap:wrap;gap:8px;align-items:end}
+    .nq-form .field{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1 1 132px}
+    .nq-form .field-grow{flex:2.2 1 220px}
+    .nq-form .field-qty{flex:0 1 58px}
+    .nq-form .field-price{flex:1 1 106px}
+    .nq-form>button{flex:0 0 auto}
+    .nq-form .field input,.nq-form .field select{width:100%}
+    .nq-form .field.internal>label{color:var(--sea-fog)}
+    .nq-form .field.internal input{background:var(--well);color:var(--why-ink);border-style:dashed}
+    .nq-form.nq-collapse{display:none;margin-bottom:12px}
+    .nq-form.nq-collapse.open{display:flex}
+    .nq-form.is-editing{background:var(--status-info-bg);border:1px solid var(--blue-soft);border-radius:var(--r-md);padding:8px}
+    tr.nq-editing td{background:var(--status-info-bg)}
+    .flight-card{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border:1px solid var(--rule);border-radius:10px;background:var(--paper-tint);padding:9px 12px;margin-bottom:8px}
+    .flight-card:last-child{margin-bottom:0}
+    .flight-card.nq-editing{background:var(--status-info-bg);border-color:var(--blue-soft)}
+    .flight-card .fc-main{flex:1;min-width:200px}
+    .flight-card .fc-no{font-weight:800}
+    .flight-card .fc-meta{font-size:11.5px;color:var(--sea-fog);margin-top:1px}
+    .day-card{border:1px solid var(--rule);border-radius:10px;background:var(--paper-tint);padding:10px 12px;margin-bottom:8px}
+    .day-card:last-child{margin-bottom:0}
+    .day-card.nq-editing{background:var(--status-info-bg);border-color:var(--blue-soft)}
+    .day-card .dc-head{display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap}
+    .day-card .dc-head b{font-size:12.5px}
+    .day-card .dc-act{font-size:12px;color:var(--why-ink);margin-top:3px}
+    .day-card .dc-meta{font-size:11.5px;color:var(--sea-fog);margin-top:3px}
+    .nq-fee{font:inherit;font-size:12.5px;color:var(--ledger-ink);background:var(--surface);border:1px solid var(--rule-input);border-radius:6px;padding:5px 8px;width:106px;text-align:right;font-variant-numeric:tabular-nums}
+    .nq-margin{display:flex;justify-content:space-between;gap:10px;align-items:baseline;padding:9px 0 2px;font-size:12px;color:var(--sea-fog);border-top:1px dashed var(--rule-hair);margin-top:8px;flex-wrap:wrap}
+    .nq-margin b{font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--why-ink)}
+    .nq-margin .src{display:inline-block;border:1px solid var(--rule);border-radius:4px;padding:0 6px;font-size:10.5px;font-weight:700;color:var(--label-ink);letter-spacing:.04em}
+    .nq-valid{display:flex;justify-content:space-between;gap:10px;align-items:center;padding-top:9px;font-size:12px;color:var(--label-ink)}
+    .nq-valid label{font-size:10.5px;font-weight:750;text-transform:uppercase;letter-spacing:.06em;color:var(--label-ink)}
+    .nq-valid input{font:inherit;font-size:12.5px;color:var(--ledger-ink);background:var(--surface);border:1px solid var(--rule-input);border-radius:6px;padding:5px 8px}
+    .nq-flash{animation:nqflash 1.1s ease-out 2}
+    @keyframes nqflash{from{box-shadow:0 0 0 3px var(--nq-ring)}to{box-shadow:0 0 0 16px var(--nq-ring-end)}}
+    #quote-builder .sheet-wrap{position:relative}
+    #quote-builder .sheet-flag{position:absolute;top:-9px;right:14px;z-index:2;background:var(--status-info-bg);color:var(--info-text);border:1px solid var(--blue-soft);border-radius:999px;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:2px 10px}
+    #quote-builder .sheet{background:var(--surface);border:1px solid var(--rule);border-radius:var(--r-lg);box-shadow:var(--sh-2);padding:20px 22px;font-size:12px}
+    #quote-builder .sheet-head{display:flex;justify-content:space-between;gap:14px;border-bottom:2px solid var(--harbor-navy);padding-bottom:11px;margin-bottom:12px;flex-wrap:wrap}
+    #quote-builder .sheet-brand{font-size:14px;font-weight:800;letter-spacing:.05em;color:var(--harbor-navy)}
+    #quote-builder .sheet-brand span{display:block;font-size:10.5px;color:var(--sea-fog);font-weight:600;letter-spacing:.02em;margin-top:2px}
+    #quote-builder .sheet-qno{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12.5px;font-weight:700;color:var(--blue-deep);text-align:right}
+    #quote-builder .sheet-qno span{display:block;font-size:10.5px;color:var(--sea-fog);font-weight:500;font-family:inherit}
+    #quote-builder .sheet-meta{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;margin-bottom:12px;font-size:11.5px}
+    #quote-builder .sheet-meta b{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--label-ink);display:block;font-weight:750}
+    #quote-builder .sheet table{font-size:11.5px}
+    #quote-builder .sheet th{padding:6px 7px}
+    #quote-builder .sheet td{padding:6px 7px}
+    #quote-builder .sheet-terms{border-top:1px solid var(--rule);margin-top:14px;padding-top:10px;font-size:11px;color:var(--why-ink)}
+    #quote-builder .sheet-foot{margin-top:12px;color:var(--sea-fog);font-size:10.5px}
+    #quote-builder .qb-row-actions{display:inline-flex;gap:4px;flex:none}
+    @media(max-width:1020px){
+      .nq-grid{grid-template-columns:1fr}
+      .nq-aside{position:static;max-height:none;overflow:visible;padding:0;margin:0}
+    }
+    @media(max-width:720px){
+      #quote-builder table.cards thead{display:none}
+      #quote-builder table.cards,#quote-builder table.cards tbody{display:block}
+      #quote-builder table.cards tr{display:block;border:1px solid var(--rule);border-radius:10px;background:var(--surface);box-shadow:var(--sh-1);padding:6px 12px;margin-bottom:10px}
+      #quote-builder table.cards tr:hover{background:var(--surface)}
+      #quote-builder table.cards td{display:flex;justify-content:space-between;gap:14px;border:0;border-bottom:1px dashed var(--rule-hair);padding:7px 0;text-align:right;align-items:baseline}
+      #quote-builder table.cards td:last-child{border-bottom:0}
+      #quote-builder table.cards td::before{content:attr(data-label);flex:1;font-size:10.5px;font-weight:750;text-transform:uppercase;letter-spacing:.06em;color:var(--label-ink);text-align:left}
+      #quote-builder .table-wrap.cards-wrap{border:0;overflow:visible;max-height:none}
+      #quote-builder .sheet{padding:16px}
+    }
+  </style>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to main content</a>
-<header><div class="header-row"><div><h1>Operations Workspace</h1></div><div class="actions"><span id="nav-case-badge" hidden style="display:inline-block;font-size:12px;color:#dce8f4;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.28);border-radius:999px;padding:2px 10px;white-space:nowrap;"></span><input id="wmit-global-search" type="search" placeholder="Search clients, cases, suppliers…" autocomplete="off" aria-label="Search clients, cases, quotations, bookings, suppliers" style="background:#fff;color:#172334;border:1px solid #c8d2df;border-radius:6px;padding:8px 10px;font:inherit;font-size:13px;min-width:200px;"><span id="auth-state" class="header-muted" style="display:flex;align-items:center;gap:8px;"></span><button class="secondary" onclick="refreshWorkspace()">Refresh</button></div></div><nav class="nav" aria-label="Operations workspaces"><a data-tab="today" href="#today">Today</a><a data-tab="dashboard" href="#dashboard">Dashboard</a><a data-tab="case" href="#case">Case</a><span class="nav-sep" aria-hidden="true"></span><a data-tab="inquiry" href="#inquiry">Inquiries</a><a data-tab="quotation" href="#quotation">Quotations</a><a data-tab="booking" href="#booking">Bookings</a><a data-tab="finance" href="#finance">Finance</a><a data-tab="departures" href="#departures">Departures</a><span class="nav-sep" aria-hidden="true"></span><a data-tab="clients" href="#clients">Clients</a><a data-tab="suppliers" href="#suppliers">Suppliers</a><a data-tab="subagents" href="#subagents">Sub-agents</a><a data-tab="tariffs" href="#tariffs">Tariff Library</a><a data-tab="packages" href="#packages">Packages</a><span class="nav-sep" aria-hidden="true"></span><a data-tab="operations" href="#operations">Follow-ups</a><a data-tab="settings" href="#settings">Settings</a><a href="/expo-console.html">Events</a></nav></header>
+<header class="topbar" id="topbar"><div class="topbar-inner"><h1 class="vh">Operations Workspace</h1><a class="brand" href="#today" aria-label="WMIT Operations — Today"><span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" style="stroke:#d7ecfb;stroke-width:1.7;fill:none;stroke-linecap:round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.7 2.6 3.9 5.7 3.9 9s-1.2 6.4-3.9 9c-2.7-2.6-3.9-5.7-3.9-9s1.2-6.4 3.9-9z"/></svg></span><span class="brand-text"><span class="brand-name">WMIT</span><span class="brand-sub">Operations</span></span></a><div class="gsearch-wrap"><div class="gsearch"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input id="wmit-global-search" type="search" placeholder="Search clients, cases, bookings, suppliers, documents…" autocomplete="off" aria-label="Search clients, cases, quotations, bookings, suppliers"></div></div><div class="staff"><span id="nav-case-badge" hidden style="display:inline-block;font-size:12px;color:#dce8f4;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.28);border-radius:999px;padding:2px 10px;white-space:nowrap;"></span><span id="auth-state" class="header-muted"></span><button class="secondary" onclick="refreshWorkspace()">Refresh</button></div></div><div class="tabs-row"><div class="tabs-scroll" id="tabs-scroll"><nav class="nav tabs" aria-label="Operations workspaces"><a data-tab="today" href="#today">Today</a><a data-tab="dashboard" href="#dashboard">Dashboard</a><a data-tab="case" href="#case">Case</a><a data-tab="inquiry" href="#inquiry">Inquiries</a><a data-tab="quotation" href="#quotation">Quotations</a><a data-tab="quote-builder" href="#quote-builder">Quote builder</a><a data-tab="booking" href="#booking">Bookings</a><a data-tab="finance" href="#finance">Finance</a><a data-tab="departures" href="#departures">Departures</a><a data-tab="clients" href="#clients">Clients</a><a data-tab="suppliers" href="#suppliers">Suppliers</a><a data-tab="subagents" href="#subagents">Sub-agents</a><a data-tab="tariffs" href="#tariffs">Tariff Library</a><a data-tab="packages" href="#packages">Packages</a><a data-tab="operations" href="#operations">Follow-ups</a><a data-tab="settings" href="#settings">Settings</a></nav></div><a class="tab tab-ext" href="/expo-console.html" target="_blank" rel="noopener" title="Events console — opens in a new tab">Events <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7"/><path d="M8 7h9v9"/></svg></a></div></header>
   <main id="main" tabindex="-1"><div id="message" class="message" role="status" aria-live="polite" tabindex="-1"></div><section id="case-header" class="case-header"></section>
-    <section id="today" class="workspace-view panel"><div class="panel-head"><div><h2>Today</h2><p class="muted">What needs you today: payments due, departures, supplier confirmations, follow-ups, and documents.</p></div><button class="secondary" onclick="loadTodayOverview(true)">Reload overview</button></div><div id="today-content"></div></section>
-    <section id="dashboard" class="workspace-view panel"><div class="panel-head"><div><h2>Dashboard</h2><p class="muted">Business metrics: monthly sales and profit, packages booked, travelers, and cash collected.</p></div><button class="secondary" onclick="loadSalesOverview(true)">Reload metrics</button></div><div id="dashboard-content"></div></section>
-    <section id="case" class="workspace-view panel"><div class="panel-head"><div><h2>Case workspace</h2><p class="muted">The whole trip in one view: requirements, quotes, booking, payments, suppliers, documents — and what to do next.</p></div></div><div id="case-workspace-content"></div></section>
-     <section id="inquiry" class="workspace-view panel"><div class="panel-head"><div><div class="eyebrow">Client requests</div><h2>Inquiries</h2><p class="muted">Capture requests and prepare quotations.</p></div></div><div id="inquiry-content"></div><div id="options-content"></div></section>
-     <section id="tariffs" class="workspace-view panel"><div class="panel-head"><div><div class="eyebrow">Supplier knowledge</div><h2>Tariff Library</h2><p class="muted">Review supplier rates before pricing.</p></div></div><div id="tariff-content"></div></section>
-     <section id="packages" class="workspace-view panel"><div class="panel-head"><div><div class="eyebrow">Supplier knowledge</div><h2>Packages</h2><p class="muted">Wholesaler flyers become reusable packages: upload, verify, confirm once — quote many times.</p></div></div><div id="packages-content"></div></section>
-    <section id="quotation" class="workspace-view panel"><div class="panel-head"><div><div class="eyebrow">Client pricing</div><h2>Quotations</h2><p class="muted">Prepare and approve client pricing.</p></div></div><div id="quotation-content"></div></section>
-    <section id="booking" class="workspace-view panel"><div class="panel-head"><div><div class="eyebrow">Travel arrangements</div><h2>Bookings</h2><p class="muted">Manage accepted travel arrangements.</p></div></div><div id="booking-content"></div></section>
-    <section id="finance" class="workspace-view panel"><div class="panel-head"><div><div class="eyebrow">Money controls</div><h2>Finance</h2><p class="muted">Payments, obligations, payables, and supplier gates.</p></div></div><div id="payment-content"></div></section>
+    <section id="today" class="workspace-view panel"><div class="view-head"><div><div class="eyebrow">Owner's cockpit · Asia/Manila</div><h2>Today</h2><p class="muted">What needs you today: payments due, departures, supplier confirmations, follow-ups, and documents. Clear the red first.</p></div><button class="secondary" onclick="loadTodayOverview(true)"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>Refresh</button></div><div id="today-content"></div></section>
+    <section id="dashboard" class="workspace-view panel"><div class="view-head"><div><div class="eyebrow">Business metrics</div><h2>Dashboard</h2><p class="muted">Monthly sales and profit, packages booked, travelers, and cash collected.</p></div><button class="secondary" onclick="loadSalesOverview(true)">Reload metrics</button></div><div id="dashboard-content"></div></section>
+    <section id="case" class="workspace-view panel"><div class="view-head"><div><div class="eyebrow">Case command center</div><h2>One trip, one screen</h2><p class="muted">The whole trip in one view: requirements, quotes, booking, payments, suppliers, documents — with the next action always on top.</p></div></div><div id="case-workspace-content"></div></section>
+      <section id="inquiry" class="workspace-view panel"><div class="view-head"><div><div class="eyebrow">Client requests</div><h2>Inquiries</h2><p class="muted">Capture requests and prepare quotations.</p></div></div><div id="inquiry-content"></div><div id="options-content"></div></section>
+      <section id="tariffs" class="workspace-view panel"><div class="view-head"><div><div class="eyebrow">Supplier knowledge</div><h2>Tariff Library</h2><p class="muted">Review supplier rates before pricing.</p></div></div><div id="tariff-content"></div></section>
+      <section id="packages" class="workspace-view panel"><div class="view-head"><div><div class="eyebrow">Supplier knowledge</div><h2>Packages</h2><p class="muted">Wholesaler flyers become reusable packages: upload, verify, confirm once — quote many times.</p></div></div><div id="packages-content"></div></section>
+     <section id="quotation" class="workspace-view panel"><div class="view-head"><div><div class="eyebrow">Client pricing</div><h2>Quotations</h2><p class="muted">Prepare and approve client pricing. The working copy stays internal; the client sheet opens as a document preview.</p></div></div><div id="quotation-content"></div></section>
+    <section id="quote-builder" class="workspace-view panel"><div class="view-head"><div><div class="eyebrow">Client pricing</div><h2>Quote builder</h2><p class="muted">Build a quotation line by line — items, flights, itinerary days — with the exact client sheet redrawing live on the right. Supplier costs and margin stay internal.</p></div></div><div id="quote-builder-content"></div></section>
+    <section id="booking" class="workspace-view panel"><div class="view-head"><div><div class="eyebrow">Travel arrangements</div><h2>Bookings</h2><p class="muted">Manage accepted travel arrangements — every peso accounted for: obligations, allocations, verification states.</p></div></div><div id="booking-content"></div></section>
+    <section id="finance" class="workspace-view panel"><div class="view-head"><div><div class="eyebrow">Money controls</div><h2>Finance</h2><p class="muted">Payments, obligations, payables, and supplier gates — money displayed as math, never just numbers.</p></div></div><div id="payment-content"></div></section>
     <section id="monitoring" class="workspace-view panel" hidden></section>
-    <section id="settings" class="workspace-view panel"><div class="panel-head"><div><div class="eyebrow">Workspace rules</div><h2>Settings</h2><p class="muted">Default quotation terms and payment deadlines.</p></div></div><div id="settings-content"></div></section>
-    <section id="suppliers" class="workspace-view panel"><div class="panel-head"><div><div class="eyebrow">Operational knowledge</div><h2>Suppliers</h2><p class="muted">Supplier profiles and rates.</p></div></div><div id="suppliers-content"></div></section>
-    <section id="subagents" class="workspace-view panel"><div class="panel-head"><div><div class="eyebrow">Sales partners</div><h2>Sub-agents</h2><p class="muted">Partner agencies and referral channels.</p></div></div><div id="subagents-content"></div></section>
-    <section id="operations" class="workspace-view panel"><div class="panel-head"><div><div class="eyebrow">Follow-up work</div><h2>Follow-ups</h2><p class="muted">Follow-ups and supporting documents.</p></div></div><div id="operations-content"></div></section>
-    <section id="departures" class="workspace-view panel"><div class="panel-head"><div><div class="eyebrow">Shared groups</div><h2>Departures</h2><p class="muted">Shared travel readiness.</p></div></div><div id="departures-content"></div></section>
-    <section id="documents" class="workspace-view panel"><div class="panel-head"><div><div class="eyebrow">Paper flow</div><h2>Documents</h2><p class="muted">Register, classify, extract, and review client documents.</p></div></div><div id="documents-content"></div></section>
-<section id="interns" class="workspace-view panel"><div class="panel-head"><div><div class="eyebrow">Trainees</div><h2>Interns</h2><p class="muted">Intern profiles, tasks, and supervisor review.</p></div></div><div id="interns-content"></div></section>
-<section id="clients" class="workspace-view panel"><div class="panel-head"><div><div class="eyebrow">Client records</div><h2>Clients</h2><p class="muted">Clients and trip history.</p></div></div><div id="clients-content"></div></section>
+    <section id="settings" class="workspace-view panel"><div class="view-head"><div><div class="eyebrow">Workspace rules</div><h2>Settings</h2><p class="muted">Default quotation terms and payment deadlines.</p></div></div><div id="settings-content"></div></section>
+    <section id="suppliers" class="workspace-view panel"><div class="view-head"><div><div class="eyebrow">Operational knowledge</div><h2>Suppliers</h2><p class="muted">Supplier profiles and rates.</p></div></div><div id="suppliers-content"></div></section>
+    <section id="subagents" class="workspace-view panel"><div class="view-head"><div><div class="eyebrow">Sales partners</div><h2>Sub-agents</h2><p class="muted">Partner agencies and referral channels.</p></div></div><div id="subagents-content"></div></section>
+    <section id="operations" class="workspace-view panel"><div class="view-head"><div><div class="eyebrow">Follow-up work</div><h2>Follow-ups</h2><p class="muted">Follow-ups and supporting documents.</p></div></div><div id="operations-content"></div></section>
+    <section id="departures" class="workspace-view panel"><div class="view-head"><div><div class="eyebrow">Shared groups · readiness checks</div><h2>Departures</h2><p class="muted">Per member and per check: BOOKING_PAID · TICKETING · VOUCHERS · DOCUMENTS. UNKNOWN means the system has no requirement record to verify against.</p></div></div><div id="departures-content"></div></section>
+    <section id="documents" class="workspace-view panel"><div class="view-head"><div><div class="eyebrow">Paper flow · human review</div><h2>Documents</h2><p class="muted">Register, classify, extract, review. Passports, visas and identity documents are sensitive — restricted access, manager-gated erasure.</p></div></div><div id="documents-content"></div></section>
+<section id="interns" class="workspace-view panel"><div class="view-head"><div><div class="eyebrow">Trainees</div><h2>Interns</h2><p class="muted">Intern profiles, tasks, and supervisor review.</p></div></div><div id="interns-content"></div></section>
+<section id="clients" class="workspace-view panel"><div class="view-head"><div><div class="eyebrow">Client records</div><h2>Clients</h2><p class="muted">Clients and trip history.</p></div></div><div id="clients-content"></div></section>
   </main>
   <script src="/operations.js"></script>
   <script src="/wmit-toasts.js"></script>
   <script src="/wmit-templates.js"></script>
   <script src="/wmit-search.js"></script>
   <script src="/auth-ui.js"></script>
+  <script>
+    (function () {
+      var topbar = document.getElementById('topbar');
+      var scroll = document.getElementById('tabs-scroll');
+      var tabs = scroll && scroll.firstElementChild;
+      function syncFade() { if (scroll && tabs) scroll.classList.toggle('has-more', tabs.scrollWidth > tabs.clientWidth + 4); }
+      function syncShadow() { if (topbar) topbar.classList.toggle('scrolled', window.scrollY > 4); }
+      window.addEventListener('resize', syncFade);
+      window.addEventListener('scroll', syncShadow, { passive: true });
+      if (tabs) tabs.addEventListener('scroll', syncFade);
+      syncFade(); syncShadow();
+    })();
+  </script>
 </body>
 </html>

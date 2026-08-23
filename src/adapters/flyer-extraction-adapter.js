@@ -9,11 +9,19 @@
 // confirms the package record; nothing is auto-created from extraction.
 //
 // Configuration is environment-gated and the adapter is swappable:
-//   FLYER_AI_PROVIDER = openai | gemini | none   (default none)
+//   FLYER_AI_PROVIDER = openai | gemini | openrouter | none   (default none)
 //   FLYER_AI_API_KEY  = provider API key
-//   FLYER_AI_MODEL    = model id (defaults: gpt-4o-mini / gemini-2.0-flash)
+//   FLYER_AI_MODEL    = model id (defaults: gpt-4o-mini / gemini-2.0-flash /
+//                       stealth/ox-alpha on openrouter)
 // With provider 'none' or a missing key the adapter reports
 // EXTRACTION_UNAVAILABLE and the manual quick-entry path continues.
+//
+// 'openrouter' routes through OpenRouter's OpenAI-compatible endpoint, so any
+// vision model there works (the owner's pick is stealth/ox-alpha: free during
+// preview, multimodal). Caveat recorded in docs: OpenRouter stealth models are
+// operated by an anonymous third party that retains prompts — acceptable for
+// wholesaler promo flyers only, and preview pricing can change. The flyer-only
+// gate below is what keeps that acceptable.
 //
 // HARD RULE: only wholesaler flyer documents reach this adapter. The runtime
 // action (extractFlyerDraft) validates Document.source_type ===
@@ -45,7 +53,7 @@ const FLYER_EXTRACTION_PROMPT = [
 
 const IMAGE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 
-const DEFAULT_MODELS = { openai: 'gpt-4o-mini', gemini: 'gemini-2.0-flash' };
+const DEFAULT_MODELS = { openai: 'gpt-4o-mini', gemini: 'gemini-2.0-flash', openrouter: 'stealth/ox-alpha' };
 
 function stripJsonFences(text) {
   const raw = String(text || '').trim();
@@ -225,10 +233,10 @@ function createFlyerExtractionAdapter(options) {
   const apiKey = readOption('apiKey', 'FLYER_AI_API_KEY').trim();
   const model = readOption('model', 'FLYER_AI_MODEL').trim() || DEFAULT_MODELS[provider] || '';
   const fetchImpl = opts.fetchImpl || globalThis.fetch;
-  const supported = provider === 'openai' || provider === 'gemini';
+  const supported = provider === 'openai' || provider === 'gemini' || provider === 'openrouter';
   const configured = Boolean(supported && apiKey && typeof fetchImpl === 'function');
   const unavailabilityMessage = !supported
-    ? 'Flyer AI extraction is disabled (FLYER_AI_PROVIDER is not openai or gemini). Package intake works manually.'
+    ? 'Flyer AI extraction is disabled (FLYER_AI_PROVIDER is not openai, gemini, or openrouter). Package intake works manually.'
     : !apiKey
       ? 'Flyer AI extraction is not configured: FLYER_AI_API_KEY is missing. Package intake works manually.'
       : 'Flyer AI extraction is unavailable on this server. Package intake works manually.';
@@ -248,10 +256,17 @@ function createFlyerExtractionAdapter(options) {
         return { ok: false, code: 'EXTRACTION_UNAVAILABLE', message: 'The flyer AI adapter only reads PNG, JPEG, and WebP images. PDF flyers are retained for manual entry.' };
       }
       let requestSpec;
-      if (provider === 'openai') {
+      if (provider === 'openai' || provider === 'openrouter') {
+        // OpenRouter is OpenAI-compatible: same body shape (including
+        // image_url content parts and response_format), same bearer auth.
+        // X-Title attributes the traffic to WMIT in OpenRouter's dashboard.
         requestSpec = {
-          url: 'https://api.openai.com/v1/chat/completions',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey },
+          url: provider === 'openrouter'
+            ? 'https://openrouter.ai/api/v1/chat/completions'
+            : 'https://api.openai.com/v1/chat/completions',
+          headers: provider === 'openrouter'
+            ? { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey, 'X-Title': 'WMIT flyer intake' }
+            : { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey },
           body: openAiRequestBody(model, 'data:' + mimeType + ';base64,' + imageBase64)
         };
       } else {
@@ -271,7 +286,7 @@ function createFlyerExtractionAdapter(options) {
       } catch (_) {
         return { ok: false, code: 'EXTRACTION_UNAVAILABLE', message: 'The flyer AI provider could not be reached. No fields were extracted.' };
       }
-      const raw = provider === 'openai' ? parseOpenAiContent(responseText) : parseGeminiContent(responseText);
+      const raw = provider === 'gemini' ? parseGeminiContent(responseText) : parseOpenAiContent(responseText);
       if (!raw) {
         return { ok: true, provider, model, fields: {}, notes: ['The model response could not be read as JSON — nothing was extracted. Verify the fields manually against the flyer.'] };
       }

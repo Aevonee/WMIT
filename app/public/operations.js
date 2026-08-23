@@ -361,7 +361,7 @@ function defaultQuotationValidUntil() {
 
 function quotationDefaultsMarkup() {
   const defaults = quotationDefaults();
-  return '<div class="card"><h3>Quotation defaults</h3><p class="muted">Applied to new quotations and payment schedules. Existing records do not change.</p>' + field('Default payment terms', defaults.paymentTerms) + field('Default validity', defaults.validityDays + ' days') + field('Default currency', defaults.currency) + field('Payment currency policy', defaults.paymentCurrencyPolicy) + field('Down payment due', defaults.downPaymentDaysAfterReservation + ' days after reservation') + field('Final balance due', defaults.finalBalanceBusinessDaysBeforeDeparture + ' business days before departure') + '<button class="secondary compact" onclick="window.location.hash=\'settings\'">Edit settings</button></div>';
+  return '<div class="panel"><h3>Quotation defaults</h3><p class="muted">Applied to new quotations and payment schedules. Existing records do not change.</p>' + field('Default payment terms', defaults.paymentTerms) + field('Default validity', defaults.validityDays + ' days') + field('Default currency', defaults.currency) + field('Payment currency policy', defaults.paymentCurrencyPolicy) + field('Down payment due', defaults.downPaymentDaysAfterReservation + ' days after reservation') + field('Final balance due', defaults.finalBalanceBusinessDaysBeforeDeparture + ' business days before departure') + '<button class="secondary compact" onclick="window.location.hash=\'settings\'">Edit settings</button></div>';
 }
 
 function messageTemplatesCard() {
@@ -397,7 +397,7 @@ function settingsMarkup() {
 
 function workspaceToolsCard() {
   const local = isLocalWorkspace();
-  return '<div class="card"><h3>Workspace tools</h3><p class="muted">Account maintenance and local test-data helpers live here — out of the daily header.</p><div class="row-actions"><button class="secondary" onclick="wmitOpenChangePassword()">Change password</button>' + (local ? '<button class="warning" onclick="fillSyntheticFormFields()">Fill test fields</button><button class="danger" onclick="resetSynthetic()">Reset synthetic data</button>' : '') + '</div></div>';
+  return '<div class="panel"><h3>Workspace tools</h3><p class="muted">Account maintenance and local test-data helpers live here — out of the daily header.</p><div class="row-actions"><button class="secondary" onclick="wmitOpenChangePassword()">Change password</button>' + (local ? '<button class="warning" onclick="fillSyntheticFormFields()">Fill test fields</button><button class="danger" onclick="resetSynthetic()">Reset synthetic data</button>' : '') + '</div></div>';
 }
 
 function renderSettings() {
@@ -690,7 +690,7 @@ function projectionForCase(records) {
 function currentTab() {
   const value = String(window.location.hash || '#dashboard').slice(1).split('/')[0];
   if (value === 'monitoring') return 'booking';
-  return ['today', 'dashboard', 'case', 'inquiry', 'clients', 'tariffs', 'packages', 'quotation', 'booking', 'finance', 'settings', 'suppliers', 'subagents', 'operations', 'departures', 'documents', 'interns'].includes(value) ? value : 'dashboard';
+  return ['today', 'dashboard', 'case', 'inquiry', 'clients', 'tariffs', 'packages', 'quotation', 'quote-builder', 'booking', 'finance', 'settings', 'suppliers', 'subagents', 'operations', 'departures', 'documents', 'interns'].includes(value) ? value : 'dashboard';
 }
 
 function clearCaseWorkspaceSelections() {
@@ -762,7 +762,7 @@ function inquiryWorkQueueMarkup() {
     const projection = projectionForInquiry(inquiry.inquiry_id);
     const requirements = inquiry.current_requirements || {};
     const lifecycle = projection && projection.currentStage || 'NOT_PROJECTED';
-    return '<tr><td><strong>' + esc(records.client && records.client.display_name || 'Client') + '</strong></td><td>' + esc(requirements.destination || 'Not recorded') + '</td><td>' + esc(requirements.travel_start || requirements.travel_month || requirements.travel_year || 'Not recorded') + '</td><td>' + status(lifecycle, records.booking ? 'good' : 'info') + '</td><td>' + esc(nextAction(records)) + '</td><td><button class="secondary compact" onclick="openCase(\'' + esc(inquiry.inquiry_id) + '\')">Open case</button></td></tr>';
+    return '<tr><td><strong>' + esc(records.client && records.client.display_name || 'Client') + '</strong></td><td>' + esc(requirements.destination || 'Not recorded') + '</td><td>' + esc(requirements.travel_start || requirements.travel_month || requirements.travel_year || 'Not recorded') + '</td><td>' + status(lifecycle, records.booking ? 'good' : 'info') + '</td><td>' + esc(nextAction(records)) + '</td><td><button class="secondary compact" onclick="openQuoteBuilder(\'' + esc(inquiry.inquiry_id) + '\')">Build quote</button> <button class="secondary compact" onclick="openCase(\'' + esc(inquiry.inquiry_id) + '\')">Open case</button></td></tr>';
   }).join('');
   return '<div class="panel"><div class="panel-head"><div><h3>Inquiry work queue</h3><p class="muted">Every open client request with its next action. Nothing is silently selected as the current case.</p></div><span class="muted">' + list('Inquiry').length + ' case' + (list('Inquiry').length === 1 ? '' : 's') + '</span></div>' + (rows ? '<div class="table-wrap"><table><thead><tr><th>Client</th><th>Destination</th><th>Travel start</th><th>Inquiry state</th><th>Next action</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty">No Inquiry cases yet. Create the first case below.</div>') + '</div>';
 }
@@ -1183,17 +1183,83 @@ function caseCommandMarkup(records, projection) {
   const next = projection.nextAction || {};
   const deadline = (projection.deadlines || []).find((item) => item.overdue) || (projection.deadlines || [])[0];
   const stateLine = [projection.commercial && projection.commercial.quotationState, projection.supplierFulfillment && projection.supplierFulfillment.state, projection.finance && projection.finance.state, projection.readiness && projection.readiness.state].filter(Boolean).map(readableState).join(' → ');
-  const blockerMarkup = blockers.length ? '<ul>' + blockers.slice(0, 4).map((item) => '<li>' + esc(item.message) + '</li>').join('') + '</ul>' : '<p class="muted">No current blockers.</p>';
-  const services = Array.isArray(projection.services) ? projection.services : [];
-  const serviceSummary = services.length ? '<div class="case-command-services"><b>Services</b><div class="table-wrap"><table><thead><tr><th>Service</th><th>Supplier fulfillment</th><th>Readiness</th></tr></thead><tbody>' + services.map((service) => '<tr><td>' + esc(service.description) + '</td><td>' + esc(readableState(service.fulfillment && service.fulfillment.state)) + '</td><td>' + status(readableState(service.readiness && service.readiness.state), service.readiness && service.readiness.state === 'READY' ? 'good' : 'warn') + '</td></tr>').join('') + '</tbody></table></div></div>' : '';
+  const chain = [records.inquiry.inquiry_id, records.quotation && records.quotation.quotation_id, records.booking && records.booking.booking_id].filter(Boolean);
+  const blockerMarkup = blockers.length
+    ? '<ul class="blockers">' + blockers.slice(0, 4).map((item) => '<li>' + esc(item.message) + '</li>').join('') + '</ul>'
+    : '<ul class="blockers none"><li>No current blockers.</li></ul>';
   const finance = projection.finance || {};
-  const fullyFunded = finance.state === 'FULLY_FUNDED' && Number(finance.outstanding || 0) === 0;
-  const balanceLine = finance.outstanding !== undefined && finance.outstanding !== null
-    ? '<div class="case-deadline"><b>Outstanding balance</b><br>' + esc(formatMoney(finance.outstanding, finance.currency)) + (finance.verifiedReceived !== undefined ? '<br><span class="muted">Verified received: ' + esc(formatMoney(finance.verifiedReceived, finance.currency)) + '</span>' : '') + '</div>'
+  const currency = finance.currency || records.booking && records.booking.currency || null;
+  const billed = Number.parseFloat(finance.obligationTotal || '0') || 0;
+  const collected = Number.parseFloat(finance.verifiedReceived || '0') || 0;
+  const outstanding = Number.parseFloat(finance.outstanding || '0') || 0;
+  const collectedPct = billed > 0 ? Math.min(100, Math.round((collected / billed) * 100)) : 0;
+  const pendingNote = Number.parseFloat(finance.pendingVerification || '0') > 0
+    ? '<div class="soa-hint">' + esc(formatMoney(finance.pendingVerification, currency)) + ' awaits verification — pending money is never counted as collected.</div>'
     : '';
-  const quotation = records.quotation;
-  const priceLine = quotation && quotation.client_total ? '<div class="case-deadline"><b>Quoted price</b><br>' + esc(formatMoney(quotation.client_total, quotation.currency)) + '</div>' : '';
-  return '<div class="case-command"><div class="case-command-main"><div class="eyebrow">Case command center</div><div class="case-command-state">' + esc(stateLine || projection.currentStage) + '</div><div class="case-command-next"><span>NEXT ACTION</span><strong>' + esc(next.label || 'Review case') + '</strong><p>' + esc(next.reason || '') + '</p><button onclick="openNextAction(\'' + esc(next.code || '') + '\')">Open</button></div></div><div class="case-command-side"><div><b>Blockers</b>' + blockerMarkup + '</div>' + (priceLine || '') + (deadline && !fullyFunded ? '<div class="case-deadline"><b>Next deadline</b><br>' + esc(deadline.label) + '<br>' + esc(readableTimestamp(deadline.at)) + (deadline.overdue ? ' · OVERDUE' : '') + '</div>' : '') + (balanceLine || '') + '<div class="muted">Responsible: ' + esc(projection.responsibleActor && (projection.responsibleActor.actorId || projection.responsibleActor.role) || 'Derived from case state') + '</div></div>' + serviceSummary + '</div>';
+  const quotedNoSchedule = billed === 0 && records.quotation && records.quotation.client_total
+    ? '<div class="soa-hint">Quoted ' + esc(formatMoney(records.quotation.client_total, records.quotation.currency)) + ' — the payment schedule has not been created yet.</div>'
+    : '';
+  const responsible = projection.responsibleActor && (projection.responsibleActor.actorId || projection.responsibleActor.role);
+  const financePanel =
+    '<div class="panel"><div class="panel-head"><h3>Financial summary</h3><span class="muted">' + (Array.isArray(finance.obligations) ? finance.obligations.length : 0) + ' obligation' + ((Array.isArray(finance.obligations) ? finance.obligations.length : 0) === 1 ? '' : 's') + (currency ? ' · ' + esc(currency) : '') + '</span></div>' +
+    '<div class="fin-cells">' +
+    '<div class="fin-cell"><span class="fl">Billed</span><span class="fv">' + esc(formatMoney(finance.obligationTotal || '0', currency)) + '</span></div>' +
+    '<div class="fin-cell hero"><span class="fl">Paid &amp; verified</span><span class="fv">' + esc(formatMoney(finance.verifiedReceived || '0', currency)) + '</span></div>' +
+    '<div class="fin-cell bad"><span class="fl">Outstanding</span><span class="fv">' + esc(formatMoney(finance.outstanding || '0', currency)) + '</span></div>' +
+    '</div>' +
+    '<div class="win-cell"><div class="win-track"><div class="win-fill green" style="width:' + collectedPct + '%"></div></div><span>' + collectedPct + '% collected' + (outstanding > 0 ? ' · ' + esc(formatMoney(finance.outstanding, currency)) + ' to go' : '') + '</span></div>' +
+    pendingNote +
+    quotedNoSchedule +
+    '</div>';
+  const supplierRows = records.supplierBookings.length
+    ? records.supplierBookings.map((supplierBooking) => {
+        const supplier = latest('Supplier', (item) => item.supplier_id === supplierBooking.supplier_id);
+        const unconfirmed = supplierBooking.reservation_state !== 'CONFIRMED';
+        return '<div class="task"><span class="t-text"><b>' + esc((supplier && (supplier.display_name || supplier.legal_name)) || supplierBooking.supplier_id || 'Supplier') + '</b></span>' +
+          status(readableState(supplierBooking.reservation_state || 'PENDING'), supplierBooking.reservation_state === 'CONFIRMED' ? 'good' : 'warn') +
+          (unconfirmed ? '<button class="secondary compact t-due" onclick="confirmServiceSupplier(\'' + esc(supplierBooking.supplier_booking_id) + '\')">Confirm</button>' : '') + '</div>';
+      }).join('')
+    : (records.booking
+        ? '<p class="muted">' + (records.bookingItems.length ? 'No supplier reservations yet for this booking.' : 'This booking has no services yet — copy them from the approved quotation first.') + '</p>'
+        : '<p class="muted">Supplier fulfillment starts once the booking exists.</p>');
+  const confirmedCount = records.supplierBookings.filter((supplierBooking) => supplierBooking.reservation_state === 'CONFIRMED').length;
+  const supplierPanel =
+    '<div class="panel"><div class="panel-head"><h3>Supplier bookings</h3><span class="muted">' + (records.supplierBookings.length ? confirmedCount + ' of ' + records.supplierBookings.length + ' confirmed' : 'fulfillment per service') + '</span></div>' + supplierRows + '</div>';
+  const requirements = records.inquiry.current_requirements || {};
+  const participants = records.booking ? list('BookingParticipant', (participant) => participant.booking_id === records.booking.booking_id) : [];
+  const travelerNames = participants.map((participant) => participant.full_name || participant.name).filter(Boolean);
+  if (!travelerNames.length && records.booking && records.booking.lead_pax_person_id) travelerNames.push(readablePerson(records.booking.lead_pax_person_id));
+  const travelersPanel =
+    '<div class="panel"><div class="panel-head"><h3>Travelers</h3><span class="muted">' + esc(travelerCompositionLabel(requirements)) + '</span></div>' +
+    (travelerNames.length
+      ? '<div class="trav-list">' + travelerNames.map((name, index) => '<div class="trav"><b>' + esc(name) + '</b><span>' + (index === 0 ? 'lead' : 'traveler') + '</span></div>').join('') + '</div>'
+      : '<p class="muted">Traveler names appear once the booking records its lead pax.</p>') +
+    '</div>';
+  const openTasks = list('Task', (task) => (task.inquiry_id === records.inquiryId || (task.related_type === 'Inquiry' && task.related_id === records.inquiryId)) && !['COMPLETED', 'CANCELLED'].includes(String(task.state || 'OPEN').toUpperCase()));
+  const tasksPanel =
+    '<div class="panel"><div class="panel-head"><h3>Related tasks</h3><span class="muted">' + openTasks.length + ' open</span></div>' +
+    (openTasks.length
+      ? openTasks.slice(0, 4).map((task) => '<div class="task"><span class="mono t-id">' + esc(task.task_id) + '</span><span class="t-text">' + esc(task.title) + '</span>' + (task.due_at || task.due_date ? '<span class="status warn t-due">Due ' + esc(String(task.due_at || task.due_date).slice(0, 10)) + '</span>' : '') + '</div>').join('') + (openTasks.length > 4 ? '<p class="muted">…and ' + (openTasks.length - 4) + ' more</p>' : '')
+      : '<p class="muted">No open tasks for this case.</p>') +
+    '</div>';
+  const deadlineBox = deadline
+    ? '<div class="deadline' + (deadline.overdue ? ' overdue' : '') + '"><span class="fl">Next deadline</span><span class="dl-label">' + esc(deadline.label) + '</span><span class="dl-at">Due ' + esc(readableTimestamp(deadline.at)) + (deadline.overdue ? ' · overdue' : '') + '</span></div>'
+    : '';
+  return '<div class="case-band"><div class="state-line">' + esc(stateLine || projection.currentStage) + '</div>' +
+    (chain.length > 1 ? '<div class="chain" aria-label="Record chain">' + chain.map((id, index) => (index ? '<span class="arrow">→</span>' : '') + '<span class="mono">' + esc(id) + '</span>').join('') + '</div>' : '') +
+    '<div class="case-grid">' +
+    '<div>' +
+    '<div class="next-hero"><span class="eyebrow">Next action</span><h3>' + esc(next.label || 'Review case') + '</h3><p>' + esc(next.reason || '') + '</p><button onclick="openNextAction(\'' + esc(next.code || '') + '\')">Open</button></div>' +
+    financePanel +
+    supplierPanel +
+    '</div>' +
+    '<div>' +
+    deadlineBox +
+    '<div class="panel"><div class="panel-head"><h3>Blockers</h3>' + (responsible ? '<span class="muted">Responsible: ' + esc(responsible) + '</span>' : '') + '</div>' + blockerMarkup + '</div>' +
+    travelersPanel +
+    tasksPanel +
+    '</div>' +
+    '</div></div>';
 }
 
 function renderHeader() {
@@ -1221,7 +1287,11 @@ function renderHeader() {
     return;
   }
   const requirements = records.inquiry.current_requirements || {};
-  target.innerHTML = '<div><div class="eyebrow">Current case · LOCAL SYNTHETIC TEST DATA</div><h2>' + esc((records.client && records.client.display_name) || 'Client') + ' · ' + esc(requirements.destination || 'Destination pending') + '</h2><div class="case-meta"><span>' + esc(requirements.travel_start || requirements.travel_month || requirements.travel_year || 'Travel timing not recorded') + (requirements.travel_end ? ' – ' + esc(requirements.travel_end) : '') + '</span><span>' + esc(requirements.pax_count || '—') + ' travelers</span><span>Inquiry ' + esc(records.inquiry.inquiry_id) + '</span></div></div><div class="row-actions"><button class="secondary" onclick="openInquiries()">Switch Inquiry</button>' + (records.client && records.client.primary_phone ? '<button class="secondary" onclick="openClientMessageComposer()">Message client</button>' : '') + '</div>';
+  target.innerHTML = '<div class="booking-band"><div><div class="eyebrow">Current case · LOCAL SYNTHETIC TEST DATA</div>' +
+    '<h3 class="case-name">' + esc((records.client && records.client.display_name) || 'Client') + ' · ' + esc(requirements.destination || 'Destination pending') + '</h3>' +
+    '<p class="muted">' + esc(requirements.travel_start || requirements.travel_month || requirements.travel_year || 'Travel timing not recorded') + (requirements.travel_end ? ' – ' + esc(requirements.travel_end) : '') + ' · ' + esc(requirements.pax_count || travelerCompositionLabel(requirements)) + '</p>' +
+    '<div class="case-meta">' + (records.client && records.client.primary_phone ? '<span>' + esc(records.client.primary_phone) + '</span>' : '') + (records.client && records.client.primary_email ? '<span>' + esc(records.client.primary_email) + '</span>' : '') + '</div></div>' +
+    '<div class="row-actions"><button class="secondary" onclick="openInquiries()">Switch Inquiry</button>' + (records.client && records.client.primary_phone ? '<button class="secondary" onclick="openClientMessageComposer()">Message client</button>' : '') + '</div></div>';
 }
 
 function openClientMessageComposer() {
@@ -1330,7 +1400,7 @@ function renderCaseWorkspace() {
   const documents = list('Document', (document) => documentRelated(document, records));
 
   const summaryCard =
-    '<div class="card"><div class="panel-head"><div><h3>' + esc((records.client && records.client.display_name) || 'Client') + ' · ' + esc(requirements.destination || 'Destination pending') + '</h3>' +
+    '<div class="panel"><div class="panel-head"><div><h3>' + esc((records.client && records.client.display_name) || 'Client') + ' · ' + esc(requirements.destination || 'Destination pending') + '</h3>' +
     '<p class="muted">' + esc(requirements.travel_start || requirements.travel_month || requirements.travel_year || 'Travel timing not recorded') + (requirements.travel_end ? ' – ' + esc(requirements.travel_end) : '') + ' · ' + esc(requirements.pax_count || travelerCompositionLabel(requirements)) + '</p></div>' +
     status(projection && projection.currentStage || 'NOT_PROJECTED', records.booking ? 'good' : 'info') + '</div>' +
     '<div class="case-meta">' +
@@ -1342,13 +1412,13 @@ function renderCaseWorkspace() {
     '<div style="margin-top:10px">' + caseJumpBar(records) + '</div></div>';
 
   const quotesCard =
-    '<div class="card"><h3>Quotations (' + quotations.length + ')</h3>' +
+    '<div class="panel"><div class="panel-head"><div><h3>Quotations</h3><p class="muted">Every quote raised for this case.</p></div><span class="muted">' + quotations.length + '</span></div>' +
     (quotations.length ? '<div class="table-wrap"><table><thead><tr><th>Quote</th><th>Status</th><th>Client total</th><th>Valid until</th><th></th></tr></thead><tbody>' +
       quotations.map((quote) => '<tr><td>' + esc(quote.quotation_id) + '</td><td>' + status(quote.status || 'DRAFT', quote.status === 'APPROVED' ? 'good' : '') + '</td><td>' + esc(quote.client_total || '—') + ' ' + esc(quote.currency || '') + '</td><td>' + esc(quote.valid_until || '—') + '</td><td><button class="secondary compact" onclick="openCaseAt(\'quotation\', \'' + esc(records.inquiryId) + '\')">Open</button></td></tr>').join('') +
       '</tbody></table></div>' : '<p class="muted">No quotation yet for this case.</p>') + '</div>';
 
   const bookingCard =
-    '<div class="card"><h3>Booking &amp; travelers</h3>' +
+    '<div class="panel"><div class="panel-head"><div><h3>Booking &amp; travelers</h3><p class="muted">Status, dates, and the people traveling.</p></div></div>' +
     (booking
       ? field('Booking status', booking.status) + field('Travel dates', [booking.travel_start, booking.travel_end].filter(Boolean).join(' – ') || 'Not recorded') + field('Lead pax', participants.map((participant) => participant.full_name || participant.name).filter(Boolean).join(', ') || booking.lead_pax_person_id || 'Not recorded') +
         (participants.length ? '<details class="secondary-details"><summary>Participants (' + participants.length + ')</summary>' + participants.map((participant) => '<div class="event"><strong>' + esc(participant.full_name || participant.name || 'Participant') + '</strong>' + (participant.participant_type ? ' · ' + esc(participant.participant_type) : '') + '</div>').join('') + '</details>' : '')
@@ -1356,7 +1426,7 @@ function renderCaseWorkspace() {
 
   const obligations = finance.obligations || [];
   const paymentsCard =
-    '<div class="card"><h3>Payments</h3>' +
+    '<div class="panel"><div class="panel-head"><div><h3>Payments</h3><p class="muted">Obligations and what has been verified.</p></div></div>' +
     (booking
       ? (obligations.length
           ? '<div class="table-wrap"><table><thead><tr><th>Purpose</th><th>Amount</th><th>Outstanding</th><th>Due</th><th>State</th></tr></thead><tbody>' +
@@ -1367,7 +1437,7 @@ function renderCaseWorkspace() {
       : '<p class="muted">Payments start after the booking exists.</p>') + '</div>';
 
   const supplierCard =
-    '<div class="card"><h3>Supplier fulfillment</h3>' +
+    '<div class="panel"><div class="panel-head"><div><h3>Supplier fulfillment</h3><p class="muted">Reservation and confirmation state per supplier.</p></div></div>' +
     (records.supplierBookings.length
       ? records.supplierBookings.map((supplierBooking) => {
           const supplier = latest('Supplier', (item) => item.supplier_id === supplierBooking.supplier_id);
@@ -1385,7 +1455,7 @@ function renderCaseWorkspace() {
           : '<p class="muted">Supplier fulfillment starts once the booking exists.</p>')) + '</div>';
 
   const docsCard =
-    '<div class="card"><h3>Documents &amp; follow-ups</h3>' +
+    '<div class="panel"><div class="panel-head"><div><h3>Documents &amp; follow-ups</h3><p class="muted">Case papers and open tasks.</p></div></div>' +
     (documents.length ? documents.map((document) => '<div class="event">' + esc(document.file_name || document.document_type || 'Document') + '</div>').join('') : '<p class="muted">No documents linked to this case.</p>') +
     (tasks.length ? '<div style="margin-top:8px"><b>Tasks</b>' + tasks.map((task) => '<div class="event">' + esc(task.title) + (task.due_at ? ' · due ' + esc(String(task.due_at).slice(0, 10)) : '') + ' · ' + status(readableState(task.state), task.state === 'COMPLETED' ? 'good' : task.state === 'OPEN' ? 'warn' : '') + '</div>').join('') + '</div>' : '') +
     '</div>';
@@ -1505,42 +1575,76 @@ function renderToday() {
     return;
   }
   const data = todayOverview;
-  const meta = '<div class="today-meta"><span>As of <strong>' + esc(data.today) + '</strong></span><span>Payments due: next ' + esc(data.windows.paymentsDueDays) + ' days</span><span>Departures: next ' + esc(data.windows.departuresDays) + ' days</span></div>';
+  const meta = '<div class="today-meta"><span>As of <strong>' + esc(data.today) + '</strong></span><span>Payments window: next <strong>' + esc(data.windows.paymentsDueDays) + ' days</strong></span><span>Departures window: next <strong>' + esc(data.windows.departuresDays) + ' days</strong></span></div>';
 
   const paymentRows = todayItemRows(data.paymentsDue.items, (item) => {
     const booking = item.bookingId && latest('Booking', (candidate) => candidate.booking_id === item.bookingId);
     const navigable = Boolean(booking && inquiryIdForBooking(booking));
-    return '<div class="today-item"><span><b>' + esc(item.clientName || item.clientId || 'Client') + '</b> — ' + esc(formatMoney(item.outstanding, item.currency)) + ' due ' + esc(item.dueDate) + (item.purpose && item.purpose !== 'INSTALLMENT' ? ' (' + esc(item.purpose.toLowerCase().replace(/_/g, ' ')) + ')' : '') + '</span>' + (navigable ? '<button class="secondary compact" onclick="openTodayPayment(\'' + esc(item.bookingId) + '\')">Open payments</button>' : '') + '</div>';
+    const purpose = item.purpose && item.purpose !== 'INSTALLMENT' ? item.purpose.toLowerCase().replace(/_/g, ' ') : 'installment';
+    return '<div class="today-item">'
+      + '<div class="t-main"><b>' + esc(item.clientName || item.clientId || 'Client') + ' — ' + purpose + (item.state === 'PARTIALLY_SATISFIED' ? ' · partially paid' : '') + '</b>'
+      + '<div class="t-sub">' + (item.bookingId ? '<span class="mono">' + esc(item.bookingId) + '</span>' : 'No booking link') + '</div></div>'
+      + '<div class="t-side"><div class="t-amt">' + esc(formatMoney(item.outstanding, item.currency)) + '</div>' + status('Due ' + item.dueDate, 'warn') + '</div>'
+      + (navigable ? '<button class="secondary compact t-open" onclick="openTodayPayment(\'' + esc(item.bookingId) + '\')">Open</button>' : '')
+      + '</div>';
   }, 'open the Finance tab');
   const paymentsCard = '<div class="card today-card"><div class="today-card-head"><h3>Payments due</h3><span class="today-count">' + data.paymentsDue.count + '</span></div>' + (paymentRows || '<p class="muted">No payments due in the next ' + data.windows.paymentsDueDays + ' days.</p>') + '</div>';
 
   const departureRows = todayItemRows(data.departures.items, (item) => {
-    return '<div class="today-item"><span><b>' + esc(item.name) + '</b>' + (item.destination ? ' · ' + esc(item.destination) : '') + '<br>' + esc(item.startDate) + (item.endDate && item.endDate !== item.startDate ? ' to ' + esc(item.endDate) : '') + ' · ' + item.memberCount + ' member' + (item.memberCount === 1 ? '' : 's') + ' · ' + (item.openIssueCount ? item.openIssueCount + ' open issue' + (item.openIssueCount === 1 ? '' : 's') : 'no open issues') + '</span><button class="secondary compact" onclick="openDepartureRecord(\'' + esc(item.departureId) + '\')">Open</button></div>';
+    return '<div class="today-item">'
+      + '<div class="t-main"><b>' + esc(item.name) + (item.destination ? ' · ' + esc(item.destination) : '') + '</b>'
+      + '<div class="t-sub">' + esc(item.startDate) + (item.endDate && item.endDate !== item.startDate ? ' to ' + esc(item.endDate) : '') + ' · ' + item.memberCount + ' member' + (item.memberCount === 1 ? '' : 's') + '</div></div>'
+      + '<div class="t-side">' + (item.openIssueCount ? status(item.openIssueCount + ' open issue' + (item.openIssueCount === 1 ? '' : 's'), 'warn') : status('No open issues', 'good')) + '</div>'
+      + '<button class="secondary compact t-open" onclick="openDepartureRecord(\'' + esc(item.departureId) + '\')">Open</button></div>';
   }, 'open the Departures tab');
   const departuresCard = '<div class="card today-card"><div class="today-card-head"><h3>Departures · next ' + data.windows.departuresDays + ' days</h3><span class="today-count">' + data.departures.count + '</span></div>' + (departureRows || '<p class="muted">No departures in the next ' + data.windows.departuresDays + ' days.</p>') + '</div>';
 
   const supplierRows = todayItemRows(data.supplierConfirmations.items, (item) => {
-    return '<div class="today-item"><span><b>' + esc(item.supplierName || item.supplierId || 'Supplier') + '</b> — ' + status(readableState(item.reservationState), 'warn') + (item.bookingId ? '<br>Booking ' + esc(item.bookingId) : '') + '</span>' + (item.bookingId ? '<button class="secondary compact" onclick="openBookingRecord(\'' + esc(item.bookingId) + '\')">Open booking</button>' : '') + '</div>';
+    const requested = item.requestedAt ? String(item.requestedAt).replace('T', ' ').slice(0, 10) : '';
+    return '<div class="today-item">'
+      + '<div class="t-main"><b>' + esc(item.supplierName || item.supplierId || 'Supplier') + '</b>'
+      + '<div class="t-sub">' + (item.supplierBookingId ? '<span class="mono">' + esc(item.supplierBookingId) + '</span>' : '') + (item.bookingId ? ' · for <span class="mono">' + esc(item.bookingId) + '</span>' : '') + '</div></div>'
+      + '<div class="t-side">' + status(readableState(item.reservationState) + (requested ? ' · ' + requested : ''), 'warn') + '</div>'
+      + (item.bookingId ? '<button class="secondary compact t-open" onclick="openBookingRecord(\'' + esc(item.bookingId) + '\')">Open</button>' : '')
+      + '</div>';
   }, 'open the Bookings tab');
   const suppliersCard = '<div class="card today-card"><div class="today-card-head"><h3>Supplier confirmations outstanding</h3><span class="today-count">' + data.supplierConfirmations.count + '</span></div>' + (supplierRows || '<p class="muted">No supplier reservations awaiting confirmation.</p>') + '</div>';
 
   const followUpRows = todayItemRows(data.followUpsDue.items, (item) => {
-    return '<div class="today-item"><span><b>' + esc(item.title) + '</b> — ' + (item.overdue ? status('Overdue · ' + item.dueDate, 'bad') : status('Due today', 'info')) + (item.taskType ? ' · ' + esc(readableState(item.taskType)) : '') + '</span><button class="secondary compact" onclick="openTodayFollowUp(\'' + esc(item.taskId) + '\')">Open</button></div>';
+    return '<div class="today-item">'
+      + '<div class="t-main"><b>' + esc(item.title) + '</b>'
+      + '<div class="t-sub">' + (item.taskType ? esc(readableState(item.taskType)) + ' · ' : '') + 'due ' + esc(item.dueDate) + '</div></div>'
+      + '<div class="t-side">' + (item.overdue ? status('Overdue', 'bad') : status('Due today', 'info')) + '</div>'
+      + '<button class="secondary compact t-open" onclick="openTodayFollowUp(\'' + esc(item.taskId) + '\')">Open</button></div>';
   }, 'open the Follow-ups tab');
   const followUpsCard = '<div class="card today-card"><div class="today-card-head"><h3>Follow-ups due</h3><span class="today-count">' + data.followUpsDue.count + '</span></div>' + (followUpRows || '<p class="muted">No follow-ups due today or overdue.</p>') + '</div>';
 
   const documentRows = todayItemRows(data.documentsPendingReview.items, (item) => {
-    return '<div class="today-item"><span><b>' + esc(item.fileName) + '</b> · ' + status(readableState(item.status), 'warn') + (item.documentType ? ' · ' + esc(readableState(item.documentType)) : '') + '</span><button class="secondary compact" onclick="window.location.hash=\'documents\'">Open review queue</button></div>';
+    return '<div class="today-item">'
+      + '<div class="t-main"><b>' + esc(item.fileName) + '</b>'
+      + '<div class="t-sub">' + (item.documentId ? '<span class="mono">' + esc(item.documentId) + '</span>' : '') + (item.documentType ? ' · ' + esc(readableState(item.documentType)) : '') + '</div></div>'
+      + '<div class="t-side">' + status(readableState(item.status), 'warn') + '</div>'
+      + '<button class="secondary compact t-open" onclick="window.location.hash=\'documents\'">Open</button></div>';
   }, 'open the Documents tab');
-  const documentsCard = '<div class="card today-card"><div class="today-card-head"><h3>Documents pending review</h3><span class="today-count">' + data.documentsPendingReview.count + '</span></div>' + (documentRows || '<p class="muted">No documents waiting for review.</p>') + '</div>';
+  const documentsCard = '<div class="card today-card wide"><div class="today-card-head"><h3>Documents pending review</h3><span class="today-count">' + data.documentsPendingReview.count + '</span></div>' + (documentRows || '<p class="muted">No documents waiting for review.</p>') + '</div>';
 
   const quoteApprovalRows = todayItemRows(data.quotesAwaitingApproval.items, (item) => {
-    return '<div class="today-item"><span><b>' + esc(item.clientName || item.clientId || 'Client') + '</b> · ' + esc(item.destination || 'Destination pending') + ' — ' + esc(formatMoney(item.clientTotal, item.currency)) + '</span>' + (item.inquiryId ? '<button class="secondary compact" onclick="openTodayQuote(\'' + esc(item.inquiryId) + '\')">Review quote</button>' : '') + '</div>';
+    return '<div class="today-item">'
+      + '<div class="t-main"><b>' + esc(item.clientName || item.clientId || 'Client') + '</b>'
+      + '<div class="t-sub">' + esc(item.destination || 'Destination pending') + '</div></div>'
+      + '<div class="t-side"><div class="t-amt">' + esc(formatMoney(item.clientTotal, item.currency)) + '</div>' + status('Awaiting approval', 'warn') + '</div>'
+      + (item.inquiryId ? '<button class="secondary compact t-open" onclick="openTodayQuote(\'' + esc(item.inquiryId) + '\')">Review</button>' : '')
+      + '</div>';
   }, 'open the Quotations tab');
   const quoteApprovalCard = '<div class="card today-card"><div class="today-card-head"><h3>Quotes awaiting approval</h3><span class="today-count">' + data.quotesAwaitingApproval.count + '</span></div>' + (quoteApprovalRows || '<p class="muted">No priced draft quotations waiting for approval.</p>') + '</div>';
 
   const quoteExpiryRows = todayItemRows(data.quotesExpiringSoon.items, (item) => {
-    return '<div class="today-item"><span><b>' + esc(item.clientName || item.clientId || 'Client') + '</b> · ' + esc(item.destination || 'Trip') + ' — ' + (item.expired ? status('Expired ' + item.validUntil, 'bad') : status('Valid until ' + item.validUntil, 'warn')) + '</span>' + (item.inquiryId ? '<button class="secondary compact" onclick="openTodayQuote(\'' + esc(item.inquiryId) + '\')">Open quote</button>' : '') + '</div>';
+    return '<div class="today-item">'
+      + '<div class="t-main"><b>' + esc(item.clientName || item.clientId || 'Client') + '</b>'
+      + '<div class="t-sub">' + esc(item.destination || 'Trip') + '</div></div>'
+      + '<div class="t-side">' + (item.expired ? status('Expired ' + item.validUntil, 'bad') : status('Valid until ' + item.validUntil, 'warn')) + '</div>'
+      + (item.inquiryId ? '<button class="secondary compact t-open" onclick="openTodayQuote(\'' + esc(item.inquiryId) + '\')">Open</button>' : '')
+      + '</div>';
   }, 'open the Quotations tab');
   const quoteExpiryCard = '<div class="card today-card"><div class="today-card-head"><h3>Quotes expiring soon</h3><span class="today-count">' + data.quotesExpiringSoon.count + '</span></div>' + (quoteExpiryRows || '<p class="muted">No approved quotes expiring within ' + data.windows.quoteExpiryDays + ' days.</p>') + '</div>';
 
@@ -1812,7 +1916,7 @@ function renderClients() {
     return;
   }
   const clientFilterBar = '<div class="supplier-filters"><div class="field"><label for="client-search">Search clients</label><input id="client-search" type="search" placeholder="Name, email, phone, client ID…" value="' + esc(clientFilters.q) + '" oninput="setClientFilter(\'q\', this.value)"></div></div>';
-  $('clients-content').innerHTML = clientForm + '<div class="card"><h3>Client master directory</h3><p class="muted">An Inquiry is a request/history record. A Client is the linked master record. Client records can be edited without changing Inquiry history.</p>' + clientFilterBar + '<div id="client-list-body">' + clientListBody() + '</div></div>';
+  $('clients-content').innerHTML = clientForm + '<div class="panel"><div class="panel-head"><div><h3>Client master directory</h3><p class="muted">An Inquiry is a request/history record. A Client is the linked master record. Client records can be edited without changing Inquiry history.</p></div></div>' + clientFilterBar + '<div id="client-list-body">' + clientListBody() + '</div></div>';
   const pendingName = sessionStorage.getItem('wmit.pendingClientName');
   if (pendingName && $('client-name')) {
     $('client-name').value = pendingName;
@@ -2059,7 +2163,18 @@ function renderOptions() {
     const rejected = option.state === 'REJECTED';
     const superseded = option.state === 'SUPERSEDED';
     const action = isSelected ? '<span class="status good">Selected for quotation</span>' : rejected || superseded ? '<span class="muted">Not selectable: ' + esc(readableState(option.state)) + '</span>' : '<button onclick="selectThisOption(\'' + esc(option.commercial_option_id) + '\')">' + (selected.length ? 'Change selection' : 'Select this option') + '</button>';
-    return '<div class="card ' + (isSelected ? 'good' : '') + '"><h3>Option ' + (index + 1) + ' · ' + status(isSelected ? 'Selected' : rejected ? 'Rejected' : superseded ? 'Superseded' : 'Available', isSelected ? 'good' : rejected || superseded ? 'warn' : 'info') + '</h3>' + field('Supplier', readableSupplierName(option.supplier_id)) + field('Conditions', conditionSummary(option.requirements_snapshot)) + optionRateDetails(option) + '<div class="why"><b>Why it matches</b>' + ((option.match_explanation || []).map((reason) => '<div>' + esc(reason) + '</div>').join('') || '<div>Requirements match recorded</div>') + '</div>' + ((option.warnings || []).length ? '<div class="warning-list"><b>Warnings</b>' + option.warnings.map((item) => '<div>' + esc(item) + '</div>').join('') + '</div>' : '') + '<div class="field"><label>Source</label><div>' + esc(sourceProvenance(option.source_provenance)) + '</div></div><div class="row-actions">' + action + '</div></div>';
+    const pricing = option && option.pricing_preview;
+    const priceLine = pricing ? '<div class="opt-price">' + esc(formatMoney(pricing.client_total, pricing.currency)) + '<span>client-facing price · supplier cost internal</span></div>' : '';
+    return '<div class="optcard' + (isSelected ? ' is-selected' : '') + '">'
+      + '<span class="opt-check" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><path d="M4 12l5 5L20 7"/></svg></span>'
+      + '<div class="opt-top"><span class="eyebrow">Option ' + (index + 1) + ' · ' + esc(readableSupplierName(option.supplier_id)) + '</span>' + (isSelected ? '' : status(rejected ? 'Rejected' : superseded ? 'Superseded' : 'Available', rejected || superseded ? 'warn' : 'info')) + '</div>'
+      + '<h3>' + esc(conditionSummary(option.requirements_snapshot)) + '</h3>'
+      + priceLine
+      + optionRateDetails(option)
+      + '<div class="why"><b>Why it matches</b>' + ((option.match_explanation || []).map((reason) => '<div>' + esc(reason) + '</div>').join('') || '<div>Requirements match recorded</div>') + '</div>'
+      + ((option.warnings || []).length ? '<div class="warning-list"><b>Warnings</b>' + option.warnings.map((item) => '<div>' + esc(item) + '</div>').join('') + '</div>' : '')
+      + '<div class="field"><label>Source</label><div>' + esc(sourceProvenance(option.source_provenance)) + '</div></div>'
+      + '<div class="row-actions">' + action + '</div></div>';
   }).join('');
   $('options-content').innerHTML = warning + '<div class="card"><h3>' + records.options.length + ' candidate option(s) found</h3><p class="muted">No best supplier or best option was selected automatically. Exactly one option can be active for quotation.</p></div><div class="grid2">' + cards + '</div><div class="card"><h3>Need more choices?</h3><p class="muted">Find More Options searches for additional candidates and excludes options already presented where the backend has that evidence.</p><button class="secondary" onclick="findMore()">Find More Options</button></div>';
 }
@@ -2830,18 +2945,18 @@ function renderQuotation() {
   }
   if (!records.quotation) {
     const selectedOptionCard = records.option && records.option.selected ? '<div class="card"><h3>Prepare quotation from selected option</h3><p class="muted">The selected Commercial Option supplies trusted source context and initial pricing. The quotation editor can then refine the client-facing document.</p><div class="field"><label>Pricing context</label><select id="quote-create-context"><option value="STANDARD">Standard pricing context</option><option value="EXPO">Expo pricing context</option></select></div><button onclick="createDraftQuotation()">Create Draft Quotation</button></div>' : '';
-    const manualCard = records.inquiry ? '<div class="card"><h3>Manual quotation</h3><p class="muted">Create a normal auditable draft for custom trips, hotel-only, visa-only, supplier quotes, or any request that does not need tariff matching. Add services, supplier costs, and selling prices before approval.</p><div class="grid3"><div class="field"><label>Currency</label><input id="manual-quote-currency" value="' + esc(quotationDefaults().currency || 'PHP') + '" maxlength="3"></div><div class="field"><label>Quotation date</label><input id="manual-quote-date" type="date" value="' + esc(new Date().toISOString().slice(0, 10)) + '"></div><div class="field"><label>Valid until</label><input id="manual-quote-valid-until" type="date" value="' + esc(defaultQuotationValidUntil()) + '"></div></div><button class="' + (selectedOptionCard ? 'secondary' : '') + '" onclick="createManualDraftQuotation()">Create Manual Quotation</button></div>' : '<div class="empty">Select an Inquiry before creating a quotation.</div>';
+    const manualCard = records.inquiry ? '<div class="card"><h3>Manual quotation</h3><p class="muted">Create a normal auditable draft for custom trips, hotel-only, visa-only, supplier quotes, or any request that does not need tariff matching. Add services, supplier costs, and selling prices before approval.</p><div class="grid3"><div class="field"><label>Currency</label><input id="manual-quote-currency" value="' + esc(quotationDefaults().currency || 'PHP') + '" maxlength="3"></div><div class="field"><label>Quotation date</label><input id="manual-quote-date" type="date" value="' + esc(new Date().toISOString().slice(0, 10)) + '"></div><div class="field"><label>Valid until</label><input id="manual-quote-valid-until" type="date" value="' + esc(defaultQuotationValidUntil()) + '"></div></div><button class="' + (selectedOptionCard ? 'secondary' : '') + '" onclick="createManualDraftQuotation()">Create Manual Quotation</button> <button class="secondary" onclick="openQuoteBuilder()">Build quotation</button></div>' : '<div class="empty">Select an Inquiry before creating a quotation.</div>';
     $('quotation-content').innerHTML = quotationDefaultsMarkup() + '<div class="grid2">' + selectedOptionCard + manualCard + '</div>';
     return;
   }
   const quote = records.quotation;
   const rules = quote.pricing_rule_snapshot || {};
   const draft = quote.status === 'DRAFT';
-  const editing = draft ? '<div class="card"><h3>Review or edit draft pricing</h3><p class="muted">Changes remain internal until approval. Supplier cost remains separate from WMIT selling price.</p><div class="grid3"><div class="field"><label>Pricing context</label><select id="quote-context"><option value="STANDARD"' + (quote.pricing_context_type === 'STANDARD' ? ' selected' : '') + '>Standard pricing context</option><option value="EXPO"' + (quote.pricing_context_type === 'EXPO' ? ' selected' : '') + '>Expo pricing context</option></select></div><div class="field"><label>Markup (%)</label><input id="quote-markup" type="number" min="0" step="0.01" value="' + esc(rules.markup_percent === undefined ? 30 : rules.markup_percent) + '"></div><div class="field"><label>Fixed fees</label><input id="quote-fixed-fees" type="number" min="0" step="0.01" value="' + esc(quote.fixed_fees || '0.00') + '"></div><div class="field"><label>Visa assistance fee</label><input id="quote-visa-fee" type="number" min="0" step="0.01" value="' + esc(quote.visa_assistance_fee || '0.00') + '"></div><div class="field"><label>Payment method</label><select id="quote-payment-method"><option value="STANDARD"' + (quote.payment_method !== 'CARD_PAYPAL' ? ' selected' : '') + '>Standard</option><option value="CARD_PAYPAL"' + (quote.payment_method === 'CARD_PAYPAL' ? ' selected' : '') + '>Credit card / PayPal</option></select></div><div class="field"><label>Explicit discount</label><input id="quote-discount" type="number" min="0" step="0.01" value="' + esc(quote.discount || quote.discount_total || '0.00') + '"></div></div><p class="muted">Expo dates are applied only through the configured pricing context. The client payment sent timestamp is the eligibility fact, not the verification timestamp.</p><button onclick="saveQuotationPricing()">Save pricing changes</button></div>' : '<div class="card"><h3>Pricing locked</h3><p class="muted">This quotation is approved. Draft pricing edits are no longer available.</p></div>';
+  const editing = draft ? '<div class="panel"><div class="panel-head"><div><h3>Review or edit draft pricing</h3><p class="muted">Changes remain internal until approval. Supplier cost remains separate from WMIT selling price.</p></div></div><div class="grid3"><div class="field"><label>Pricing context</label><select id="quote-context"><option value="STANDARD"' + (quote.pricing_context_type === 'STANDARD' ? ' selected' : '') + '>Standard pricing context</option><option value="EXPO"' + (quote.pricing_context_type === 'EXPO' ? ' selected' : '') + '>Expo pricing context</option></select></div><div class="field"><label>Markup (%)</label><input id="quote-markup" type="number" min="0" step="0.01" value="' + esc(rules.markup_percent === undefined ? 30 : rules.markup_percent) + '"></div><div class="field"><label>Fixed fees</label><input id="quote-fixed-fees" type="number" min="0" step="0.01" value="' + esc(quote.fixed_fees || '0.00') + '"></div><div class="field"><label>Visa assistance fee</label><input id="quote-visa-fee" type="number" min="0" step="0.01" value="' + esc(quote.visa_assistance_fee || '0.00') + '"></div><div class="field"><label>Payment method</label><select id="quote-payment-method"><option value="STANDARD"' + (quote.payment_method !== 'CARD_PAYPAL' ? ' selected' : '') + '>Standard</option><option value="CARD_PAYPAL"' + (quote.payment_method === 'CARD_PAYPAL' ? ' selected' : '') + '>Credit card / PayPal</option></select></div><div class="field"><label>Explicit discount</label><input id="quote-discount" type="number" min="0" step="0.01" value="' + esc(quote.discount || quote.discount_total || '0.00') + '"></div></div><p class="muted">Expo dates are applied only through the configured pricing context. The client payment sent timestamp is the eligibility fact, not the verification timestamp.</p><button onclick="saveQuotationPricing()">Save pricing changes</button></div>' : '<div class="panel"><div class="panel-head"><div><h3>Pricing locked</h3><p class="muted">This quotation is approved. Draft pricing edits are no longer available.</p></div></div></div>';
   const option = records.option;
   const items = list('QuotationItem', (item) => item.quotation_id === quote.quotation_id).sort((a, b) => Number(a.line_order || 0) - Number(b.line_order || 0));
   const approvalAction = draft ? '<button onclick="approveQuotation()">Approve Quotation</button>' : (records.quotationAcceptance ? '<span class="muted">Approval is locked because the client has accepted this quotation. Use a revision/amendment.</span>' : '<button class="secondary" onclick="cancelQuotationApproval()">Cancel approval</button><span class="status good">Approved</span>');
-  $('quotation-content').innerHTML = '<div class="grid2"><div class="card ' + (draft ? 'warn' : 'good') + '"><h3>WMIT Quotation ' + status(readableState(quote.status), draft ? 'warn' : 'good') + '</h3>' + field('Quotation record', quote.quotation_id) + field('Selected supplier', option ? readableSupplierName(option.supplier_id) : 'Recorded on option') + field('Selected tariff/version', option && option.tariff_source_id || 'Provenance retained') + field('Supplier cost · internal', quote.supplier_cost_total + ' ' + quote.currency) + field('Client price', quote.client_total + ' ' + quote.currency) + field('Staff review', quote.staff_review_required ? 'Required' : 'Complete') + '<div class="row-actions">' + approvalAction + '</div></div><div class="card"><h3>Pricing explanation</h3><table><tbody><tr><td>Pricing context</td><td>' + esc(readablePricingContext(quote.pricing_context_type)) + '</td></tr><tr><td>Supplier tariff cost</td><td>' + esc(quote.supplier_cost_total) + ' ' + esc(quote.currency) + '</td></tr><tr><td>WMIT markup</td><td>' + esc(quote.markup_total) + ' ' + esc(quote.currency) + '</td></tr><tr><td>Fees</td><td>' + esc(quote.fees_total) + ' ' + esc(quote.currency) + '</td></tr><tr><td>Discount</td><td>-' + esc(quote.discount_total) + ' ' + esc(quote.currency) + ' · ' + esc(quote.discount_state || 'Not recorded') + '</td></tr><tr><th>Total client price</th><th>' + esc(quote.client_total) + ' ' + esc(quote.currency) + '</th></tr></tbody></table><p class="muted">Markup rule: ' + esc(rules.markup_percent === undefined ? 'Not recorded' : rules.markup_percent + '%') + ' · Conversion rule: ' + esc(readableRule(rules.fx_rule)) + ' · Card/PayPal rule: ' + esc(rules.card_paypal_percent === undefined ? 'Not recorded' : rules.card_paypal_percent + '%') + '</p></div></div>' + editing + '<details><summary>Readable quotation provenance</summary><p class="muted">Source: ' + esc(sourceProvenance(quote.provenance)) + '</p><p class="muted">Itinerary components retained: ' + esc((quote.itinerary_components || []).length) + '. Pricing edits recorded: ' + esc((quote.pricing_edit_history || []).length) + '.</p></details>';
+  $('quotation-content').innerHTML = '<div class="grid2"><div class="panel ' + (draft ? 'warn' : 'good') + '"><div class="panel-head"><div><h3>WMIT Quotation</h3><p class="muted">Record, provenance, and approval state.</p></div>' + status(readableState(quote.status), draft ? 'warn' : 'good') + '</div>' + field('Quotation record', quote.quotation_id) + field('Selected supplier', option ? readableSupplierName(option.supplier_id) : 'Recorded on option') + field('Selected tariff/version', option && option.tariff_source_id || 'Provenance retained') + field('Supplier cost · internal', quote.supplier_cost_total + ' ' + quote.currency) + field('Client price', quote.client_total + ' ' + quote.currency) + field('Staff review', quote.staff_review_required ? 'Required' : 'Complete') + '<div class="row-actions">' + approvalAction + '</div></div><div class="panel"><div class="panel-head"><div><h3>Pricing math</h3><p class="muted">' + esc(readablePricingContext(quote.pricing_context_type)) + ' — supplier cost never reaches the client sheet.</p></div></div><div class="q-totals" style="max-width:none;margin:0"><div><span>Supplier tariff cost · internal</span><b>' + esc(quote.supplier_cost_total) + ' ' + esc(quote.currency) + '</b></div><div><span>WMIT markup</span><b>' + esc(quote.markup_total) + ' ' + esc(quote.currency) + '</b></div><div><span>Fees</span><b>' + esc(quote.fees_total) + ' ' + esc(quote.currency) + '</b></div><div><span>Discount · ' + esc(quote.discount_state || 'Not recorded') + '</span><b>−' + esc(quote.discount_total) + ' ' + esc(quote.currency) + '</b></div><div class="grand"><span>Total client price</span><span>' + esc(quote.client_total) + ' ' + esc(quote.currency) + '</span></div></div><p class="muted" style="margin-top:10px">Markup rule: ' + esc(rules.markup_percent === undefined ? 'Not recorded' : rules.markup_percent + '%') + ' · Conversion rule: ' + esc(readableRule(rules.fx_rule)) + ' · Card/PayPal rule: ' + esc(rules.card_paypal_percent === undefined ? 'Not recorded' : rules.card_paypal_percent + '%') + '</p></div></div>' + editing + '<details><summary>Readable quotation provenance</summary><p class="muted">Source: ' + esc(sourceProvenance(quote.provenance)) + '</p><p class="muted">Itinerary components retained: ' + esc((quote.itinerary_components || []).length) + '. Pricing edits recorded: ' + esc((quote.pricing_edit_history || []).length) + '.</p></details>';
   const notices = (quote.pricing_context_type === 'EXPO' ? '<div class="card warn"><strong>Expo eligibility</strong><p>' + esc(expoEligibilityMessage(quote)) + '</p></div>' : '') + '<div class="card warn"><strong>Currency conversion</strong><p>' + esc(fxInputMessage(quote)) + '</p></div>';
   $('quotation-content').insertAdjacentHTML('afterbegin', notices);
   $('quotation-content').insertAdjacentHTML('afterbegin', '<div class="selection-bar"><button class="secondary" onclick="clearQuotationRecord()">Back to Quotation list</button><strong>' + esc(quote.quotation_id) + '</strong><span>' + esc(readableState(quote.status)) + '</span></div>');
@@ -3644,7 +3759,7 @@ function bookingListMarkup() {
     + '<div class="field"><label for="booking-search">Search bookings</label><input id="booking-search" type="search" placeholder="Booking, client, lead pax, destination…" value="' + esc(bookingFilters.q) + '" oninput="setBookingFilter(\'q\', this.value)"></div>'
     + '<div class="field"><label for="booking-filter-destination">Destination</label><select id="booking-filter-destination" onchange="setBookingFilter(\'destination\', this.value)"><option value="">All destinations (' + destinations.length + ')</option>' + destinations.map((destination) => '<option value="' + esc(destination) + '"' + (destination === bookingFilters.destination ? ' selected' : '') + '>' + esc(destination) + '</option>').join('') + '</select></div>'
     + '</div>';
-  return '<div class="card"><h3>Booking list</h3><p class="muted">Bookings remain linked to their original Inquiry and Client. Every Booking has one selected lead passenger. Confirmed commitment is shown separately from Booking record existence.</p>' + filterBar + '<div id="booking-list-body">' + bookingListBody() + '</div></div>';
+  return '<div class="panel"><div class="panel-head"><div><h3>Booking list</h3><p class="muted">Bookings remain linked to their original Inquiry and Client. Every Booking has one selected lead passenger. Confirmed commitment is shown separately from Booking record existence.</p></div></div>' + filterBar + '<div id="booking-list-body">' + bookingListBody() + '</div></div>';
 }
 
 function bookingListBody() {
@@ -3773,7 +3888,7 @@ function renderBooking() {
   const bookingPrice = records.booking.current_price || records.quotation && records.quotation.client_total;
   const bookingCurrency = records.quotation && records.quotation.currency || records.booking.currency || 'PHP';
   const bookingItemCount = list('BookingItem', (item) => item.booking_id === records.booking.booking_id).length;
-  $('booking-content').innerHTML = bookingListSection + '<div class="grid2"><div class="card"><h3>Booking record ' + status('EXISTS', 'info') + '</h3>' + field('Booking ID', records.booking.booking_id) + field('Client', records.client && records.client.display_name) + field('Destination', bookingDestination(records.booking)) + field('Travel', bookingTravelLabel(records.booking)) + field('Supplier cost · internal', bookingCost ? bookingCost + ' ' + bookingCurrency : 'Not recorded') + field('Client selling price', bookingPrice ? bookingPrice + ' ' + bookingCurrency : 'Not recorded') + field('Booking record state', records.booking.record_state) + field('Client commitment', records.booking.commitment_state) + field('Client decision', records.booking.client_decision_state) + '<div class="row-actions">' + (records.booking.commitment_state === 'PENDING' ? '<button onclick="confirmCommitment()">Confirm commitment</button>' : '') + '<button class="secondary" onclick="issueClientStatusLink()">Client status link</button></div></div><div class="card"><h3>Supplier fulfillment</h3>' + (!records.supplierBooking ? '<p>Reservation: ' + status('Not requested', 'info') + '</p>' + (bookingItemCount ? '<button onclick="requestReservation()">Request supplier</button>' : '<p class="muted">This booking has no services yet — copy them from the approved quotation, assign a supplier to each, then request fulfillment.</p><button onclick="copyBookingItemsFromQuotation()">Copy services from the quotation</button>') : field('Supplier reservation', readableState(records.supplierBooking.reservation_state)) + field('Supplier', readableSupplierName(records.supplierBooking.supplier_id)) + field('Supplier reference', records.supplierBooking.supplier_reference || 'Not recorded') + field('Supplier confirmation', records.supplierBooking.confirmation_state || 'Not recorded') + field('Client payment', records.payment ? readableState(records.payment.payment_state) : 'Not recorded') + field('Supplier Payment', records.supplierPayment ? 'Executed' : 'Separate gate — not executed') + (records.supplierBooking.reservation_state !== 'CONFIRMED' ? '<div class="row-actions"><button onclick="confirmServiceSupplier(\'' + esc(records.supplierBooking.supplier_booking_id) + '\')">Confirm supplier reservation</button></div>' : '')) + '</div></div><div class="card"><h3>People and roles</h3>' + (participantRows ? '<div class="table-wrap"><table><thead><tr><th>Person</th><th>Role</th><th></th></tr></thead><tbody>' + participantRows + '</tbody></table></div>' : '<p class="muted">No Booking participants recorded.</p>') + '<div class="grid2"><div class="field"><label>Person name</label><input id="participant-name" placeholder="Existing or new person" list="participant-name-options">' + personNameOptionsMarkup() + '</div><div class="field"><label>Role</label><select id="participant-role"><option value="COORDINATOR">Coordinator</option><option value="PAYER">Payer</option><option value="TRAVELER">Traveler</option><option value="COMMUNICATOR">Communicating contact</option><option value="LEAD_PAX">Lead passenger</option></select></div></div><button class="secondary" onclick="addParticipantRole()">Record person and role</button><p class="muted">A Booking keeps exactly one lead passenger. To move the lead role: change the current lead to another role and save, then assign Lead passenger to the new person.</p></div><div class="card"><h3>Amend Booking</h3><p class="muted">Amendments preserve before/after history. If price or supplier cost changes, the Booking enters the existing re-acceptance state.</p><div class="grid3"><div class="field"><label>New travel start</label><input id="amend-start" type="date" value="' + esc(records.booking.travel_start || '') + '"></div><div class="field"><label>New travel end</label><input id="amend-end" type="date" value="' + esc(records.booking.travel_end || '') + '"></div><div class="field"><label>New product</label><input id="amend-product" value="' + esc(records.booking.product || '') + '"></div><div class="field"><label>New client price</label><input id="amend-price" type="number" min="0" step="0.01" value=""></div><div class="field"><label>New supplier cost</label><input id="amend-cost" type="number" min="0" step="0.01" value=""></div><div class="field"><label>Reason</label><input id="amend-reason" placeholder="Required reason"></div></div><button class="secondary" onclick="amendBooking()">Record Amendment</button>' + (amendment ? '<h4>Latest amendment</h4><table><thead><tr><th></th><th>Before</th><th>After</th></tr></thead><tbody><tr><th>Price</th><td>' + esc(amendment.before_snapshot && amendment.before_snapshot.current_price) + '</td><td>' + esc(amendment.after_snapshot && amendment.after_snapshot.current_price) + '</td></tr><tr><th>Supplier cost</th><td>' + esc(amendment.before_snapshot && amendment.before_snapshot.current_supplier_cost) + '</td><td>' + esc(amendment.after_snapshot && amendment.after_snapshot.current_supplier_cost) + '</td></tr><tr><th>State</th><td colspan="2">' + esc(readableState(amendment.state)) + '</td></tr></tbody></table>' : '') + '</div><div class="card"><h3>Cancellation / refund adjustment</h3><p class="muted">Cancellation does not automatically refund. Record a draft request with the applicable terms and outcome.</p><div class="grid3"><div class="field"><label>Amount</label><input id="refund-amount" type="number" min="0" step="0.01"></div><div class="field"><label>Currency</label><input id="refund-currency" value="PHP"></div><div class="field"><label>Reason / supplier terms</label><input id="refund-reason" placeholder="Record terms or reason"></div></div><button class="warning" onclick="requestRefund()">Create Refund / Adjustment Draft</button>' + (refund ? '<p>Latest request: ' + status(readableState(refund.state), 'warn') + ' · ' + esc(refund.refund_adjustment_id) + '</p><button class="danger" onclick="executeRefund()">Attempt Authorized Execution</button>' : '') + '</div>';
+  $('booking-content').innerHTML = bookingListSection + '<div class="grid2"><div class="panel"><div class="panel-head"><div><h3>Booking record</h3><p class="muted">The operational Booking and its commitment state.</p></div>' + status('EXISTS', 'info') + '</div>' + field('Booking ID', records.booking.booking_id) + field('Client', records.client && records.client.display_name) + field('Destination', bookingDestination(records.booking)) + field('Travel', bookingTravelLabel(records.booking)) + field('Supplier cost · internal', bookingCost ? bookingCost + ' ' + bookingCurrency : 'Not recorded') + field('Client selling price', bookingPrice ? bookingPrice + ' ' + bookingCurrency : 'Not recorded') + field('Booking record state', records.booking.record_state) + field('Client commitment', records.booking.commitment_state) + field('Client decision', records.booking.client_decision_state) + '<div class="row-actions">' + (records.booking.commitment_state === 'PENDING' ? '<button onclick="confirmCommitment()">Confirm commitment</button>' : '') + '<button class="secondary" onclick="issueClientStatusLink()">Client status link</button></div></div><div class="panel"><div class="panel-head"><div><h3>Supplier fulfillment</h3><p class="muted">Reservation, confirmation, and payment gates per supplier.</p></div></div>' + (!records.supplierBooking ? '<p>Reservation: ' + status('Not requested', 'info') + '</p>' + (bookingItemCount ? '<button onclick="requestReservation()">Request supplier</button>' : '<p class="muted">This booking has no services yet — copy them from the approved quotation, assign a supplier to each, then request fulfillment.</p><button onclick="copyBookingItemsFromQuotation()">Copy services from the quotation</button>') : field('Supplier reservation', readableState(records.supplierBooking.reservation_state)) + field('Supplier', readableSupplierName(records.supplierBooking.supplier_id)) + field('Supplier reference', records.supplierBooking.supplier_reference || 'Not recorded') + field('Supplier confirmation', records.supplierBooking.confirmation_state || 'Not recorded') + field('Client payment', records.payment ? readableState(records.payment.payment_state) : 'Not recorded') + field('Supplier Payment', records.supplierPayment ? 'Executed' : 'Separate gate — not executed') + (records.supplierBooking.reservation_state !== 'CONFIRMED' ? '<div class="row-actions"><button onclick="confirmServiceSupplier(\'' + esc(records.supplierBooking.supplier_booking_id) + '\')">Confirm supplier reservation</button></div>' : '')) + '</div></div><div class="card"><h3>People and roles</h3>' + (participantRows ? '<div class="table-wrap"><table><thead><tr><th>Person</th><th>Role</th><th></th></tr></thead><tbody>' + participantRows + '</tbody></table></div>' : '<p class="muted">No Booking participants recorded.</p>') + '<div class="grid2"><div class="field"><label>Person name</label><input id="participant-name" placeholder="Existing or new person" list="participant-name-options">' + personNameOptionsMarkup() + '</div><div class="field"><label>Role</label><select id="participant-role"><option value="COORDINATOR">Coordinator</option><option value="PAYER">Payer</option><option value="TRAVELER">Traveler</option><option value="COMMUNICATOR">Communicating contact</option><option value="LEAD_PAX">Lead passenger</option></select></div></div><button class="secondary" onclick="addParticipantRole()">Record person and role</button><p class="muted">A Booking keeps exactly one lead passenger. To move the lead role: change the current lead to another role and save, then assign Lead passenger to the new person.</p></div><div class="card"><h3>Amend Booking</h3><p class="muted">Amendments preserve before/after history. If price or supplier cost changes, the Booking enters the existing re-acceptance state.</p><div class="grid3"><div class="field"><label>New travel start</label><input id="amend-start" type="date" value="' + esc(records.booking.travel_start || '') + '"></div><div class="field"><label>New travel end</label><input id="amend-end" type="date" value="' + esc(records.booking.travel_end || '') + '"></div><div class="field"><label>New product</label><input id="amend-product" value="' + esc(records.booking.product || '') + '"></div><div class="field"><label>New client price</label><input id="amend-price" type="number" min="0" step="0.01" value=""></div><div class="field"><label>New supplier cost</label><input id="amend-cost" type="number" min="0" step="0.01" value=""></div><div class="field"><label>Reason</label><input id="amend-reason" placeholder="Required reason"></div></div><button class="secondary" onclick="amendBooking()">Record Amendment</button>' + (amendment ? '<h4>Latest amendment</h4><table><thead><tr><th></th><th>Before</th><th>After</th></tr></thead><tbody><tr><th>Price</th><td>' + esc(amendment.before_snapshot && amendment.before_snapshot.current_price) + '</td><td>' + esc(amendment.after_snapshot && amendment.after_snapshot.current_price) + '</td></tr><tr><th>Supplier cost</th><td>' + esc(amendment.before_snapshot && amendment.before_snapshot.current_supplier_cost) + '</td><td>' + esc(amendment.after_snapshot && amendment.after_snapshot.current_supplier_cost) + '</td></tr><tr><th>State</th><td colspan="2">' + esc(readableState(amendment.state)) + '</td></tr></tbody></table>' : '') + '</div><div class="card"><h3>Cancellation / refund adjustment</h3><p class="muted">Cancellation does not automatically refund. Record a draft request with the applicable terms and outcome.</p><div class="grid3"><div class="field"><label>Amount</label><input id="refund-amount" type="number" min="0" step="0.01"></div><div class="field"><label>Currency</label><input id="refund-currency" value="PHP"></div><div class="field"><label>Reason / supplier terms</label><input id="refund-reason" placeholder="Record terms or reason"></div></div><button class="warning" onclick="requestRefund()">Create Refund / Adjustment Draft</button>' + (refund ? '<p>Latest request: ' + status(readableState(refund.state), 'warn') + ' · ' + esc(refund.refund_adjustment_id) + '</p><button class="danger" onclick="executeRefund()">Attempt Authorized Execution</button>' : '') + '</div>';
   const projection = projectionForCase(records);
   const serviceRows = projection && Array.isArray(projection.services) ? projection.services.map((service) => '<tr><td><strong>' + esc(service.description) + '</strong><br><span class="muted">' + esc(service.serviceType) + '</span></td><td>' + esc(readableState(service.fulfillment && service.fulfillment.state)) + '</td><td>' + esc(service.fulfillment && service.fulfillment.supplierReference || 'Not recorded') + '</td><td>' + esc(readableState(service.documents && service.documents.state)) + '</td><td>' + esc(readableState(service.tasks && service.tasks.state)) + '</td><td>' + status(readableState(service.readiness && service.readiness.state), service.readiness && service.readiness.state === 'READY' ? 'good' : 'warn') + (service.fulfillment && service.fulfillment.supplierBookingId && service.fulfillment.state !== 'CONFIRMED' ? ' <button class="secondary" onclick="confirmServiceSupplier(\'' + esc(service.fulfillment.supplierBookingId) + '\',\'' + esc(service.bookingItemId) + '\')">Confirm</button>' : '') + '</td></tr>').join('') : '';
   $('booking-content').insertAdjacentHTML('afterbegin', '<div class="selection-bar"><button class="secondary" onclick="clearBookingRecord()">Back to Booking list</button><strong>' + esc(records.booking.booking_id) + '</strong><span>' + esc(bookingDestination(records.booking)) + '</span><span>Lead pax: ' + esc(bookingLeadPaxName(records.booking)) + '</span></div>');
@@ -4105,8 +4220,20 @@ function paymentBalanceSummary(records, payments) {
   const verified = sameCurrency.filter((payment) => payment.payment_state === 'VERIFIED').reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
   const allocated = sameCurrency.filter((payment) => payment.payment_state === 'VERIFIED').reduce((sum, payment) => sum + paymentAllocations(payment.client_payment_id).reduce((inner, allocation) => inner + Number(allocation.amount || 0), 0), 0);
   const unallocated = Math.max(verified - allocated, 0);
+  const pending = sameCurrency.filter((payment) => payment.payment_state !== 'VERIFIED').reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
   const balance = clientPrice === null ? null : Math.max(clientPrice - allocated, 0);
-  return '<div class="card"><h3>Client balance and funds</h3><div class="grid3">' + field('Client price / obligation', clientPrice === null ? 'Not recorded' : clientPrice.toFixed(2) + ' ' + currency) + field('Payments reported', reported.toFixed(2) + ' ' + currency) + field('Payments verified', verified.toFixed(2) + ' ' + currency) + field('Verified allocated funds', allocated.toFixed(2) + ' ' + currency) + field('Verified but unallocated', unallocated.toFixed(2) + ' ' + currency) + field('Remaining client balance', balance === null ? 'Not calculable' : balance.toFixed(2) + ' ' + currency) + '</div><p class="muted">Only verified, client-directed allocations affect the final client balance and Supplier Payment gate.</p></div>';
+  const collectedPct = clientPrice ? Math.min(100, Math.round((allocated / clientPrice) * 100)) : 0;
+  const row = (label, value, extraClass) => '<div class="soa-row' + (extraClass ? ' ' + extraClass : '') + '"><span>' + label + '</span><b>' + value + '</b></div>';
+  return '<div class="panel"><div class="panel-head"><div><h3>Statement of account</h3><p class="muted">Only verified, client-directed allocations affect the final client balance and Supplier Payment gate.</p></div></div>'
+    + row('Client price / obligation', clientPrice === null ? 'Not recorded' : clientPrice.toFixed(2) + ' ' + currency)
+    + row('Payments reported', reported.toFixed(2) + ' ' + currency)
+    + row('Verified payments received', verified.toFixed(2) + ' ' + currency)
+    + row('Allocated to obligations', allocated.toFixed(2) + ' ' + currency)
+    + (pending > 0.005 ? row('Awaiting verification <span class="muted">(not counted)</span>', pending.toFixed(2) + ' ' + currency) : '')
+    + (unallocated > 0.005 ? row('Verified but unallocated', unallocated.toFixed(2) + ' ' + currency) : '')
+    + row('Remaining client balance', balance === null ? 'Not calculable' : balance.toFixed(2) + ' ' + currency, 'total')
+    + '<div class="win-cell" style="margin-top:12px"><div class="win-track" style="height:7px"><div class="win-fill green" style="width:' + collectedPct + '%"></div></div><span>' + collectedPct + '% collected' + (balance ? ' · ' + balance.toFixed(2) + ' ' + currency + ' to go' : '') + '</span></div>'
+    + '</div>';
 }
 
 function dateTimeLocalAtNine(date) {
@@ -4204,7 +4331,7 @@ function accountantExportDefaults() {
 
 function accountantExportPanel() {
   const defaults = accountantExportDefaults();
-  return '<div class="card"><h3>Accountant export</h3><p class="muted">Cashbook, receivables, and payables for a period, downloaded as Excel-safe CSV (UTF-8 BOM, CRLF). Unverified client payments are included but clearly flagged and never reduce receivables.</p>'
+  return '<div class="panel"><h3>Accountant export</h3><p class="muted">Cashbook, receivables, and payables for a period, downloaded as Excel-safe CSV (UTF-8 BOM, CRLF). Unverified client payments are included but clearly flagged and never reduce receivables.</p>'
     + '<div class="grid3"><div class="field"><label>From</label><input id="accountant-export-from" type="date" value="' + esc(defaults.from) + '"></div>'
     + '<div class="field"><label>To</label><input id="accountant-export-to" type="date" value="' + esc(defaults.to) + '"></div>'
     + '<div class="field"><label>Row counts</label><div id="accountant-export-preview" class="muted">Use Refresh row counts.</div></div></div>'
@@ -4311,7 +4438,7 @@ function commissionsPanel() {
     + '<div class="field"><label>Trigger</label><select id="rule-trigger"><option value="BOOKING_CREATED">Booking is created</option><option value="BOOKING_FULLY_PAID">Booking becomes fully paid</option></select></div>'
     + '<div class="field"><label>Applies to</label><select id="rule-source"><option value="">All bookings</option><option value="EXPO">Expo-traceable bookings only</option></select></div>'
     + '</div><button class="secondary" onclick="addCommissionRuleAction()">Add rule</button>';
-  return '<div class="card"><h3>Commissions</h3>' + summaryLine
+  return '<div class="panel"><h3>Commissions</h3>' + summaryLine
     + (rows ? '<div class="table-wrap"><table><thead><tr><th>Beneficiary</th><th>Booking</th><th>Basis</th><th>Amount</th><th>Status</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '')
     + '<h4>Record a commission</h4><p class="muted">Commissions start as DRAFT, then a manager approves and later marks them paid with a payment reference.</p>' + form
     + '<h4>Automatic draft rules</h4><p class="muted">Matching bookings get a DRAFT commission automatically — approval and payment stay manual. Rule amounts and matching terms are fixed once created; deactivate a rule and add a new one to change them.</p>'
@@ -4423,7 +4550,7 @@ function renderPayment() {
   const receivedCoversBalance = verifiedReceived > 0 && verifiedReceived >= Number(clientPriceForSchedule || 0) - 0.005 && !fullyPaid;
   const obligationFormAmount = remainingToSchedule === null ? '' : remainingToSchedule.toFixed(2);
   const obligationSetup = obligationCanBeAdded ? '<div class="card warn"><h3>Add client payment obligation</h3><p class="muted">Create down payments, installments, and the final balance separately. The total cannot exceed the client price.</p><div class="grid3"><div class="field"><label>Sequence</label><input id="new-obligation-sequence" type="number" min="1" step="1" value="' + esc(nextObligationSequence) + '"></div><div class="field"><label>Payment</label><select id="new-obligation-purpose" onchange="setDefaultObligationDueDate()"><option value="DOWN_PAYMENT">Down payment</option><option value="INSTALLMENT">Installment</option><option value="FINAL_BALANCE">Final balance</option><option value="FULL_PAYMENT">Full payment</option></select></div><div class="field"><label>Amount</label><input id="new-obligation-amount" type="number" min="0.01" max="' + (remainingToSchedule === null ? '' : esc(remainingToSchedule.toFixed(2))) + '" step="0.01" value="' + esc(obligationFormAmount) + '"></div></div><div class="grid2"><div class="field"><label>Currency</label><input id="new-obligation-currency" value="' + esc(obligationCurrencyDefault) + '"></div><div class="field"><label>Due date</label><input id="new-obligation-due" type="datetime-local" value="' + esc(obligationDueDefault) + '"></div></div>' + (remainingToSchedule === null ? '' : '<p class="muted">Remaining amount to schedule: ' + esc(remainingToSchedule.toFixed(2) + ' ' + obligationCurrencyDefault) + '</p>') + '<button class="secondary" onclick="createClientPaymentObligation()">Add payment obligation</button></div>' : '<div class="card ' + (fullyPaid ? 'good' : receivedCoversBalance ? 'warn' : '') + '"><h3>Payment schedule fully configured</h3><p class="muted">The scheduled obligations cover the full client price, so no further obligation can be added without exceeding it. The schedule is the payment plan — not proof that the client has paid.</p><div class="grid3">' + field('Scheduled total', scheduledAmount.toFixed(2) + ' ' + obligationCurrencyDefault) + field('Client price', clientPriceForSchedule === null ? 'Not recorded' : clientPriceForSchedule.toFixed(2) + ' ' + obligationCurrencyDefault) + field('Verified received', verifiedReceived.toFixed(2) + ' ' + obligationCurrencyDefault) + field('Allocated to obligations', verifiedAllocated.toFixed(2) + ' ' + obligationCurrencyDefault) + field('Still outstanding', outstandingBalance.toFixed(2) + ' ' + obligationCurrencyDefault) + (unallocatedVerified > 0.005 ? field('Received, not yet allocated', unallocatedVerified.toFixed(2) + ' ' + obligationCurrencyDefault) : '') + field('Next payment due', nextDueObligation ? readableState(nextDueObligation.purpose) + ' · ' + nextDueObligation.amount + ' ' + nextDueObligation.currency + (nextDueObligation.dueAt ? ' · due ' + readableTimestamp(nextDueObligation.dueAt) : '') : 'None') + '</div>' + (fullyPaid ? '<p class="muted">This Booking is also fully paid — every obligation is satisfied.</p>' : receivedCoversBalance ? '<p class="muted">The client appears to have paid the full price: ' + unallocatedVerified.toFixed(2) + ' ' + obligationCurrencyDefault + ' is verified but not yet allocated. Allocate it against the remaining obligations below — do not record it again as a new payment.</p>' : '<p class="muted">Record the remaining payments under Record Client Payment below, then verify and allocate them against these obligations.</p>') + '</div>';
-  const obligationRows = obligations.length ? obligations.map((obligation) => '<tr><td>' + esc(obligation.purpose) + '</td><td>' + esc(obligation.amount + ' ' + obligation.currency) + '</td><td>' + esc(obligation.allocated + ' ' + obligation.currency) + '</td><td>' + esc(obligation.outstanding + ' ' + obligation.currency) + '</td><td>' + status(readableState(obligation.state), obligation.state === 'SATISFIED' ? 'good' : 'warn') + '</td></tr>').join('') : '<tr><td colspan="5">No authoritative client obligations recorded.</td></tr>';
+  const obligationRows = obligations.length ? obligations.map((obligation) => '<tr><td>' + esc(obligation.purpose) + '</td><td>' + esc(obligation.amount + ' ' + obligation.currency) + '</td><td>' + esc(obligation.allocated + ' ' + obligation.currency) + '</td><td>' + esc(obligation.outstanding + ' ' + obligation.currency) + '</td><td>' + esc(obligation.dueAt ? String(obligation.dueAt).slice(0, 10) : '—') + '</td><td>' + status(readableState(obligation.state), obligation.state === 'SATISFIED' ? 'good' : 'warn') + '</td></tr>').join('') : '<tr><td colspan="6">No authoritative client obligations recorded.</td></tr>';
   const obligationsExist = obligations.some((item) => item.obligationId);
   const hasOutstandingObligations = obligations.some((obligation) => Number(obligation.outstanding || 0) > 0 && obligation.obligationId);
   const obligationOptionRecords = hasOutstandingObligations ? obligations.filter((obligation) => Number(obligation.outstanding || 0) > 0 && obligation.obligationId) : obligations.filter((obligation) => obligation.obligationId);
@@ -4444,9 +4571,9 @@ function renderPayment() {
       : (allocations.length ? '<p class="allocation-hint">Fully allocated — every verified payment of this Booking is allocated.</p>' : '<p class="allocation-hint">Not verified yet — verify this payment before recording a client allocation.</p>'))
     + '</div>' : '';
   const financeContext = '<div class="selection-bar"><strong>' + esc(records.client && records.client.display_name || records.booking.client_id) + '</strong><span>' + esc(bookingDestination(records.booking)) + '</span><span>' + esc(bookingTravelLabel(records.booking)) + '</span><span>Booking ' + esc(records.booking.booking_id) + '</span><span class="spacer"></span><button class="secondary compact" onclick="previewClientVoucher()">Tour voucher</button><button class="secondary compact" onclick="previewClientInvoice()">Client invoice</button></div>';
-  const projectionMarkup = '<div class="card"><h3>Financial summary</h3>' + field('Finance state', projection && projection.finance && projection.finance.state) + field('Readiness', projection && projection.readiness && projection.readiness.state) + (projection && projection.blockers && projection.blockers.length ? '<p class="muted">' + esc(projection.blockers.map((blocker) => blocker.message).join(' · ')) + '</p>' : '<p class="muted">No current financial blockers.</p>') + '<h4>Client payment obligations</h4><div class="table-wrap"><table><thead><tr><th>Purpose</th><th>Amount</th><th>Allocated</th><th>Outstanding</th><th>State</th></tr></thead><tbody>' + obligationRows + '</tbody></table></div></div>';
+  const projectionMarkup = '<div class="panel"><div class="panel-head"><div><h3>Financial summary</h3><p class="muted">' + (projection && projection.finance && projection.finance.state ? esc(readableState(projection.finance.state)) + ' · readiness ' + esc(readableState(projection.readiness && projection.readiness.state)) : 'No financial projection yet.') + '</p></div></div>' + (projection && projection.blockers && projection.blockers.length ? '<p class="muted">' + esc(projection.blockers.map((blocker) => blocker.message).join(' · ')) + '</p>' : '<p class="muted">No current financial blockers.</p>') + '<h4>Client payment obligations</h4><div class="table-wrap"><table><thead><tr><th>Purpose</th><th>Amount</th><th>Allocated</th><th>Outstanding</th><th>Due</th><th>State</th></tr></thead><tbody>' + obligationRows + '</tbody></table></div></div>';
   const paymentForm = '<div class="card"><h3>Record Client Payment</h3><p class="muted">Add payment evidence. Verification and allocation are separate.</p><div class="grid3"><div class="field"><label>Amount</label><input id="payment-amount" data-error-field="amount" type="number" min="0" step="0.01"></div><div class="field"><label>Currency</label><input id="payment-currency" value="PHP"></div><div class="field"><label>Payment sent timestamp</label><input id="payment-sent-at" type="datetime-local"></div></div><div class="grid3"><div class="field"><label>Proof/reference</label><input id="payment-proof" data-error-field="proof_document_id or proof_reference" placeholder="Receipt, transfer reference, or proof ID"></div><div class="field"><label>Payment proof file</label><input id="payment-proof-file" type="file"></div><div class="field"><label>Payment method</label><input id="payment-method" placeholder="Bank transfer, cash, card, etc."></div></div><button class="secondary" onclick="recordPayment()">Add payment</button></div>';
-  const paymentHistory = payments.length ? '<div class="card"><h3>Payment history</h3><div class="row-actions"><button class="secondary compact" onclick="exportPaymentsCsv()">Export payments CSV</button></div><table><thead><tr><th>Sent at</th><th>Amount</th><th>Verification</th><th>Allocation</th></tr></thead><tbody>' + payments.map((item) => '<tr><td>' + esc(item.actual_sent_at || 'Not recorded') + '</td><td>' + esc(item.amount + ' ' + item.currency) + '</td><td>' + status(readableState(item.payment_state), item.payment_state === 'VERIFIED' ? 'good' : 'warn') + '</td><td>' + esc(paymentAllocations(item.client_payment_id).map((allocation) => allocation.amount + ' ' + allocation.currency).join(', ') || 'Unallocated') + (item.payment_state === 'VERIFIED' ? ' · <button class="secondary compact" onclick="previewPaymentReceipt(\'' + esc(item.client_payment_id) + '\')">Receipt</button>' : '') + '</td></tr>').join('') + '</tbody></table></div>' : '';
+  const paymentHistory = payments.length ? '<div class="panel"><div class="panel-head"><div><h3>Payment history</h3><p class="muted">Only verified money can be allocated. Pending payments sit outside the statement until a human verifies them.</p></div><div class="row-actions"><button class="secondary compact" onclick="exportPaymentsCsv()">Export payments CSV</button></div></div><div class="table-wrap"><table><thead><tr><th>Sent at</th><th>Method</th><th>Amount</th><th>Verification</th><th>Allocation</th></tr></thead><tbody>' + payments.map((item) => '<tr><td>' + esc(item.actual_sent_at || 'Not recorded') + '</td><td>' + esc(item.payment_method || '—') + '</td><td>' + esc(item.amount + ' ' + item.currency) + '</td><td>' + status(readableState(item.payment_state), item.payment_state === 'VERIFIED' ? 'good' : 'warn') + '</td><td>' + esc(paymentAllocations(item.client_payment_id).map((allocation) => allocation.amount + ' ' + allocation.currency).join(', ') || 'Unallocated') + (item.payment_state === 'VERIFIED' ? ' · <button class="secondary compact" onclick="previewPaymentReceipt(\'' + esc(item.client_payment_id) + '\')">Receipt</button>' : '') + '</td></tr>').join('') + '</tbody></table></div></div>' : '';
   const payment = records.payment ? '<div class="card"><h3>Client Payment</h3><p class="money">' + esc(records.payment.amount) + ' ' + esc(records.payment.currency) + '</p>' + field('Payment sent at', records.payment.actual_sent_at) + field('Proof/reference', records.payment.proof_reference || evidence && evidence.proof_reference) + field('Verification', readableState(records.payment.payment_state)) + (records.payment.payment_state === 'VERIFIED' ? '<p class="muted">Verified by ' + esc(records.payment.verified_by || 'authorized local actor') + '.</p><div class="row-actions"><button class="secondary" onclick="previewPaymentReceipt(\'' + esc(records.payment.client_payment_id) + '\', true)">Issue receipt</button><button class="secondary" onclick="previewPaymentReceipt(\'' + esc(records.payment.client_payment_id) + '\')">View receipt</button></div>' : '<button class="secondary" onclick="verifyPayment()">Verify</button>') + allocationSection + '</div>' : '<div class="card"><h3>Record Client Payment</h3><p class="muted">Add payment evidence. Verification and allocation are separate.</p><div class="grid3"><div class="field"><label>Amount</label><input id="payment-amount" data-error-field="amount" type="number" min="0" step="0.01"></div><div class="field"><label>Currency</label><input id="payment-currency" value="PHP"></div><div class="field"><label>Payment sent timestamp</label><input id="payment-sent-at" type="datetime-local"></div></div><div class="grid2"><div class="field"><label>Proof/reference</label><input id="payment-proof" data-error-field="proof_document_id or proof_reference" placeholder="Receipt, transfer reference, or proof ID"></div><div class="field"><label>Payment method</label><input id="payment-method" placeholder="Bank transfer, cash, card, etc."></div></div><button class="secondary" onclick="recordPayment()">Add payment</button></div>';
   const paymentPurposeField = '<div class="field"><label>Payment purpose</label><select id="payment-purpose"><option value="DOWN_PAYMENT">Down payment</option><option value="PARTIAL_PAYMENT">Installment / partial payment</option><option value="FULL_PAYMENT">Full payment</option><option value="BALANCE_PAYMENT">Final balance payment</option><option value="OTHER">Other</option></select><span class="muted">Partial/installment is any payment before the balance is cleared. Final balance is the remaining amount due. Full payment is the client-stated intent to settle the whole obligation.</span></div>';
   const paymentFormWithPurpose = fullyPaid ? '<div class="card good"><h3>Client payment complete</h3><p class="muted">This Booking is fully paid. Additional client payments cannot be recorded here. Review duplicate or excess funds separately.</p></div>' : paymentForm.replace('<h3>Record Client Payment</h3>', '<h3>Record Client Payment</h3><p class="muted">Purpose is intent; allocation determines the balance.</p>' + paymentPurposeField);
@@ -4670,7 +4797,7 @@ function renderSubAgents() {
   const agents = list('SubAgent');
   const form = '<div id="subagent-form" class="card"><h3>Add sub-agent / partner</h3><p class="muted">A sub-agent can have multiple roles. Keep it separate from the supplier directory because it may refer clients, resell WMIT products, or coordinate a client relationship.</p><div class="grid3"><div class="field"><label>Name *</label><input id="subagent-name" placeholder="Partner agency or agent"></div><div class="field"><label>Legal name</label><input id="subagent-legal-name"></div><div class="field"><label>Email</label><input id="subagent-email" type="email"></div><div class="field"><label>Phone</label><input id="subagent-phone"></div><div class="field"><label>Commission terms</label><input id="subagent-commission" placeholder="e.g. 10% after client payment"></div></div><div class="field"><label>Roles</label><label><input type="checkbox" value="REFERRAL_PARTNER"> Referral partner</label> <label><input type="checkbox" value="RESELLER"> Reseller</label> <label><input type="checkbox" value="B2B_AGENCY"> B2B agency</label> <label><input type="checkbox" value="COORDINATOR"> Coordinator</label></div><div class="field"><label>Notes</label><textarea id="subagent-notes" rows="2"></textarea></div><button onclick="createSubAgentRecord()">Save sub-agent</button></div>';
   const rows = agents.map((agent) => '<tr><td><strong>' + esc(agent.display_name || agent.legal_name || agent.sub_agent_id) + '</strong><br><span class="muted">' + esc(agent.sub_agent_id) + '</span></td><td>' + esc((agent.roles || []).map(readableState).join(' · ') || 'Not recorded') + '</td><td>' + esc(agent.primary_email || 'Not recorded') + '</td><td>' + esc(agent.primary_phone || 'Not recorded') + '</td><td>' + status(agent.status || 'ACTIVE', agent.status === 'ACTIVE' ? 'good' : 'warn') + '</td></tr>').join('');
-  $('subagents-content').innerHTML = form + '<div class="card"><h3>Sub-agent directory</h3>' + (rows ? '<div class="table-wrap"><table><thead><tr><th>Partner</th><th>Roles</th><th>Email</th><th>Phone</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty">No sub-agents recorded yet.</div>') + '</div>';
+  $('subagents-content').innerHTML = form + '<div class="panel"><div class="panel-head"><div><h3>Sub-agent directory</h3><p class="muted">Partner agencies and referral channels.</p></div></div>' + (rows ? '<div class="table-wrap"><table><thead><tr><th>Partner</th><th>Roles</th><th>Email</th><th>Phone</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty">No sub-agents recorded yet.</div>') + '</div>';
 }
 
 const SUPPLIER_CAPABILITY_CHOICES = ['DMC', 'Tariff Supplier', 'Transport Provider', 'Hotel Partner', 'Visa Assistance', 'Insurance'];
@@ -4934,7 +5061,7 @@ function renderGlobalFollowUps() {
   const inquiryOptions = list('Inquiry').map((inquiry) => '<option value="' + esc(inquiry.inquiry_id) + '">' + esc(inquiry.inquiry_id + ' · ' + (inquiry.current_requirements && inquiry.current_requirements.destination || 'Inquiry')) + '</option>').join('');
   const form = '<div class="card"><h3>Add follow-up or deadline</h3><div class="grid3"><div class="field"><label>Task</label><input id="global-task-description" placeholder="Call client, request supplier confirmation, collect passport"></div><div class="field"><label>Due date/time</label><input id="global-task-due" type="datetime-local"></div><div class="field"><label>Priority</label><select id="global-task-priority"><option>NORMAL</option><option>HIGH</option><option>URGENT</option></select></div><div class="field"><label>Inquiry (optional)</label><select id="global-task-inquiry"><option value="">General follow-up</option>' + inquiryOptions + '</select></div><div class="field"><label>Client (optional)</label><input id="global-task-client-search" placeholder="Search client"><select id="global-task-client">' + clientOptions + '</select></div></div><button onclick="createGlobalTask()">Save follow-up</button></div>';
   const communication = '<div class="card"><h3>Log client communication</h3><div class="grid3"><div class="field"><label>Client</label><input id="communication-client-search" placeholder="Search client"><select id="communication-client">' + clientOptions + '</select></div><div class="field"><label>Channel</label><select id="communication-channel"><option>Messenger</option><option>WhatsApp</option><option>Viber</option><option>Email</option><option>Phone</option><option>Walk-in</option><option>Other</option></select></div><div class="field"><label>Outcome / next step</label><input id="communication-outcome" placeholder="Client will send passport scans"></div></div><div class="field"><label>Notes</label><textarea id="communication-notes" rows="2"></textarea></div><button class="secondary" onclick="logCommunication()">Save communication</button></div>';
-  $('operations-content').innerHTML = form + communication + '<div class="card"><h3>Open follow-ups and deadlines</h3>' + (rows ? '<div class="table-wrap"><table><thead><tr><th>Priority</th><th>Task</th><th>Due</th><th>Linked record</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty">No open follow-ups or deadlines.</div>') + '</div>' + reminderDraftsPanel();
+  $('operations-content').innerHTML = form + communication + '<div class="panel"><div class="panel-head"><div><h3>Open follow-ups and deadlines</h3><p class="muted">Every open task with its due date and linked record.</p></div></div>' + (rows ? '<div class="table-wrap"><table><thead><tr><th>Priority</th><th>Task</th><th>Due</th><th>Linked record</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty">No open follow-ups or deadlines.</div>') + '</div>' + reminderDraftsPanel();
   bindClientPicker('global-task-client-search', 'global-task-client');
   bindClientPicker('communication-client-search', 'communication-client');
 }
@@ -4958,7 +5085,7 @@ function reminderDraftsPanel() {
     }).join('');
     return '<div class="card today-card"><div class="today-card-head"><h3>' + entry[1] + '</h3><span class="today-count">' + categoryDrafts.length + '</span></div>' + (rows || '<p class="muted">No open drafts.</p>') + '<div class="row-actions"><button class="secondary compact" onclick="regenerateReminderDrafts(\'' + entry[0] + '\')">Regenerate</button></div></div>';
   }).join('');
-  return '<div class="card"><h3>Reminder drafts — review before sending</h3><p class="muted">Drafts are prepared for manual review only. Nothing is ever sent automatically: use Copy email, paste into your mail client, check it over, and send it yourself. Discarded drafts stay in the audit log.</p><div class="today-grid">' + groups + '</div></div>';
+  return '<div class="panel"><h3>Reminder drafts — review before sending</h3><p class="muted">Drafts are prepared for manual review only. Nothing is ever sent automatically: use Copy email, paste into your mail client, check it over, and send it yourself. Discarded drafts stay in the audit log.</p><div class="today-grid">' + groups + '</div></div>';
 }
 
 async function regenerateReminderDrafts(category) {
@@ -5139,41 +5266,57 @@ let departureReadinessCache = { departureId: null, data: null, error: null };
 
 function departureReadinessPanelShell(entry) {
   if (entry.kind !== 'SHARED_GROUP') {
-    return '<div class="card"><h3>Departure readiness checklist</h3><p class="muted">The automated checklist runs on Departure records (shared groups). Individual booking entries are tracked through their case workspace instead.</p></div>';
+    return '<div class="panel"><div class="panel-head"><div><h3>Departure readiness checklist</h3><p class="muted">The automated checklist runs on Departure records (shared groups). Individual booking entries are tracked through their case workspace instead.</p></div></div></div>';
   }
-  return '<div class="card" id="departure-readiness-panel"><h3>Departure readiness checklist</h3><p class="muted">Loading readiness…</p></div>';
+  return '<div class="panel" id="departure-readiness-panel"><div class="panel-head"><div><h3>Departure readiness checklist</h3><p class="muted">Loading readiness…</p></div></div></div>';
 }
 
 function readinessStatusBadge(state) {
   if (state === 'PASS') return status('PASS', 'good');
   if (state === 'FAIL') return status('FAIL', 'bad');
-  return status('UNKNOWN', 'info');
+  return status('UNKNOWN', 'unknown');
 }
+
+const READINESS_CHECK_COLUMNS = ['BOOKING_PAID', 'TICKETING', 'VOUCHERS', 'DOCUMENTS'];
+const READINESS_CHECK_LABELS = { BOOKING_PAID: 'Booking paid', TICKETING: 'Ticketing', VOUCHERS: 'Vouchers', DOCUMENTS: 'Documents' };
 
 function renderDepartureReadinessPanel(departureId) {
   const target = $('departure-readiness-panel');
   if (!target) return;
   if (departureReadinessCache.error) {
-    target.innerHTML = '<h3>Departure readiness checklist</h3><p class="muted">The readiness checklist could not be loaded. Try Run check to retry.</p><div class="row-actions"><button class="secondary" onclick="runDepartureReadinessFromPanel(\'' + esc(departureId) + '\')">Run check</button></div>';
+    target.innerHTML = '<div class="panel-head"><div><h3>Departure readiness checklist</h3><p class="muted">The readiness checklist could not be loaded. Try Run check to retry.</p></div></div><div class="row-actions"><button class="secondary" onclick="runDepartureReadinessFromPanel(\'' + esc(departureId) + '\')">Run check</button></div>';
     return;
   }
   const data = departureReadinessCache.data;
   if (!data) return;
   const raisedTasks = list('Task', (task) => task.task_type === 'DEPARTURE_READINESS' && task.departure_id === departureId && ['OPEN', 'IN_PROGRESS', 'BLOCKED'].includes(String(task.state || 'OPEN').toUpperCase()));
   const memberRows = data.members.length ? data.members.map(function (member) {
-    const checks = member.checks.map(function (check) {
-      return '<div class="event">' + readinessStatusBadge(check.status) + ' <strong>' + esc(check.check.replace(/_/g, ' ').toLowerCase()) + '</strong> · ' + esc(check.detail) + '</div>';
+    const byCheck = new Map(member.checks.map((check) => [check.check, check]));
+    const passCount = member.checks.filter((check) => check.status === 'PASS').length;
+    const memberScore = member.checks.length ? Math.round((passCount / member.checks.length) * 100) : 0;
+    const cells = READINESS_CHECK_COLUMNS.map(function (name) {
+      const check = byCheck.get(name);
+      if (!check) return '<td><span class="muted">—</span></td>';
+      const detail = check.status !== 'PASS' && check.detail ? '<br><span class="muted" style="font-size:11px">' + esc(check.detail.length > 90 ? check.detail.slice(0, 90) + '…' : check.detail) + '</span>' : '';
+      return '<td>' + readinessStatusBadge(check.status) + detail + '</td>';
     }).join('');
-    return '<div class="event" style="background:var(--paper-tint)"><strong>' + esc(member.clientName || member.leadPaxName || 'Member') + '</strong>' + (member.bookingId ? ' · Booking ' + esc(member.bookingId) : '') + (member.bookingItemId ? ' · item ' + esc(member.bookingItemId) : '') + checks + '</div>';
-  }).join('') : '<p class="muted">No members are linked to this departure yet.</p>';
-  const scoreLine = data.score === null || data.score === undefined
+    return '<tr><td><b>' + esc(member.clientName || member.leadPaxName || 'Member') + '</b></td><td>' + (member.bookingId ? '<span class="mono">' + esc(member.bookingId) + '</span>' : '<span class="muted">—</span>') + '</td>' + cells + '<td class="num" style="font-weight:800">' + memberScore + '%</td></tr>';
+  }).join('') : '';
+  const membersTable = memberRows
+    ? '<div class="table-wrap"><table><thead><tr><th>Member</th><th>Booking</th><th>Booking paid</th><th>Ticketing</th><th>Vouchers</th><th>Documents</th><th class="num">Score</th></tr></thead><tbody>' + memberRows + '</tbody></table></div>' + (data.members.length > 8 ? '' : '')
+    : '<p class="muted">No members are linked to this departure yet.</p>';
+  const scoreIsNull = data.score === null || data.score === undefined;
+  const scoreLine = scoreIsNull
     ? 'No decisive checks yet (' + data.counts.unknown + ' UNKNOWN)'
-    : data.score + '% (' + data.counts.pass + ' PASS · ' + data.counts.fail + ' FAIL · ' + data.counts.unknown + ' UNKNOWN)';
+    : data.counts.pass + ' PASS · ' + data.counts.fail + ' FAIL · ' + data.counts.unknown + ' UNKNOWN';
   const stateBadge = data.state === 'READY' ? status('READY', 'good') : data.state === 'NOT_READY' ? status('NOT READY', 'bad') : status('NEEDS REVIEW', 'warn');
-  target.innerHTML = '<div class="panel-head"><div><h3>Departure readiness checklist</h3><p class="muted">Paid in full, tickets issued, vouchers issued, documents complete — per member. UNKNOWN means the system has no requirement record to verify against.</p></div><div class="row-actions"><button onclick="runDepartureReadinessFromPanel(\'' + esc(departureId) + '\')">Run check</button></div></div>'
-    + field('Overall score', scoreLine) + field('State', stateBadge) + field('As of', data.asOf) + field('Open readiness tasks raised', raisedTasks.length)
-    + (raisedTasks.length ? '<details class="secondary-details" open><summary>Raised tasks (' + raisedTasks.length + ')</summary>' + raisedTasks.map(function (task) { return '<div class="event">' + esc(task.title) + ' · due ' + esc(task.due_date || '—') + ' · ' + status(readableState(task.state || 'OPEN'), 'warn') + '</div>'; }).join('') + '</details>' : '')
-    + memberRows;
+  const taskRows = raisedTasks.length
+    ? raisedTasks.map(function (task) { return '<div class="task"><span class="mono t-id">' + esc(task.task_id) + '</span><span class="t-text">' + esc(task.title) + '</span>' + (task.due_date ? '<span class="status warn t-due">Due ' + esc(task.due_date) + '</span>' : '') + '<span class="status t-due">' + esc(readableState(task.state || 'OPEN')) + '</span></div>'; }).join('')
+    : '<p class="muted">Every FAIL raises a task with an owner and a due date — none are open now.</p>';
+  target.innerHTML = '<div class="panel-head"><div><h3>Member checks</h3><p class="muted">Paid in full, tickets issued, vouchers issued, documents complete — per member. UNKNOWN means the system has no requirement record to verify against; it is never silently treated as PASS.</p></div><div class="row-actions"><button onclick="runDepartureReadinessFromPanel(\'' + esc(departureId) + '\')">Run check</button></div></div>'
+    + '<div class="ready-head"><div><span class="ready-score">' + (scoreIsNull ? '—' : data.score + '%') + '</span><span class="muted" style="display:block">readiness</span></div><div><div class="ready-track"><div class="ready-fill" style="width:' + (scoreIsNull ? 0 : Math.max(0, Math.min(100, Number(data.score) || 0))) + '%"></div></div><p class="muted" style="margin-top:7px">' + esc(scoreLine) + ' · checked as of ' + esc(data.asOf) + '</p></div><div class="ready-state">' + stateBadge + '</div></div>'
+    + membersTable
+    + (raisedTasks.length ? '<div style="margin-top:14px"><div class="panel-head"><div><h3>Tasks raised by readiness</h3><span class="muted">Every FAIL raises a task with an owner and a due date</span></div></div>' + taskRows + '</div>' : '');
 }
 
 async function loadDepartureReadiness(departureId, force) {
@@ -5231,7 +5374,7 @@ function renderDepartures() {
   const selectedEntry = selectedId && entries.find((entry) => entry.departure.departure_id === selectedId);
   if (selectedId && selectedEntry) {
     const bookingIds = selectedEntry.bookingItemIds.map((itemId) => { const item = latest('BookingItem', (candidate) => candidate.booking_item_id === itemId); return item && item.booking_id; }).filter(Boolean).filter((id, index, all) => all.indexOf(id) === index);
-    $('departures-content').innerHTML = '<div class="selection-bar"><button class="secondary" onclick="clearDepartureRecord()">Back to Departures</button><strong>' + esc(selectedEntry.departure.name || 'Departure') + '</strong><span>' + esc(selectedEntry.departure.start_date || 'Date not recorded') + '</span></div><article class="card"><h3>' + esc(selectedEntry.departure.name || 'Departure') + '</h3>' + field('Lead pax', selectedEntry.leadPaxName) + field('Type', selectedEntry.kind === 'SHARED_GROUP' ? 'Shared operational group' : 'Individual Booking entry') + field('Date', (selectedEntry.departure.start_date || 'Not recorded') + (selectedEntry.departure.end_date ? ' to ' + selectedEntry.departure.end_date : '')) + field('Destination', selectedEntry.departure.destination) + field('Status', readableState(selectedEntry.departure.status || 'PENDING')) + field('Readiness', selectedEntry.departure.readiness_percent === undefined ? 'Not recorded' : selectedEntry.departure.readiness_percent + '%') + '<h4>Linked Bookings</h4>' + (bookingIds.length ? bookingIds.map((id) => '<div class="event"><button class="secondary compact" onclick="openBookingFromDeparture(\'' + esc(id) + '\')">Open Booking</button> ' + esc(id) + '</div>').join('') : '<p class="muted">No linked Booking.</p>') + '<details class="secondary-details"><summary>Technical details</summary><p class="muted">Departure records are operational projections linked through Booking Items. Financial records remain independent.</p></details></article>';
+    $('departures-content').innerHTML = '<div class="selection-bar"><button class="secondary" onclick="clearDepartureRecord()">Back to Departures</button><strong>' + esc(selectedEntry.departure.name || 'Departure') + '</strong><span>' + esc(selectedEntry.departure.start_date || 'Date not recorded') + '</span></div><article class="panel"><div class="panel-head"><div><h3>' + esc(selectedEntry.departure.name || 'Departure') + '</h3><p class="muted">' + esc(selectedEntry.kind === 'SHARED_GROUP' ? 'Shared operational group' : 'Individual Booking entry') + ' · ' + esc(selectedEntry.departure.destination || 'Destination not recorded') + '</p></div>' + status(readableState(selectedEntry.departure.status || 'PENDING'), departurePhase(selectedEntry.departure) === 'Present' ? 'good' : 'info') + '</div>' + field('Lead pax', selectedEntry.leadPaxName) + field('Date', (selectedEntry.departure.start_date || 'Not recorded') + (selectedEntry.departure.end_date ? ' to ' + esc(selectedEntry.departure.end_date) : '')) + field('Readiness', selectedEntry.departure.readiness_percent === undefined ? 'Not recorded' : selectedEntry.departure.readiness_percent + '%') + '<h4>Linked Bookings</h4>' + (bookingIds.length ? bookingIds.map((id) => '<div class="event"><button class="secondary compact" onclick="openBookingFromDeparture(\'' + esc(id) + '\')">Open Booking</button> ' + esc(id) + '</div>').join('') : '<p class="muted">No linked Booking.</p>') + '<details class="secondary-details"><summary>Technical details</summary><p class="muted">Departure records are operational projections linked through Booking Items. Financial records remain independent.</p></details></article>';
     $('departures-content').insertAdjacentHTML('beforeend', departureReadinessControls(selectedEntry));
     $('departures-content').insertAdjacentHTML('beforeend', departureReadinessPanelShell(selectedEntry));
     if (selectedEntry.kind === 'SHARED_GROUP') loadDepartureReadiness(selectedEntry.departure.departure_id, false);
@@ -5246,7 +5389,7 @@ function renderDepartures() {
     const bookingIds = entry.bookingItemIds.map((itemId) => { const item = latest('BookingItem', (candidate) => candidate.booking_item_id === itemId); return item && item.booking_id; }).filter(Boolean).filter((id, index, all) => all.indexOf(id) === index);
     const links = bookingIds.length ? bookingIds.map((id) => '<button class="secondary compact" onclick="openBookingFromDeparture(\'' + esc(id) + '\')">' + esc(id) + '</button>').join(' ') : '<span class="muted">No linked Booking</span>';
     const phase = departurePhase(entry.departure);
-    return '<tr><td>' + esc(entry.departure.start_date || 'Not recorded') + (entry.departure.end_date ? '<br><span class="muted">to ' + esc(entry.departure.end_date) + '</span>' : '') + '</td><td>' + esc(phase) + '</td><td>' + esc(entry.leadPaxName || 'Not selected') + '</td><td>' + esc(entry.kind === 'SHARED_GROUP' ? 'Shared operational group' : 'Individual Booking entry') + '</td><td>' + esc(entry.departure.destination || 'Not recorded') + '</td><td>' + links + '</td><td>' + status(readableState(entry.departure.status || 'PENDING'), phase === 'Present' ? 'good' : 'info') + '</td><td>' + esc(entry.departure.readiness_percent === undefined ? 'Not recorded' : entry.departure.readiness_percent + '%') + '</td></tr>';
+    return '<tr><td><button class="secondary compact" onclick="openDepartureRecord(\'' + esc(entry.departure.departure_id) + '\')">Open</button> ' + esc(entry.departure.start_date || 'Not recorded') + (entry.departure.end_date ? '<br><span class="muted">to ' + esc(entry.departure.end_date) + '</span>' : '') + '</td><td>' + esc(phase) + '</td><td>' + esc(entry.leadPaxName || 'Not selected') + '</td><td>' + esc(entry.kind === 'SHARED_GROUP' ? 'Shared operational group' : 'Individual Booking entry') + '</td><td>' + esc(entry.departure.destination || 'Not recorded') + '</td><td>' + links + '</td><td>' + status(readableState(entry.departure.status || 'PENDING'), phase === 'Present' ? 'good' : 'info') + '</td><td>' + esc(entry.departure.readiness_percent === undefined ? 'Not recorded' : entry.departure.readiness_percent + '%') + '</td></tr>';
   }).join('');
   $('departures-content').innerHTML = '<p class="muted">Sorted by travel date. Lead pax is taken from the selected Booking participant. Financial records remain independent.</p><div class="table-wrap"><table><thead><tr><th>Date</th><th>Period</th><th>Lead pax</th><th>Type</th><th>Destination</th><th>Booking(s)</th><th>Status</th><th>Readiness</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
@@ -5338,7 +5481,7 @@ function renderPrivacyOverviewResult() {
     + '<tr><td>Documents</td><td>' + esc(inventory.documents.total) + ' (' + esc(inventory.documents.sensitive) + ' sensitive · ' + esc(inventory.documents.erased) + ' erased)</td></tr>'
     + '<tr><td>Expo leads</td><td>' + esc(inventory.expo_leads.total) + ' (' + esc(inventory.expo_leads.consent.granted) + ' consented · ' + esc(inventory.expo_leads.consent.legacy) + ' legacy)</td></tr>';
   const documentRows = data.documents.length ? data.documents.map(function (document) {
-    return '<tr><td>' + esc(document.document_id) + '</td><td>' + esc(document.document_type || '—') + (document.sensitive ? ' · sensitive' : '') + '</td><td>' + privacyRetentionStatus(document.retention) + (document.eligible_on ? '<br><span class="muted">eligible on ' + esc(document.eligible_on) + '</span>' : '') + '</td></tr>';
+    return '<tr><td><span class="mono">' + esc(document.document_id) + '</span></td><td>' + esc(document.document_type || '—') + documentSensitiveMarkup(document.document_type) + '</td><td>' + privacyRetentionStatus(document.retention) + (document.eligible_on ? '<br><span class="muted">eligible on ' + esc(document.eligible_on) + '</span>' : '') + '</td></tr>';
   }).join('') : '<tr><td colspan="3">No documents linked to this client.</td></tr>';
   const eligible = data.documents.filter(function (document) { return document.retention === 'ELIGIBLE_FOR_ERASURE'; });
   target.innerHTML =
@@ -5358,26 +5501,37 @@ async function eraseEligibleClientDocuments(clientId, eligibleCount) {
   await loadPrivacyOverview();
 }
 
+function documentSensitiveMarkup(type) {
+  return ['PASSPORT', 'VISA', 'IDENTITY'].includes(String(type || '').toUpperCase())
+    ? ' <span class="sens"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Sensitive</span>'
+    : '';
+}
+
 function renderDocumentsIngest() {
   const container = document.getElementById('documents-content');
   if (!container) return;
   const docs = list('Document', () => true).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  const pendingCount = docs.filter((doc) => ['RECEIVED', 'CLASSIFIED', 'NEEDS_REVIEW'].includes(String(doc.status || '').toUpperCase())).length;
   const rows = docs.map(function (doc) {
-    const type = doc.classification && doc.classification.document_type;
+    const type = doc.classification && doc.classification.document_type || doc.document_type;
     const confidence = doc.classification && doc.classification.confidence;
-    return '<div class="event" style="display:flex;justify-content:space-between;gap:10px;align-items:center"><span style="min-width:0;word-wrap:break-word"><b>' + esc(doc.document_id) + '</b> · ' + esc(doc.status) + (type ? ' · ' + esc(type) + (confidence ? ' (' + Number(confidence * 100).toFixed(0) + '%)' : '') : '') + (doc.filename ? ' · ' + esc(doc.filename) : '') + '</span><span style="flex:none;display:flex;gap:6px">' +
+    const confidenceDisplay = confidence === undefined || confidence === null ? '—' : Number(confidence * 100).toFixed(0) + '%';
+    const lowConfidence = confidence !== undefined && confidence !== null && Number(confidence) < 0.8;
+    const actions =
       (doc.status === 'RECEIVED' ? '<button class="secondary compact" onclick="ingestAction(\'/api/documents/ingest/classify\', \'' + esc(doc.document_id) + '\')">Classify</button>' : '') +
       ((doc.status === 'CLASSIFIED' || doc.status === 'NEEDS_REVIEW') && !doc.extraction ? '<button class="secondary compact" onclick="ingestAction(\'/api/documents/ingest/extract\', \'' + esc(doc.document_id) + '\')">Extract</button>' : '') +
-      ((doc.status === 'CLASSIFIED' || doc.status === 'NEEDS_REVIEW') && doc.extraction ? '<button class="secondary compact" onclick="ingestReview(\'' + esc(doc.document_id) + '\', \'APPROVE\')">Approve</button><button class="secondary compact" onclick="ingestReview(\'' + esc(doc.document_id) + '\', \'REJECT\')">Reject</button>' : '') +
-      '</span></div>';
+      ((doc.status === 'CLASSIFIED' || doc.status === 'NEEDS_REVIEW') && doc.extraction ? '<button class="secondary compact" onclick="ingestReview(\'' + esc(doc.document_id) + '\', \'APPROVE\')">Approve</button><button class="secondary compact" onclick="ingestReview(\'' + esc(doc.document_id) + '\', \'REJECT\')">Reject</button>' : '');
+    const statusKind = doc.status === 'NEEDS_REVIEW' ? 'warn' : doc.status === 'ACCEPTED' || doc.status === 'APPROVED' ? 'good' : 'info';
+    return '<tr><td><span class="mono">' + esc(doc.document_id) + '</span>' + (doc.filename ? '<br><span class="muted" style="font-size:11px">' + esc(doc.filename) + '</span>' : '') + '</td><td>' + esc(type || '—') + documentSensitiveMarkup(type) + '</td><td>' + status(readableState(doc.status), statusKind) + (lowConfidence ? ' <span class="lowconf">Low confidence</span>' : '') + '</td><td class="num">' + confidenceDisplay + '</td><td>' + (actions || '<span class="muted">—</span>') + '</td></tr>';
   }).join('');
   container.innerHTML =
-    '<div class="card"><h3>Register a document</h3><p class="muted">Paste the document text (email body, quotation, invoice). PDF uploads without text extraction are not supported on this server - paste the text instead.</p>' +
+    '<div class="panel"><div class="panel-head"><div><h3>Review queue</h3><p class="muted">Passports, visas and identity documents are sensitive — restricted access, manager-gated erasure. Low-confidence extractions are flagged, never silently accepted.</p></div><span class="muted">' + pendingCount + ' awaiting review</span></div>' +
+    (rows ? '<div class="table-wrap"><table><thead><tr><th>Document</th><th>Type</th><th>Status</th><th>Confidence</th><th>Actions</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty">No documents registered yet.</div>') + '</div>' +
+    '<div class="panel"><div class="panel-head"><div><h3>Register a document</h3><p class="muted">Paste the document text (email body, quotation, invoice). PDF uploads without text extraction are not supported on this server — paste the text instead.</p></div></div>' +
     '<div class="field"><label>Filename (optional)</label><input id="ingest-filename" placeholder="quotation-email.txt"></div>' +
     '<div class="field"><label>Document text *</label><textarea id="ingest-text" rows="6" placeholder="Paste the full document text here"></textarea></div>' +
     '<button onclick="ingestRegisterDocument()">Register document</button></div>' +
-    '<div class="card"><h3>Review queue (' + docs.length + ')</h3>' + (rows || '<p class="muted">No documents registered yet.</p>') + '</div>' +
-    '<div class="card"><h3>Privacy</h3><p class="muted">Per-client data inventory, consent status, and document retention (passport/visa/identity documents become erasure-eligible 30 days after departure). Erasure is manager-gated.</p>' +
+    '<div class="panel"><div class="panel-head"><div><h3>Privacy overview</h3><p class="muted">Per-client data inventory, consent status, and document retention (passport/visa/identity documents become erasure-eligible 30 days after departure). Erasure is manager-gated and requires typed confirmation.</p></div></div>' +
     '<div class="grid3"><div class="field"><label>Client</label><input id="privacy-client-search" placeholder="Search client"></div>' +
     '<div class="field"><label>&nbsp;</label><select id="privacy-client"><option value="">Select a client</option></select></div>' +
     '<div class="field" style="align-self:end"><button onclick="loadPrivacyOverview()">Privacy overview</button></div></div>' +
@@ -5402,7 +5556,7 @@ function renderInterns() {
     return '<div class="event"><b>' + esc(intern.name) + '</b> · ' + esc(intern.school || '') + ' · ' + esc(String(intern.status).toLowerCase()) + (intern.supervisor_username ? ' · supervisor ' + esc(intern.supervisor_username) : '') + (intern.username ? ' · account ' + esc(intern.username) : '') + ' · ' + esc(String(intern.period_start || '').slice(0, 10)) + ' to ' + esc(String(intern.period_end || '').slice(0, 10)) + '</div>';
   }).join('');
   container.innerHTML =
-    '<div class="card"><h3>Add intern</h3><div class="grid3">' +
+    '<div class="panel"><h3>Add intern</h3><div class="grid3">' +
     '<div class="field"><label>Name *</label><input id="intern-name"></div>' +
     '<div class="field"><label>School *</label><input id="intern-school"></div>' +
     '<div class="field"><label>Email *</label><input id="intern-email" type="email"></div>' +
@@ -5412,14 +5566,14 @@ function renderInterns() {
     '<div class="field"><label>Period start *</label><input id="intern-start" type="date"></div>' +
     '<div class="field"><label>Period end *</label><input id="intern-end" type="date"></div>' +
     '</div><button onclick="createInternRecord()">Save intern</button></div>' +
-    '<div class="card"><h3>Assign intern task</h3><div class="grid3">' +
+    '<div class="panel"><h3>Assign intern task</h3><div class="grid3">' +
     '<div class="field"><label>Intern *</label><select id="intern-task-intern">' + internOptions + '</select></div>' +
     '<div class="field"><label>Title *</label><input id="intern-task-title"></div>' +
     '<div class="field"><label>Due date</label><input id="intern-task-due" type="date"></div>' +
     '</div><div class="field"><label>Instructions *</label><textarea id="intern-task-instructions" rows="2"></textarea></div>' +
     '<button class="secondary" onclick="assignInternTaskRecord()">Assign task</button></div>' +
-    '<div class="card"><h3>Interns (' + interns.length + ')</h3>' + (internRows || '<p class="muted">No interns yet.</p>') + '</div>' +
-    '<div class="card"><h3>Tasks (' + tasks.length + ')</h3><p class="muted">Interns submit their own tasks from their account; supervisors approve or reject here. Rejection requires feedback and reopens the task.</p>' + (taskRows || '<p class="muted">No intern tasks yet.</p>') + '</div>';
+    '<div class="panel"><h3>Interns (' + interns.length + ')</h3>' + (internRows || '<p class="muted">No interns yet.</p>') + '</div>' +
+    '<div class="panel"><h3>Tasks (' + tasks.length + ')</h3><p class="muted">Interns submit their own tasks from their account; supervisors approve or reject here. Rejection requires feedback and reopens the task.</p>' + (taskRows || '<p class="muted">No intern tasks yet.</p>') + '</div>';
 }
 
 async function createInternRecord() {
@@ -5464,6 +5618,7 @@ const workspaceRenderers = {
   case: renderCaseWorkspace,
   inquiry: renderInquiry,
   quotation: renderQuotation,
+  'quote-builder': renderQuoteBuilder,
   booking: renderBooking,
   finance: renderPayment,
   departures: renderDepartures,
@@ -5633,4 +5788,563 @@ function isLocalWorkspace() {
 
 refreshState().catch((error) => showMessage('✕ Workspace unavailable', error.message, 'error'));
 updateAuthIndicator();
+
+/* =====================================================================
+   QUOTE BUILDER — additive manual builder (docs/mockups operations-overhaul
+   #tab-newquote). Opens from the Inquiries work queue or the Quotations
+   manual card; saves through the same whitelisted actions the case-embedded
+   editor uses (createQuotation / createQuotationItem / updateQuotation).
+   Unit costs and margin are internal only — they never render into the
+   client sheet.
+   ===================================================================== */
+
+let quoteBuilderState = null;
+
+const QB_SERVICES = [
+  ['Flight', 'Airfare'],
+  ['Hotel', 'Hotel'],
+  ['Tour', 'Tour'],
+  ['Transfer', 'Transfer'],
+  ['Travel insurance', 'Travel insurance'],
+  ['Land Arrangement', 'Land arrangement'],
+  ['Ticket', 'Ticket'],
+  ['Other', 'Other']
+];
+
+const QB_AIRLINES = ['Philippine Airlines', 'Cebu Pacific', 'Vietnam Airlines', 'EVA Air', 'Singapore Airlines', 'Cathay Pacific', 'Emirates', 'Qatar Airways'];
+
+const QB_PENCIL_SVG = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>';
+
+function qbRequirements() {
+  const inquiry = quoteBuilderState && inquiryById(quoteBuilderState.inquiryId);
+  return (inquiry && inquiry.current_requirements) || {};
+}
+
+function qbPaxCount() {
+  return Number(qbRequirements().pax_count) || 0;
+}
+
+function qbTravelWindow() {
+  const requirements = qbRequirements();
+  if (requirements.travel_start) return requirements.travel_start + (requirements.travel_end ? ' – ' + requirements.travel_end : '');
+  return requirements.travel_month || requirements.travel_year || 'Not recorded';
+}
+
+function qbComputed() {
+  const builder = quoteBuilderState;
+  let sell = 0;
+  let cost = 0;
+  builder.items.forEach((item) => { sell += item.qty * item.sell; cost += item.qty * item.cost; });
+  const fee = Math.max(0, Number(builder.fee) || 0);
+  const grand = sell + fee;
+  const margin = grand - cost;
+  return { sell, cost, fee, grand, margin, marginPct: grand > 0 ? Math.round(margin / grand * 1000) / 10 : 0 };
+}
+
+function qbMoney(value) {
+  return (quoteBuilderState ? quoteBuilderState.currency : 'PHP') + ' ' + Math.round(Number(value) || 0).toLocaleString('en-US');
+}
+
+function qbDateLabel(iso) {
+  if (!iso) return '—';
+  const parsed = new Date(String(iso).length === 10 ? iso + 'T00:00:00' : iso);
+  return isNaN(parsed) ? String(iso) : parsed.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function qbDaysLeft(iso) {
+  if (!iso) return null;
+  return Math.round((Date.parse(String(iso).length === 10 ? iso + 'T00:00:00' : iso) - Date.parse(new Date().toISOString().slice(0, 10) + 'T00:00:00')) / 86400000);
+}
+
+function qbValidText() {
+  const iso = quoteBuilderState && quoteBuilderState.validUntil;
+  const days = qbDaysLeft(iso);
+  return qbDateLabel(iso) + (days > 0 ? ' · ' + days + ' day' + (days === 1 ? '' : 's') + ' left' : '');
+}
+
+function openQuoteBuilder(inquiryId) {
+  const id = inquiryId || selectedInquiryId();
+  const inquiry = latest('Inquiry', (item) => item.inquiry_id === id);
+  if (!inquiry) return failLocal('Select an Inquiry first — the builder prices a real client request.');
+  sessionStorage.setItem('wmit.operations.selectedInquiryId', inquiry.inquiry_id);
+  quoteBuilderState = {
+    inquiryId: inquiry.inquiry_id,
+    currency: String(quotationDefaults().currency || 'PHP').trim().toUpperCase(),
+    fee: 0,
+    validUntil: defaultQuotationValidUntil(),
+    items: [],
+    flights: [],
+    days: [],
+    edit: { item: -1, flight: -1, day: -1 },
+    flightFormOpen: false,
+    dayFormOpen: false,
+    saving: false
+  };
+  if (currentTab() === 'quote-builder') render();
+  else window.location.hash = 'quote-builder';
+}
+
+function qbBackToQuotations() {
+  window.location.hash = 'quotation';
+}
+
+function qbInquiryPickerMarkup() {
+  const rows = list('Inquiry').map((inquiry) => {
+    const client = latest('Client', (item) => item.client_id === inquiry.client_id);
+    const requirements = inquiry.current_requirements || {};
+    return '<tr><td><strong>' + esc(client && client.display_name || 'Client') + '</strong></td><td>' + esc(requirements.destination || 'Not recorded') + '</td><td>' + esc(requirements.travel_start || requirements.travel_month || requirements.travel_year || 'Not recorded') + '</td><td><button class="secondary compact" onclick="openQuoteBuilder(\'' + esc(inquiry.inquiry_id) + '\')">Build quote</button></td></tr>';
+  }).join('');
+  return '<div class="panel"><div class="panel-head"><div><h3>Pick an Inquiry</h3><p class="muted">The builder prices a real client request — nothing is saved until you press Save draft.</p></div></div>'
+    + (rows
+      ? '<div class="table-wrap"><table><thead><tr><th>Client</th><th>Destination</th><th>Travel start</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+      : '<div class="empty">No Inquiry cases yet — create one on the Inquiries tab first.</div>')
+    + '</div>';
+}
+
+function qbServiceOptions(selected) {
+  return QB_SERVICES.map((entry) => '<option value="' + esc(entry[0]) + '"' + (entry[0] === selected ? ' selected' : '') + '>' + esc(entry[1]) + '</option>').join('');
+}
+
+function qbItemsTableMarkup() {
+  const builder = quoteBuilderState;
+  const rows = builder.items.length ? builder.items.map((item, index) => {
+    const editing = builder.edit.item === index;
+    const belowCost = item.sell < item.cost;
+    return '<tr' + (editing ? ' class="nq-editing"' : '') + '><td data-label="Service"><b>' + esc(item.serviceType) + '</b></td><td data-label="Description">' + esc(item.description)
+      + (item.supplierId ? '<br><span class="muted" style="font-size:11px">' + esc(readableSupplierName(item.supplierId)) + '</span>' : '')
+      + '</td><td data-label="Qty" class="num">' + esc(item.qty) + '</td><td data-label="Unit selling" class="num">' + qbMoney(item.sell)
+      + '</td><td data-label="Amount" class="num" style="font-weight:750">' + qbMoney(item.qty * item.sell) + (belowCost ? '<br><span class="status warn">Below cost</span>' : '')
+      + '</td><td data-label="Actions"><span class="qb-row-actions">'
+      + '<button class="secondary compact" type="button" onclick="qbEditItem(' + index + ')" aria-label="Edit item ' + (index + 1) + '">' + QB_PENCIL_SVG + '</button>'
+      + '<button class="secondary compact" type="button" onclick="qbRemoveItem(' + index + ')" aria-label="Remove item ' + (index + 1) + '">×</button></span></td></tr>';
+  }).join('') : '<tr><td colspan="6" class="muted" style="text-align:center;padding:14px">No items yet — add the first line above.</td></tr>';
+  return '<div class="table-wrap cards-wrap"><table class="cards"><thead><tr><th>Service</th><th>Description</th><th class="num">Qty</th><th class="num">Unit selling</th><th class="num">Amount</th><th><span class="vh">Actions</span></th></tr></thead><tbody id="qb-items-body">' + rows + '</tbody></table></div>';
+}
+
+function qbItemFormMarkup() {
+  const builder = quoteBuilderState;
+  const editing = builder.edit.item > -1 ? builder.items[builder.edit.item] : null;
+  return '<form class="nq-form' + (editing ? ' is-editing' : '') + '" id="qb-item-form" onsubmit="return qbSubmitItem(event)">'
+    + '<div class="field"><label for="qb-svc">Service</label><select id="qb-svc">' + qbServiceOptions(editing ? editing.serviceType : QB_SERVICES[0][0]) + '</select></div>'
+    + '<div class="field field-grow"><label for="qb-desc">Description</label><input id="qb-desc" type="text" autocomplete="off" placeholder="e.g. Round trip MNL–SGN, 20kg baggage" value="' + esc(editing ? editing.description : '') + '"></div>'
+    + '<div class="field"><label for="qb-sup">Supplier <span>(optional)</span></label><select id="qb-sup">' + quotationSupplierOptions(editing ? editing.supplierId : '') + '</select></div>'
+    + '<div class="field field-qty"><label for="qb-qty">Qty</label><input id="qb-qty" type="number" min="1" step="1" value="' + esc(editing ? editing.qty : 1) + '"></div>'
+    + '<div class="field field-price internal"><label for="qb-cost">Unit cost <span>(' + esc(builder.currency) + ')</span></label><input id="qb-cost" type="number" min="0" step="any" inputmode="decimal" placeholder="0" value="' + esc(editing && editing.cost ? editing.cost : '') + '"></div>'
+    + '<div class="field field-price"><label for="qb-sell">Unit price <span>(' + esc(builder.currency) + ')</span></label><input id="qb-sell" type="number" min="0" step="any" inputmode="decimal" placeholder="0" value="' + esc(editing && editing.sell ? editing.sell : '') + '"></div>'
+    + '<button class="compact" type="submit"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg> <span id="qb-item-submit-label">' + (editing ? 'Save item' : 'Add item') + '</span></button>'
+    + '<button class="secondary compact" type="button" id="qb-item-cancel" onclick="qbCancelEdit(\'item\')"' + (editing ? '' : ' hidden') + '>Cancel</button>'
+    + '</form>'
+    + '<p class="muted" style="margin:8px 0 10px;font-size:11px">Unit cost is internal — muted on purpose. It feeds the margin line only and never reaches the client sheet.</p>';
+}
+
+function qbFlightsMarkup() {
+  const builder = quoteBuilderState;
+  const editing = builder.edit.flight > -1 ? builder.flights[builder.edit.flight] : null;
+  const open = builder.flightFormOpen || Boolean(editing);
+  const requirements = qbRequirements();
+  const form = '<form class="nq-form nq-collapse' + (open ? ' open' : '') + (editing ? ' is-editing' : '') + '" id="qb-flight-form" onsubmit="return qbSubmitFlight(event)">'
+    + '<div class="field"><label for="qb-f-airline">Airline</label><input id="qb-f-airline" type="text" autocomplete="off" list="qb-airlines" placeholder="e.g. Philippine Airlines" value="' + esc(editing ? editing.airline : '') + '"><datalist id="qb-airlines">' + QB_AIRLINES.map((name) => '<option value="' + esc(name) + '"></option>').join('') + '</datalist></div>'
+    + '<div class="field"><label for="qb-f-no">Flight no.</label><input id="qb-f-no" type="text" autocomplete="off" placeholder="VN 855" value="' + esc(editing ? editing.no : '') + '"></div>'
+    + '<div class="field"><label for="qb-f-route">Route</label><input id="qb-f-route" type="text" autocomplete="off" placeholder="MNL–SGN" value="' + esc(editing ? editing.route : '') + '"></div>'
+    + '<div class="field"><label for="qb-f-date">Date</label><input id="qb-f-date" type="date" value="' + esc(editing ? editing.date : requirements.travel_start || '') + '"></div>'
+    + '<div class="field field-qty"><label for="qb-f-dep">Dep</label><input id="qb-f-dep" type="time" value="' + esc(editing ? editing.dep : '') + '"></div>'
+    + '<div class="field field-qty"><label for="qb-f-arr">Arr</label><input id="qb-f-arr" type="time" value="' + esc(editing ? editing.arr : '') + '"></div>'
+    + '<button class="compact" type="submit"><span id="qb-flight-submit-label">' + (editing ? 'Save flight' : 'Add flight') + '</span></button>'
+    + '<button class="secondary compact" type="button" id="qb-flight-cancel" onclick="qbCancelEdit(\'flight\')"' + (editing ? '' : ' hidden') + '>Cancel</button>'
+    + '</form>';
+  const cards = builder.flights.length ? builder.flights.map((flight, index) => {
+    const editingRow = builder.edit.flight === index;
+    return '<div class="flight-card' + (editingRow ? ' nq-editing' : '') + '"><div class="fc-main"><span class="fc-no">' + esc(flight.no) + '</span> · ' + esc(flight.airline || 'Airline not recorded')
+      + ' <span class="mono" style="margin-left:6px">' + esc(flight.route) + '</span>'
+      + '<div class="fc-meta">' + qbDateLabel(flight.date) + ' · ' + esc(flight.dep || '--:--') + ' → ' + esc(flight.arr || '--:--') + nextDayArrivalBadge(flight.dep, flight.arr) + '</div></div>'
+      + '<span class="qb-row-actions">'
+      + '<button class="secondary compact" type="button" onclick="qbEditFlight(' + index + ')" aria-label="Edit flight ' + (index + 1) + '">' + QB_PENCIL_SVG + '</button>'
+      + '<button class="secondary compact" type="button" onclick="qbRemoveFlight(' + index + ')" aria-label="Remove flight ' + (index + 1) + '">×</button></span></div>';
+  }).join('') : '<p class="muted">No flights attached — the airfare line can stand alone until schedules are fixed.</p>';
+  return '<div class="panel"><div class="panel-head"><div><h3>Flights</h3></div>'
+    + '<button class="secondary compact" type="button" id="qb-flight-toggle" onclick="qbToggleForm(\'flight\')" aria-expanded="' + (open ? 'true' : 'false') + '" aria-controls="qb-flight-form"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg> Add flight</button></div>'
+    + form + '<div id="qb-flights">' + cards + '</div></div>';
+}
+
+function qbDaysMarkup() {
+  const builder = quoteBuilderState;
+  const editing = builder.edit.day > -1 ? builder.days[builder.edit.day] : null;
+  const open = builder.dayFormOpen || Boolean(editing);
+  const form = '<form class="nq-form nq-collapse' + (open ? ' open' : '') + (editing ? ' is-editing' : '') + '" id="qb-day-form" onsubmit="return qbSubmitDay(event)">'
+    + '<div class="field field-qty"><label for="qb-nd-no">Day</label><input id="qb-nd-no" type="number" min="1" step="1" value="' + esc(editing ? editing.no : builder.days.length + 1) + '"></div>'
+    + '<div class="field field-grow"><label for="qb-nd-title">Title</label><input id="qb-nd-title" type="text" autocomplete="off" placeholder="e.g. Cu Chi tunnels half-day" value="' + esc(editing ? editing.title : '') + '"></div>'
+    + '<div class="field"><label for="qb-nd-city">City</label><input id="qb-nd-city" type="text" autocomplete="off" placeholder="City" value="' + esc(editing ? editing.city : '') + '"></div>'
+    + '<div class="field field-grow"><label for="qb-nd-act">Activities</label><input id="qb-nd-act" type="text" autocomplete="off" placeholder="Tunnels tour · lunch · war museum" value="' + esc(editing ? editing.act : '') + '"></div>'
+    + '<div class="field"><label for="qb-nd-meals">Meals</label><input id="qb-nd-meals" type="text" autocomplete="off" placeholder="Breakfast, lunch" value="' + esc(editing ? editing.meals : '') + '"></div>'
+    + '<div class="field"><label for="qb-nd-over">Overnight</label><input id="qb-nd-over" type="text" autocomplete="off" placeholder="City" value="' + esc(editing ? editing.over : '') + '"></div>'
+    + '<button class="compact" type="submit"><span id="qb-day-submit-label">' + (editing ? 'Save day' : 'Add day') + '</span></button>'
+    + '<button class="secondary compact" type="button" id="qb-day-cancel" onclick="qbCancelEdit(\'day\')"' + (editing ? '' : ' hidden') + '>Cancel</button>'
+    + '</form>';
+  const cards = builder.days.length ? builder.days.map((day, index) => {
+    const editingRow = builder.edit.day === index;
+    return '<div class="day-card' + (editingRow ? ' nq-editing' : '') + '"><div class="dc-head"><b>Day ' + esc(day.no) + ' — ' + esc(day.title) + '</b>'
+      + '<span style="display:flex;gap:8px;align-items:center;flex:none">' + (day.city ? '<span class="status">' + esc(day.city) + '</span>' : '')
+      + '<span class="qb-row-actions">'
+      + '<button class="secondary compact" type="button" onclick="qbEditDay(' + index + ')" aria-label="Edit day ' + (index + 1) + '">' + QB_PENCIL_SVG + '</button>'
+      + '<button class="secondary compact" type="button" onclick="qbRemoveDay(' + index + ')" aria-label="Remove day ' + (index + 1) + '">×</button></span></span></div>'
+      + (day.act ? '<p class="dc-act">' + esc(day.act) + '</p>' : '')
+      + '<p class="dc-meta">Meals · ' + esc(day.meals || 'none') + ' · Overnight · ' + esc(day.over || day.city || '—') + '</p></div>';
+  }).join('') : '<p class="muted">No itinerary days yet.</p>';
+  return '<div class="panel"><div class="panel-head"><div><h3>Itinerary days</h3></div>'
+    + '<button class="secondary compact" type="button" id="qb-day-toggle" onclick="qbToggleForm(\'day\')" aria-expanded="' + (open ? 'true' : 'false') + '" aria-controls="qb-day-form"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg> Add day</button></div>'
+    + form + '<div id="qb-days">' + cards + '</div></div>';
+}
+
+function qbTotalsRailMarkup(computed) {
+  const builder = quoteBuilderState;
+  const pax = qbPaxCount();
+  return '<div class="panel" style="margin-bottom:14px"><div class="panel-head"><div><h3>Totals</h3></div><span class="muted">recomputed live</span></div>'
+    + '<div class="soa-row"><span>Subtotal · <span id="qb-count">' + builder.items.length + ' item' + (builder.items.length === 1 ? '' : 's') + '</span></span><b class="num" id="qb-sub">' + qbMoney(computed.sell) + '</b></div>'
+    + '<div class="soa-row"><span>Service fee <span class="muted">(' + esc(builder.currency) + ')</span></span><input id="qb-fee" class="nq-fee" type="number" min="0" step="50" value="' + esc(builder.fee || 0) + '" aria-label="Service fee" oninput="qbFeeInput(this.value)"></div>'
+    + '<div class="soa-row total"><span>Grand total' + (pax ? ' · ' + pax + ' pax' : '') + '</span><b class="num" id="qb-grand">' + qbMoney(computed.grand) + '</b></div>'
+    + '<div class="nq-margin"><span>Margin — selling − cost <span class="src">Internal</span></span><b class="num" id="qb-margin">' + qbMoney(computed.margin) + ' · ' + computed.marginPct + '%</b></div>'
+    + '<p class="muted" style="font-size:11px;margin:4px 0 0">Supplier cost and margin never appear on the client sheet.</p>'
+    + '<div class="nq-valid"><label for="qb-valid">Valid to</label><input id="qb-valid" type="date" value="' + esc(builder.validUntil || '') + '" onchange="qbValidInput(this.value)"></div>'
+    + '<p class="muted" style="font-size:11px;margin:4px 0 0">Default +' + esc(quotationDefaults().validityDays || 7) + ' days from today.</p>'
+    + '</div>';
+}
+
+function qbSheetMarkup(computed, records) {
+  const builder = quoteBuilderState;
+  const client = records.client || {};
+  const pax = qbPaxCount();
+  const requirements = qbRequirements();
+  const contact = [client.primary_phone, client.primary_email].filter(Boolean).join(' · ') || 'Contact not recorded';
+  const itemRows = builder.items.length ? builder.items.map((item) => '<tr><td><b>' + esc(item.serviceType) + '</b> — ' + esc(item.description) + (item.qty > 1 ? ' <span style="color:var(--sea-fog)">× ' + esc(item.qty) + '</span>' : '') + '</td><td class="num" style="font-weight:750">' + qbMoney(item.qty * item.sell) + '</td></tr>').join('') : '<tr><td class="muted">No items yet</td><td class="num">—</td></tr>';
+  const flights = builder.flights.length ? '<b>Flights.</b> ' + builder.flights.map((flight) => esc(flight.no) + ' · ' + esc(flight.route) + ' · ' + qbDateLabel(flight.date) + ' · ' + esc(flight.dep || '--:--') + '–' + esc(flight.arr || '--:--') + (flight.airline ? ' (' + esc(flight.airline) + ')' : '')).join('<br>') : '';
+  const itinerary = builder.days.length ? '<b>Itinerary.</b> ' + builder.days.map((day) => 'Day ' + esc(day.no) + ' — ' + esc(day.title) + (day.city ? ' (' + esc(day.city) + ')' : '')).join('<br>') : '';
+  return '<div class="sheet-wrap" id="qb-sheet-wrap"><span class="sheet-flag">Live client preview</span><div class="sheet">'
+    + '<div class="sheet-head"><div class="sheet-brand">WORLDMASTER INTERNATIONAL TRAVEL<span>Travel &amp; Tours · Manila, Philippines</span></div><div class="sheet-qno">DRAFT<span>Draft · prepared ' + qbDateLabel(new Date().toISOString().slice(0, 10)) + '</span></div></div>'
+    + '<div class="sheet-meta"><div><b>Prepared for</b>' + esc(client.display_name || client.legal_name || 'Client') + '<br>' + esc(contact) + '</div>'
+    + '<div><b>Valid to</b><span id="qb-sheet-valid">' + esc(qbValidText()) + '</span><br><span id="qb-sheet-ctx">' + esc([pax ? pax + ' pax' : '', requirements.destination || '', qbTravelWindow() !== 'Not recorded' ? qbTravelWindow() : ''].filter(Boolean).join(' · ') || 'Trip details pending') + '</span></div></div>'
+    + '<table><thead><tr><th scope="col">Inclusions</th><th scope="col" class="num">Amount</th></tr></thead><tbody id="qb-sheet-items">' + itemRows + '</tbody></table>'
+    + '<div id="qb-sheet-flights" class="sheet-terms" style="margin-top:10px"' + (builder.flights.length ? '' : ' hidden') + '>' + flights + '</div>'
+    + '<div id="qb-sheet-itin" class="sheet-terms" style="margin-top:8px"' + (builder.days.length ? '' : ' hidden') + '>' + itinerary + '</div>'
+    + '<div class="q-totals" style="max-width:none;margin:12px 0 0">'
+    + '<div><span>Subtotal</span><b class="num" id="qb-sheet-sub">' + qbMoney(computed.sell) + '</b></div>'
+    + '<div><span>Documentation &amp; service fee</span><b class="num" id="qb-sheet-fee">' + qbMoney(computed.fee) + '</b></div>'
+    + (pax ? '<div><span>Per pax · ' + pax + '</span><b class="num" id="qb-sheet-pax">' + qbMoney(computed.grand / pax) + '</b></div>' : '')
+    + '<div class="grand"><span>Total' + (pax ? ' · ' + pax + ' pax' : '') + '</span><span class="num" id="qb-sheet-grand">' + qbMoney(computed.grand) + '</span></div></div>'
+    + '<div class="sheet-terms"><b>Payment terms.</b> ' + esc(quotationDefaults().paymentTerms || 'Payment terms to be confirmed.') + ' Payment due in quotation currency (' + esc(builder.currency) + ').<br><b>Validity.</b> This quotation is guaranteed until <span id="qb-sheet-valid2">' + esc(qbDateLabel(builder.validUntil)) + '</span>; after that, pricing is subject to re-confirmation.</div>'
+    + '<div class="sheet-foot">This quotation is not a confirmed booking. Availability and fares are verified at acceptance — Worldmaster never claims confirmed arrangements until the supplier confirms in writing.</div>'
+    + '</div></div>';
+}
+
+function renderQuoteBuilder() {
+  const target = $('quote-builder-content');
+  if (!target) return;
+  if (!quoteBuilderState || !inquiryById(quoteBuilderState.inquiryId)) {
+    quoteBuilderState = null;
+    target.innerHTML = qbInquiryPickerMarkup();
+    return;
+  }
+  const inquiry = inquiryById(quoteBuilderState.inquiryId);
+  const records = recordsForInquiry(inquiry);
+  const requirements = inquiry.current_requirements || {};
+  const projection = projectionForInquiry(inquiry.inquiry_id);
+  const computed = qbComputed();
+  const currencyOptions = ['PHP', 'USD', 'EUR', 'JPY', 'SGD'].map((code) => '<option value="' + code + '"' + (code === quoteBuilderState.currency ? ' selected' : '') + '>' + code + '</option>').join('');
+  target.innerHTML =
+    '<div class="selection-bar">'
+    + '<button class="secondary compact" type="button" onclick="qbBackToQuotations()"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5"/><path d="m11 18-6-6 6-6"/></svg> Back to Quotations</button>'
+    + '<strong>' + esc(records.client && records.client.display_name || 'Quote builder') + '</strong>'
+    + '<span class="spacer"></span>'
+    + '<label class="qb-cur" for="qb-currency">Currency <select id="qb-currency" onchange="qbCurrencyInput(this.value)">' + currencyOptions + '</select></label>'
+    + '<button class="secondary compact" type="button" onclick="qbPreviewSheet()"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg> Preview</button>'
+    + '<button type="button" id="qb-save" onclick="qbSaveDraft()"' + (quoteBuilderState.saving ? ' disabled' : '') + '><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg> Save draft</button>'
+    + '</div>'
+    + '<div class="panel"><div class="booking-band"><div>'
+    + '<span class="booking-id">' + esc(inquiry.inquiry_id) + '</span>'
+    + '<h3 style="margin-top:4px">' + esc(records.client && records.client.display_name || 'Client') + ' — ' + esc(requirements.destination || 'Destination pending') + '</h3>'
+    + '<div class="kv"><span>Stage <b>' + esc(readableState(projection && projection.currentStage || 'NOT_PROJECTED')) + '</b></span>'
+    + '<span>Pax <b>' + esc(requirements.pax_count || '—') + '</b></span>'
+    + '<span>Window <b>' + esc(qbTravelWindow()) + '</b></span>'
+    + '<span>Mobile <b>' + esc(records.client && records.client.primary_phone || 'Not recorded') + '</b></span></div>'
+    + '</div><span class="status warn" style="align-self:flex-start">Draft · not yet numbered</span></div></div>'
+    + '<div class="nq-grid"><div>'
+    + '<div class="panel"><div class="panel-head"><div><h3>Items</h3></div><span class="muted">unit cost is internal — never shown to the client</span></div>'
+    + qbItemFormMarkup() + qbItemsTableMarkup() + '</div>'
+    + qbFlightsMarkup()
+    + qbDaysMarkup()
+    + '</div><div class="nq-aside">'
+    + qbTotalsRailMarkup(computed)
+    + qbSheetMarkup(computed, records)
+    + '</div></div>';
+}
+
+function qbFocus(id) {
+  const node = $(id);
+  if (node && node.focus) node.focus();
+}
+
+function qbEndEdit(kind) {
+  if (!quoteBuilderState) return;
+  quoteBuilderState.edit[kind] = -1;
+  if (kind === 'flight') quoteBuilderState.flightFormOpen = false;
+  if (kind === 'day') quoteBuilderState.dayFormOpen = false;
+}
+
+function qbCancelEdit(kind) {
+  qbEndEdit(kind);
+  render();
+}
+
+function qbSubmitItem(event) {
+  event.preventDefault();
+  const builder = quoteBuilderState;
+  if (!builder) return false;
+  const description = $('qb-desc').value.trim();
+  const sell = Math.max(0, Number($('qb-sell').value) || 0);
+  if (!description || !(sell > 0)) { showMessage('✕ Add item — NOT EXECUTED', 'Add a description and a unit selling price first.', 'error'); return false; }
+  const entry = {
+    serviceType: $('qb-svc').value,
+    description: description,
+    supplierId: $('qb-sup').value || '',
+    qty: Math.max(1, Math.round(Number($('qb-qty').value) || 1)),
+    cost: Math.max(0, Number($('qb-cost').value) || 0),
+    sell: sell
+  };
+  if (entry.sell < entry.cost) showMessage('Item priced below cost', 'Kept internally, but the draft cannot be saved until every selling price covers its unit cost.', 'warn');
+  const editing = builder.edit.item;
+  if (editing > -1) builder.items[editing] = entry;
+  else builder.items.push(entry);
+  qbEndEdit('item');
+  render();
+  qbFocus('qb-desc');
+  return false;
+}
+
+function qbSubmitFlight(event) {
+  event.preventDefault();
+  const builder = quoteBuilderState;
+  if (!builder) return false;
+  const no = $('qb-f-no').value.trim();
+  const route = $('qb-f-route').value.trim();
+  if (!no || !route) { showMessage('✕ Add flight — NOT EXECUTED', 'Add at least a flight number and a route.', 'error'); return false; }
+  const match = route.match(/^\s*([A-Za-z0-9]{3,})\s*(?:–|—|->|−|-|\s+to\s+)\s*([A-Za-z0-9]{3,})\s*$/i);
+  const entry = {
+    airline: $('qb-f-airline').value.trim(),
+    no: no,
+    route: route,
+    from: match ? match[1].toUpperCase() : route.toUpperCase(),
+    to: match ? match[2].toUpperCase() : '',
+    date: $('qb-f-date').value,
+    dep: $('qb-f-dep').value,
+    arr: $('qb-f-arr').value
+  };
+  const editing = builder.edit.flight;
+  if (editing > -1) builder.flights[editing] = entry;
+  else builder.flights.push(entry);
+  qbEndEdit('flight');
+  render();
+  return false;
+}
+
+function qbSubmitDay(event) {
+  event.preventDefault();
+  const builder = quoteBuilderState;
+  if (!builder) return false;
+  const title = $('qb-nd-title').value.trim();
+  if (!title) { showMessage('✕ Add day — NOT EXECUTED', 'Give the day a title.', 'error'); return false; }
+  const entry = {
+    no: Math.max(1, Math.round(Number($('qb-nd-no').value) || builder.days.length + 1)),
+    title: title,
+    city: $('qb-nd-city').value.trim(),
+    act: $('qb-nd-act').value.trim(),
+    meals: $('qb-nd-meals').value.trim(),
+    over: $('qb-nd-over').value.trim()
+  };
+  const editing = builder.edit.day;
+  if (editing > -1) builder.days[editing] = entry;
+  else builder.days.push(entry);
+  qbEndEdit('day');
+  render();
+  return false;
+}
+
+function qbEditItem(index) {
+  if (!quoteBuilderState) return;
+  quoteBuilderState.edit.item = index;
+  render();
+  qbFocus('qb-desc');
+}
+
+function qbEditFlight(index) {
+  if (!quoteBuilderState) return;
+  quoteBuilderState.edit.flight = index;
+  render();
+  qbFocus('qb-f-no');
+}
+
+function qbEditDay(index) {
+  if (!quoteBuilderState) return;
+  quoteBuilderState.edit.day = index;
+  render();
+  qbFocus('qb-nd-title');
+}
+
+function qbRemoveItem(index) {
+  const builder = quoteBuilderState;
+  if (!builder) return;
+  if (builder.edit.item === index) qbEndEdit('item');
+  else if (builder.edit.item > index) builder.edit.item -= 1;
+  builder.items.splice(index, 1);
+  render();
+}
+
+function qbRemoveFlight(index) {
+  const builder = quoteBuilderState;
+  if (!builder) return;
+  if (builder.edit.flight === index) qbEndEdit('flight');
+  else if (builder.edit.flight > index) builder.edit.flight -= 1;
+  builder.flights.splice(index, 1);
+  render();
+}
+
+function qbRemoveDay(index) {
+  const builder = quoteBuilderState;
+  if (!builder) return;
+  if (builder.edit.day === index) qbEndEdit('day');
+  else if (builder.edit.day > index) builder.edit.day -= 1;
+  builder.days.splice(index, 1);
+  render();
+}
+
+function qbToggleForm(kind) {
+  const builder = quoteBuilderState;
+  if (!builder) return;
+  if (kind === 'flight') { builder.flightFormOpen = !builder.flightFormOpen; builder.edit.flight = -1; render(); if (builder.flightFormOpen) qbFocus('qb-f-no'); }
+  else { builder.dayFormOpen = !builder.dayFormOpen; builder.edit.day = -1; render(); if (builder.dayFormOpen) qbFocus('qb-nd-title'); }
+}
+
+function qbFeeInput(value) {
+  if (!quoteBuilderState) return;
+  quoteBuilderState.fee = Math.max(0, Number(value) || 0);
+  qbUpdateComputed();
+}
+
+function qbValidInput(value) {
+  if (!quoteBuilderState) return;
+  quoteBuilderState.validUntil = value;
+  render();
+}
+
+function qbCurrencyInput(value) {
+  if (!quoteBuilderState) return;
+  quoteBuilderState.currency = String(value || 'PHP').trim().toUpperCase();
+  render();
+}
+
+function qbUpdateComputed() {
+  if (!quoteBuilderState) return;
+  const computed = qbComputed();
+  const pax = qbPaxCount();
+  const set = (id, text) => { const node = $(id); if (node) node.textContent = text; };
+  set('qb-sub', qbMoney(computed.sell));
+  set('qb-grand', qbMoney(computed.grand));
+  set('qb-margin', qbMoney(computed.margin) + ' · ' + computed.marginPct + '%');
+  set('qb-sheet-sub', qbMoney(computed.sell));
+  set('qb-sheet-fee', qbMoney(computed.fee));
+  set('qb-sheet-grand', qbMoney(computed.grand));
+  if (pax) set('qb-sheet-pax', qbMoney(computed.grand / pax));
+}
+
+function qbPreviewSheet() {
+  const wrap = $('qb-sheet-wrap');
+  if (!wrap) return;
+  wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  wrap.classList.remove('nq-flash');
+  void wrap.offsetWidth;
+  wrap.classList.add('nq-flash');
+  showMessage('Client preview', 'The sheet on the right is exactly what the client receives — internal costs and margin never appear on it.', 'ok');
+}
+
+function qbFlightSegment(flight) {
+  return {
+    segment_type: 'FLIGHT',
+    flight_date: flight.date || undefined,
+    airline: flight.airline || undefined,
+    flight_number: flight.no || undefined,
+    departure_airport: flight.from || undefined,
+    arrival_airport: flight.to || undefined,
+    departure_time: flight.dep || undefined,
+    arrival_time: flight.arr || undefined
+  };
+}
+
+function qbDayDate(dayNo, requirements) {
+  if (!requirements || !requirements.travel_start) return '';
+  const start = new Date(requirements.travel_start + 'T00:00:00');
+  if (isNaN(start)) return '';
+  start.setDate(start.getDate() + (Math.max(1, Number(dayNo) || 1) - 1));
+  return start.getFullYear() + '-' + String(start.getMonth() + 1).padStart(2, '0') + '-' + String(start.getDate()).padStart(2, '0');
+}
+
+function qbOpenDraft(quotationId, warnTitle, warnDetail) {
+  quoteBuilderState = null;
+  setWorkspaceId('quotation', quotationId);
+  if (warnTitle) showMessage(warnTitle, warnDetail, 'warn');
+  if (currentTab() === 'quotation') render();
+  else window.location.hash = 'quotation';
+}
+
+async function qbSaveDraft() {
+  const builder = quoteBuilderState;
+  if (!builder || builder.saving) return;
+  const inquiry = inquiryById(builder.inquiryId);
+  if (!inquiry) { quoteBuilderState = null; render(); return failLocal('That Inquiry is no longer available.'); }
+  const requirements = inquiry.current_requirements || {};
+  if (!builder.items.length) return failLocal('Add at least one item before saving the draft.');
+  const belowCost = builder.items.find((item) => item.sell < item.cost);
+  if (belowCost) return failLocal('"' + belowCost.description + '" sells below its unit cost — raise the selling price or lower the internal cost before saving.');
+  if (!requirements.destination && (builder.flights.length || builder.days.length)) return failLocal('This Inquiry has no destination recorded — flights and itinerary days cannot be saved without one. Add the destination on the Inquiry first.');
+  builder.saving = true;
+  render();
+  const quote = await api('createQuotation', {
+    inquiry_id: inquiry.inquiry_id,
+    client_id: inquiry.client_id,
+    destination: requirements.destination,
+    travel_start: requirements.travel_start,
+    travel_end: requirements.travel_end,
+    pax_count: requirements.pax_count,
+    quotation_date: new Date().toISOString().slice(0, 10),
+    valid_until: builder.validUntil || defaultQuotationValidUntil(),
+    currency: builder.currency,
+    supplier_cost_total: '0.00',
+    fixed_fees: Number(builder.fee || 0).toFixed(2),
+    discount: '0.00',
+    notes: 'Manual quotation built with the quote builder.'
+  }, 'LOCAL_STAFF');
+  if (!quote || !quote.quotation_id) { builder.saving = false; render(); return; }
+  for (let index = 0; index < builder.items.length; index += 1) {
+    const item = builder.items[index];
+    const created = await api('createQuotationItem', {
+      quotation_id: quote.quotation_id,
+      service_type: item.serviceType,
+      description: item.description,
+      supplier_id: item.supplierId || undefined,
+      quantity: String(item.qty),
+      unit_cost: Number(item.cost || 0).toFixed(2),
+      unit_selling_price: Number(item.sell || 0).toFixed(2),
+      currency: builder.currency
+    }, 'LOCAL_STAFF');
+    if (!created) {
+      return qbOpenDraft(quote.quotation_id, 'Draft partially created', 'Item ' + (index + 1) + ' was rejected, so the draft keeps only the earlier lines. Finish it in the quotation editor — nothing was lost.');
+    }
+  }
+  if (builder.flights.length) {
+    const saved = await api('updateQuotation', { quotation_id: quote.quotation_id, flight_details: JSON.stringify(builder.flights.map(qbFlightSegment)) }, 'LOCAL_STAFF');
+    if (!saved) return qbOpenDraft(quote.quotation_id, 'Draft created without flights', 'The flight details were rejected. The draft is saved with its items — add the flights in the quotation editor.');
+  }
+  if (builder.days.length) {
+    const saved = await api('updateQuotation', { quotation_id: quote.quotation_id, itinerary: JSON.stringify(builder.days.map((day) => ({ day: day.no, date: qbDayDate(day.no, requirements), city: day.city, title: day.title, activities: day.act, meals: day.meals, overnight: day.over, notes: '' }))) }, 'LOCAL_STAFF');
+    if (!saved) return qbOpenDraft(quote.quotation_id, 'Draft created without itinerary', 'The itinerary days were rejected. The draft is saved with its items — add the days in the quotation editor.');
+  }
+  qbOpenDraft(quote.quotation_id);
+}
 if (!isLocalWorkspace()) ['btn-fill-test', 'btn-reset-synthetic'].forEach((id) => { const el = $(id); if (el) el.hidden = true; });

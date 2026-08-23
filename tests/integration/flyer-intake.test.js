@@ -112,6 +112,27 @@ test('adapter parses openai and gemini responses into sanitized draft fields', a
   assert.equal(captured.key, 'gem-key');
   assert.equal(captured.body.contents[0].parts[1].inline_data.mime_type, 'image/png');
 
+  const openrouterDefault = createFlyerExtractionAdapter({ provider: 'openrouter', apiKey: 'or-key' });
+  assert.equal(openrouterDefault.available, true);
+  assert.equal(openrouterDefault.model, 'stealth/ox-alpha', 'owner-picked default');
+  const openrouter = createFlyerExtractionAdapter({
+    provider: 'openrouter', apiKey: 'or-key', model: 'stealth/ox-alpha',
+    fetchImpl: async (url, options) => {
+      captured = { url, auth: options.headers.Authorization, title: options.headers['X-Title'], body: JSON.parse(options.body) };
+      return openAiResponse(JSON.stringify(FLYER_FIELDS));
+    }
+  });
+  const openrouterResult = await openrouter.extract({ image_base64: TINY_PNG_BASE64, mime_type: 'image/png' });
+  assert.equal(openrouterResult.ok, true);
+  assert.equal(openrouterResult.provider, 'openrouter');
+  assert.equal(openrouterResult.model, 'stealth/ox-alpha');
+  assert.equal(openrouterResult.fields.name, 'Bangkok City Break 4D3N', 'OpenAI-shaped responses parse');
+  assert.equal(captured.url, 'https://openrouter.ai/api/v1/chat/completions');
+  assert.equal(captured.auth, 'Bearer or-key');
+  assert.equal(captured.title, 'WMIT flyer intake');
+  assert.equal(captured.body.model, 'stealth/ox-alpha');
+  assert.ok(captured.body.messages.some((message) => Array.isArray(message.content) && message.content.some((part) => part.type === 'image_url')));
+
   const garbage = createFlyerExtractionAdapter({ provider: 'openai', apiKey: 'k', fetchImpl: async () => openAiResponse('total garbage, not json') });
   const garbageResult = await garbage.extract({ image_base64: TINY_PNG_BASE64, mime_type: 'image/png' });
   assert.equal(garbageResult.ok, true, 'garbage never throws');

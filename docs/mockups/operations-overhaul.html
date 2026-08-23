@@ -1,0 +1,2154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Operations Workspace — UI Overhaul Proposal (Mockup) · WMIT</title>
+<meta name="description" content="Mockup proposal for the WMIT Operations Workspace overhaul. Self-contained, synthetic data, not wired to the server.">
+<style>
+/* ============================================================
+   WMIT Operations Workspace — UI overhaul proposal (self-contained mockup)
+   Design lineage: identical token set as the Expo Console proposal
+   (docs/mockups/expo-console-overhaul.html), itself descended from
+   app/public/tokens.css "Operations Ledger" system: navy #14334f
+   authority band, manifest green #177245 primary actions, passage
+   blue #3679b6 data accent, chart-paper #f5f7fb ground, rule-line
+   borders, stamped pills. System font stack only — no external
+   requests of any kind.
+   ============================================================ */
+:root{
+  --navy:#14334f; --navy-deep:#102a40; --navy-line:#2a4d6d;
+  --ink:#172334; --fog:#607085; --label:#56677a;
+  --paper:#fff; --tint:#fbfcfe; --well:#f1f5f9; --chart:#f5f7fb;
+  --rule:#d9e2ec; --rule-hair:#e6ebf0; --rule-input:#c8d2df;
+  --green:#177245; --green-deep:#14603c;
+  --slate:#34526f; --slate-deep:#2b455d;
+  --blue:#3679b6; --blue-deep:#245c89; --blue-fill:#4d87bf; --blue-mid:#6f9fd0; --blue-soft:#93b9dc;
+  --good-bg:#dcf3e3; --good-text:#176237; --good-wash:#eef9f1; --good-rule:#add9b7;
+  --warn-bg:#fff1c6; --warn-text:#70530b; --warn-wash:#fff8df; --warn-rule:#e3c777;
+  --bad-bg:#f9dddd; --bad-text:#8d2c2c; --bad-wash:#fff5f5; --bad-rule:#e3aaaa;
+  --info-bg:#dcecfb; --info-text:#245c89;
+  --neutral-bg:#edf2f7; --neutral-text:#4e6175;
+  --wa-bg:#e7f6ec; --wa-text:#116936; --wa-line:#b9e2c6;
+  --vb-bg:#ece7f6; --vb-text:#553099; --vb-line:#d4c8ee;
+  --sh-1:0 1px 2px rgba(23,35,52,.05),0 1px 6px rgba(23,35,52,.05);
+  --sh-2:0 6px 18px rgba(23,35,52,.12);
+  --sh-head:0 2px 10px rgba(23,35,52,.16);
+  --r-sm:6px; --r-md:8px; --r-lg:12px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif;font-size:13px;line-height:1.5;color:var(--ink);background:var(--chart)}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+::selection{background:var(--info-bg);color:var(--ink)}
+h1,h2,h3,h4,p{margin:0}
+h2{font-size:17px;font-weight:750;letter-spacing:-.01em}
+h3{font-size:14px;font-weight:700}
+.eyebrow{font-size:10.5px;font-weight:750;text-transform:uppercase;letter-spacing:.09em;color:var(--label)}
+.muted{color:var(--fog);font-size:12.5px}
+svg.i{width:14px;height:14px;flex:none;stroke:currentColor;stroke-width:1.9;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11.5px;overflow-wrap:anywhere}
+
+/* ---------- proposal banner ---------- */
+.proposal-banner{display:flex;gap:12px;align-items:flex-start;background:var(--warn-wash);border-bottom:1px solid var(--warn-rule);padding:10px 20px;color:#5a430f;font-size:12.5px}
+.proposal-banner .i{margin-top:2px;color:var(--warn-text);width:16px;height:16px}
+.proposal-banner .pb-body{flex:1}
+.proposal-banner .pb-body b{font-weight:750}
+.banner-dismiss{border:0;background:none;font:inherit;font-size:12px;font-weight:700;color:#7a5c12;cursor:pointer;padding:4px 8px;border-radius:6px;display:inline-flex;align-items:center;gap:4px}
+.banner-dismiss:hover{background:var(--warn-bg)}
+
+/* ---------- top bar ---------- */
+.topbar{position:sticky;top:0;z-index:40;background:linear-gradient(180deg,#17395a,var(--navy));color:#eaf2fa;transition:box-shadow .2s}
+.topbar.scrolled{box-shadow:var(--sh-head)}
+.topbar-inner{max-width:1240px;margin:0 auto;padding:10px 20px 8px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:9px;text-decoration:none;color:#fff}
+.brand .mark{width:30px;height:30px;border-radius:8px;background:#ffffff1f;border:1px solid #ffffff2e;display:flex;align-items:center;justify-content:center}
+.brand .mark svg{width:17px;height:17px}
+.brand-name{font-size:15px;font-weight:800;letter-spacing:.02em}
+.brand-sub{font-size:11px;color:#bcd2e4;display:block;margin-top:-3px;font-weight:600}
+/* global search — flagship */
+.gsearch-wrap{position:relative;flex:1;max-width:560px;min-width:230px}
+.gsearch{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--rule-input);border-radius:999px;padding:8px 8px 8px 14px;box-shadow:0 1px 4px rgba(16,42,64,.25)}
+.gsearch:focus-within{border-color:var(--blue-mid)}
+.gsearch .i{color:var(--fog);width:15px;height:15px}
+.gsearch input{flex:1;border:0;font:inherit;font-size:13px;outline:none;background:none;color:var(--ink);min-width:0}
+.gsearch input::placeholder{color:#8a99ab}
+.gsearch kbd{font:inherit;font-size:10.5px;font-weight:750;color:var(--label);background:var(--well);border:1px solid var(--rule-input);border-bottom-width:2px;border-radius:5px;padding:1px 7px;letter-spacing:.04em}
+.gsearch-drop{position:absolute;top:calc(100% + 7px);left:0;right:0;background:#fff;border:1px solid var(--rule);border-radius:10px;box-shadow:var(--sh-2);overflow:hidden;display:none;z-index:60;color:var(--ink)}
+.gsearch-drop.open{display:block}
+.gs-row{padding:9px 13px;border-bottom:1px solid var(--rule-hair);cursor:pointer}
+.gs-row:last-child{border-bottom:0}
+.gs-row:hover,.gs-row.gs-active{background:var(--tint)}
+.gs-row b{display:block;font-size:13px;font-weight:750}
+.gs-row span{display:block;font-size:11px;color:var(--fog)}
+.gs-row .gs-kind{font-weight:750;text-transform:uppercase;letter-spacing:.05em;font-size:10px;color:var(--blue-deep)}
+.gs-foot{padding:7px 13px;font-size:10.5px;color:var(--fog);background:var(--tint)}
+.staff{display:flex;align-items:center;gap:10px;margin-left:auto}
+.avatar{width:32px;height:32px;border-radius:50%;background:#315877;border:1px solid #4a7699;display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:800;color:#fff;letter-spacing:.03em}
+.staff-meta{line-height:1.25}
+.staff-meta b{display:block;font-size:12.5px;color:#fff}
+.staff-meta span{font-size:11px;color:#a9c3d9}
+.chip-btn{display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:12px;font-weight:700;color:#dbe8f4;background:#ffffff14;border:1px solid #ffffff2b;border-radius:var(--r-sm);padding:6px 10px;cursor:pointer;white-space:nowrap}
+.chip-btn:hover{background:#ffffff24}
+.chip-btn .i{width:13px;height:13px}
+/* tabs */
+.tabs-row{width:100%;padding:0 16px;display:flex;gap:6px;align-items:center}
+.tabs-scroll{flex:1;min-width:0;position:relative}
+.tabs-scroll::after{content:'';position:absolute;top:0;right:0;bottom:0;width:26px;background:linear-gradient(90deg,rgba(20,51,79,0),var(--navy));pointer-events:none;opacity:0;transition:opacity .15s}
+.tabs-scroll.has-more::after{opacity:1}
+.tabs{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{border:0;background:none;font:inherit;font-size:13px;font-weight:600;color:#c6d9e9;padding:9px 14px;border-radius:8px 8px 0 0;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:7px}
+.tab:hover{color:#fff;background:#ffffff12}
+.tab.active{background:var(--chart);color:var(--navy);font-weight:750;box-shadow:0 -1px 0 #ffffff26 inset}
+.tab-badge{background:#c94848;color:#fff;font-size:10.5px;font-weight:800;border-radius:999px;padding:1px 6px;line-height:1.5}
+.tab.active .tab-badge{background:#b03a3a}
+.tab-dot{width:5px;height:5px;border-radius:50%;background:#59c98b;flex:none}
+
+/* ---------- layout ---------- */
+main{max-width:1240px;margin:0 auto;padding:20px}
+.view{display:none}
+.view.active{display:block;animation:fade .25s ease-out}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.view-head{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;margin-bottom:14px;flex-wrap:wrap}
+.view-head .muted{margin-top:2px;max-width:680px}
+.panel{background:var(--paper);border:1px solid var(--rule);border-radius:var(--r-lg);box-shadow:var(--sh-1);padding:16px 18px;margin-bottom:16px}
+.panel-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:12px}
+.panel-head .muted{font-size:12px}
+
+/* ---------- buttons ---------- */
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid transparent;border-radius:var(--r-sm);padding:8px 12px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer;color:#fff;background:var(--slate)}
+.btn:hover{background:var(--slate-deep)}
+.btn:disabled{opacity:.55;cursor:default}
+.btn-primary{background:var(--green)}
+.btn-primary:hover{background:var(--green-deep)}
+.btn-ghost{background:#fff;color:var(--slate);border-color:var(--rule-input)}
+.btn-ghost:hover{background:var(--tint);border-color:var(--slate);color:var(--slate-deep)}
+.btn-sm{padding:5px 9px;font-size:12px}
+
+/* ---------- pills & chips ---------- */
+.pill{display:inline-block;border-radius:999px;padding:2px 9px;font-size:10.5px;font-weight:800;letter-spacing:.03em;background:var(--neutral-bg);color:var(--neutral-text);text-transform:uppercase;white-space:nowrap}
+.pill-good{background:var(--good-bg);color:var(--good-text)}
+.pill-warn{background:var(--warn-bg);color:var(--warn-text)}
+.pill-bad{background:var(--bad-bg);color:var(--bad-text)}
+.pill-info{background:var(--info-bg);color:var(--info-text)}
+.pill-solid{background:var(--green);color:#fff}
+.pill-unknown{background:#fff;border:1px dashed var(--rule-input);color:var(--fog)}
+.sens{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--vb-text);background:var(--vb-bg);border:1px solid var(--vb-line);border-radius:4px;padding:1px 6px;white-space:nowrap}
+.sens .i{width:11px;height:11px}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--rule-input);background:#fff;border-radius:999px;padding:5px 12px;font:inherit;font-size:12px;font-weight:700;color:var(--label);cursor:pointer}
+.chip:hover{border-color:var(--slate)}
+.chip.active{background:var(--navy);border-color:var(--navy);color:#fff}
+.chip .cnt{font-weight:800;font-size:11px;opacity:.75}
+.src{display:inline-block;border:1px solid var(--rule);border-radius:4px;padding:0 6px;font-size:10.5px;font-weight:700;color:var(--label);letter-spacing:.04em}
+
+/* ---------- tables ---------- */
+.table-wrap{overflow:auto;border:1px solid var(--rule);border-radius:10px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule-hair);vertical-align:top}
+thead th{background:var(--well);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--label);font-weight:750;position:sticky;top:0;white-space:nowrap}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover{background:var(--tint)}
+.num{font-variant-numeric:tabular-nums}
+.win-track{height:5px;background:var(--well);border-radius:3px;overflow:hidden;min-width:70px}
+.win-fill{height:100%;background:var(--blue);border-radius:3px}
+.win-fill.green{background:var(--green)}
+.win-cell{display:flex;align-items:center;gap:8px}
+.win-cell span{font-size:11px;color:var(--fog);white-space:nowrap}
+
+/* ---------- today (owner cockpit) ---------- */
+.today-meta{display:flex;gap:14px;flex-wrap:wrap;color:var(--label);font-size:12.5px;margin-bottom:14px}
+.today-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.today-grid .panel{margin-bottom:0;display:flex;flex-direction:column}
+.today-grid .panel.wide{grid-column:1/-1}
+.t-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:6px}
+.t-count{font-size:20px;font-weight:800;color:var(--blue-deep);font-variant-numeric:tabular-nums}
+.t-item{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--rule-hair);font-size:12.5px}
+.t-item:last-of-type{border-bottom:0}
+.t-item.is-done{opacity:.5}
+.t-main{flex:1;min-width:0}
+.t-main b{font-weight:750}
+.t-sub{font-size:11.5px;color:var(--fog);margin-top:1px}
+.t-sub .mono{font-size:11px}
+.t-side{text-align:right;flex:none}
+.t-amt{font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+.t-more{margin-top:8px}
+
+/* ---------- case command center ---------- */
+.case-band .chain{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px}
+.chain .mono{font-weight:700;color:var(--slate);background:var(--well);border:1px solid var(--rule-hair);border-radius:5px;padding:2px 7px;white-space:nowrap}
+.chain .arrow{color:var(--fog);font-size:11px}
+.case-grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(290px,1fr);gap:14px;align-items:start;margin-top:14px}
+.next-hero{background:var(--warn-wash);border:1px solid var(--warn-rule);border-left:4px solid #d9a93c;border-radius:var(--r-lg);padding:14px 16px;box-shadow:var(--sh-1)}
+.next-hero .eyebrow{color:var(--warn-text)}
+.next-hero h3{font-size:17px;letter-spacing:-.01em;margin:5px 0 5px}
+.next-hero p{font-size:12.5px;color:#43566c}
+.next-hero .btn{margin-top:11px}
+.state-line{font-size:11.5px;color:var(--fog);letter-spacing:.04em;margin-top:6px}
+.fin-cells{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:12px 0 10px}
+.fin-cell{background:var(--tint);border:1px solid var(--rule-hair);border-radius:8px;padding:8px 11px;min-width:0}
+.fin-cell .fl{display:block;font-size:10px;font-weight:750;text-transform:uppercase;letter-spacing:.07em;color:var(--label)}
+.fin-cell .fv{display:block;font-size:15.5px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:2px;white-space:nowrap}
+.fin-cell.hero{background:var(--good-wash);border-color:var(--good-rule)}
+.fin-cell.hero .fv{color:var(--green-deep)}
+.fin-cell.bad .fv{color:var(--bad-text)}
+.deadline{border:1px solid var(--rule);border-radius:10px;background:var(--tint);padding:11px 13px;margin-bottom:12px}
+.deadline .fl{display:block;font-size:10px;font-weight:750;text-transform:uppercase;letter-spacing:.07em;color:var(--label);margin-bottom:3px}
+.deadline .dl-label{font-size:12.5px;font-weight:750}
+.deadline .dl-at{display:block;font-size:12px;color:var(--fog);margin-top:2px}
+.deadline.overdue{background:var(--bad-wash);border-color:var(--bad-rule)}
+.deadline.overdue .fl{color:var(--bad-text)}
+.deadline.overdue .dl-at{color:var(--bad-text);font-weight:700}
+.blockers{margin:8px 0 0;padding-left:19px;color:#70530b;font-size:12.5px}
+.blockers li{margin:5px 0}
+.blockers.none{list-style:none;padding-left:0;color:var(--good-text)}
+.trav-list{display:flex;gap:8px;flex-wrap:wrap}
+.trav{border:1px solid var(--rule-input);background:var(--tint);border-radius:8px;padding:6px 10px;min-width:0}
+.trav b{display:block;font-size:12.5px;font-weight:750}
+.trav span{display:block;font-size:10.5px;color:var(--fog)}
+.task{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--rule-hair);font-size:12.5px}
+.task:last-child{border-bottom:0}
+.task.is-done{opacity:.55}
+.task .t-id{flex:none}
+.task .t-text{flex:1;min-width:0}
+.task .t-due{flex:none}
+
+/* ---------- quotation ---------- */
+.quote-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(330px,.85fr);gap:16px;align-items:start}
+.optcard{position:relative;border:1px solid var(--rule);border-radius:var(--r-lg);background:var(--paper);box-shadow:var(--sh-1);padding:14px 16px;margin-bottom:12px;cursor:pointer;transition:border-color .15s,box-shadow .15s}
+.optcard:hover{border-color:var(--blue-mid)}
+.optcard.is-selected{border-color:var(--good-rule);background:var(--good-wash)}
+.optcard .opt-top{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:4px}
+.optcard h3{font-size:14.5px;letter-spacing:-.01em}
+.opt-price{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--navy);margin:5px 0 3px}
+.opt-price span{font-size:11px;color:var(--fog);font-weight:600}
+.opt-inc{margin:7px 0 0;padding:0;list-style:none}
+.opt-inc li{display:flex;gap:7px;align-items:flex-start;font-size:12px;color:#43566c;padding:2px 0}
+.opt-inc .i{width:13px;height:13px;color:var(--green);margin-top:2.5px}
+.opt-check{position:absolute;top:12px;right:12px;width:22px;height:22px;border-radius:50%;background:var(--good-bg);border:1px solid var(--good-rule);color:var(--good-text);display:none;align-items:center;justify-content:center}
+.opt-check .i{width:12px;height:12px;stroke-width:2.4}
+.optcard.is-selected .opt-check{display:flex}
+.q-totals{max-width:340px;margin:12px 0 0 auto}
+.q-totals div{display:flex;justify-content:space-between;padding:5px 0;font-size:12.5px}
+.q-totals .grand{border-top:2px solid var(--navy);font-size:14px;font-weight:800;margin-top:5px;padding-top:9px}
+.sheet-wrap{position:relative}
+.sheet-flag{position:absolute;top:-9px;right:14px;z-index:2;background:var(--info-bg);color:var(--info-text);border:1px solid #b9d4ec;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:2px 10px}
+.sheet{background:#fff;border:1px solid var(--rule);border-radius:var(--r-lg);box-shadow:var(--sh-2);padding:20px 22px;font-size:12px}
+.sheet-head{display:flex;justify-content:space-between;gap:14px;border-bottom:2px solid var(--navy);padding-bottom:11px;margin-bottom:12px;flex-wrap:wrap}
+.sheet-brand{font-size:14px;font-weight:800;letter-spacing:.05em;color:var(--navy)}
+.sheet-brand span{display:block;font-size:10.5px;color:var(--fog);font-weight:600;letter-spacing:.02em;margin-top:2px}
+.sheet-qno{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12.5px;font-weight:700;color:var(--blue-deep);text-align:right}
+.sheet-qno span{display:block;font-size:10.5px;color:var(--fog);font-weight:500;font-family:inherit}
+.sheet-meta{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;margin-bottom:12px;font-size:11.5px}
+.sheet-meta b{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--label);display:block;font-weight:750}
+.sheet table{font-size:11.5px}
+.sheet th{padding:6px 7px}
+.sheet td{padding:6px 7px}
+.sheet-terms{border-top:1px solid var(--rule);margin-top:14px;padding-top:10px;font-size:11px;color:#43566c}
+.sheet-foot{margin-top:12px;color:var(--fog);font-size:10.5px}
+
+/* ---------- new quotation builder ---------- */
+.nq-grid{display:grid;grid-template-columns:minmax(0,1.16fr) minmax(330px,.84fr);gap:16px;align-items:start}
+.nq-aside{position:sticky;top:92px;max-height:calc(100vh - 106px);overflow:auto;padding:6px 6px 10px;margin:-6px -6px -10px;scrollbar-width:thin}
+#nqSheetWrap{scroll-margin-top:104px}
+.nq-form{display:flex;flex-wrap:wrap;gap:8px;align-items:end}
+.nq-form .field{flex:1 1 132px}
+.nq-form .field-grow{flex:2.2 1 220px}
+.nq-form .field-qty{flex:0 1 58px}
+.nq-form .field-price{flex:1 1 106px}
+.nq-form>button{flex:0 0 auto}
+.nq-form.nq-collapse{display:none;margin-bottom:12px}
+.nq-form.nq-collapse.open{display:flex}
+.field{display:flex;flex-direction:column;gap:3px;min-width:0}
+.field>label{font-size:10.5px;font-weight:750;text-transform:uppercase;letter-spacing:.06em;color:var(--label)}
+.field>label span{font-weight:650;text-transform:none;letter-spacing:0}
+.field input,.field select{font:inherit;font-size:12.5px;color:var(--ink);background:#fff;border:1px solid var(--rule-input);border-radius:6px;padding:7px 9px;width:100%}
+.field input:focus,.field select:focus{border-color:var(--blue-mid);outline:none}
+.field.internal>label{color:var(--fog)}
+.field.internal input{background:var(--well);color:#43566c}
+.flight-card{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border:1px solid var(--rule);border-radius:10px;background:var(--tint);padding:9px 12px;margin-bottom:8px}
+.flight-card:last-child{margin-bottom:0}
+.flight-card .fc-main{flex:1;min-width:200px}
+.flight-card .fc-no{font-weight:800}
+.flight-card .fc-meta{font-size:11.5px;color:var(--fog);margin-top:1px}
+.day-card{border:1px solid var(--rule);border-radius:10px;background:var(--tint);padding:10px 12px;margin-bottom:8px}
+.day-card:last-child{margin-bottom:0}
+.day-card .dc-head{display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap}
+.day-card .dc-head b{font-size:12.5px}
+.day-card .dc-act{font-size:12px;color:#43566c;margin-top:3px}
+.day-card .dc-meta{font-size:11.5px;color:var(--fog);margin-top:3px}
+.nq-fee{font:inherit;font-size:12.5px;color:var(--ink);background:#fff;border:1px solid var(--rule-input);border-radius:6px;padding:5px 8px;width:106px;text-align:right;font-variant-numeric:tabular-nums}
+.nq-margin{display:flex;justify-content:space-between;gap:10px;align-items:baseline;padding:9px 0 2px;font-size:12px;color:var(--fog);border-top:1px dashed var(--rule-hair);margin-top:8px;flex-wrap:wrap}
+.nq-margin b{font-variant-numeric:tabular-nums;white-space:nowrap;color:#43566c}
+.nq-valid{display:flex;justify-content:space-between;gap:10px;align-items:center;padding-top:9px;font-size:12px;color:var(--label)}
+.nq-valid label{font-size:10.5px;font-weight:750;text-transform:uppercase;letter-spacing:.06em;color:var(--label)}
+.nq-valid input{font:inherit;font-size:12.5px;color:var(--ink);background:#fff;border:1px solid var(--rule-input);border-radius:6px;padding:5px 8px}
+.nq-flash{animation:nqflash 1.1s ease-out 2}
+@keyframes nqflash{from{box-shadow:0 0 0 3px rgba(54,121,182,.55)}to{box-shadow:0 0 0 16px rgba(54,121,182,0)}}
+.tab-ext{text-decoration:none}
+.tab-ext .i{width:11px;height:11px;opacity:.7}
+.btn[hidden]{display:none!important}
+.nq-form.is-editing{background:var(--info-bg);border:1px solid #b9d4ec;border-radius:var(--r-md);padding:8px}
+tr.nq-editing td{background:var(--info-bg)}
+.flight-card.nq-editing,.day-card.nq-editing{background:var(--info-bg);border-color:#b9d4ec}
+
+/* ---------- booking & payments / soa ---------- */
+.booking-band{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.booking-id{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-weight:700;font-size:13px;color:var(--slate)}
+.kv{display:flex;gap:18px;flex-wrap:wrap;margin-top:8px;font-size:12.5px;color:var(--label)}
+.kv b{color:var(--ink)}
+.pay-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(300px,1fr);gap:16px;align-items:start}
+.soa-row{display:flex;justify-content:space-between;gap:14px;padding:7px 0;border-bottom:1px dashed var(--rule-hair);font-size:12.5px}
+.soa-row span{color:#43566c}
+.soa-row b{font-variant-numeric:tabular-nums;white-space:nowrap}
+.soa-row.total{border-top:2px solid var(--navy);border-bottom:0;margin-top:5px;padding-top:10px;font-size:14px}
+.soa-row.total span{color:var(--ink);font-weight:750}
+.soa-row.total b{font-weight:800}
+.soa-hint{margin-top:10px;padding:8px 11px;background:var(--info-bg);border:1px solid #b9d4ec;border-radius:8px;color:var(--info-text);font-size:12px}
+
+/* ---------- departures readiness ---------- */
+.ready-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:16px;align-items:center;margin-bottom:4px}
+.ready-score{font-size:clamp(26px,3vw,34px);font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums;color:var(--navy)}
+.ready-track{height:8px;background:var(--well);border-radius:4px;overflow:hidden}
+.ready-fill{height:100%;background:var(--blue);border-radius:4px}
+.dep-chips{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.check-pill{white-space:nowrap}
+
+/* ---------- documents & privacy ---------- */
+.priv-strip{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.priv-note{margin-top:10px;font-size:12px;color:#43566c}
+.lowconf{color:#8c5b00;font-weight:750;font-size:10.5px;border:1px solid var(--warn-rule);background:var(--warn-wash);border-radius:4px;padding:1px 6px;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap}
+
+/* ---------- stub view ---------- */
+.stub-links{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+
+/* ---------- changelog ---------- */
+.changelog{background:var(--paper);border:1px solid var(--rule);border-radius:var(--r-lg);box-shadow:var(--sh-1);margin-top:26px}
+.changelog summary{cursor:pointer;list-style:none;padding:16px 18px;display:flex;align-items:center;gap:14px}
+.changelog summary::-webkit-details-marker{display:none}
+.changelog summary .cl-head{flex:1}
+.changelog summary h3{font-size:15px;margin-top:2px}
+.changelog summary .i{color:var(--label);transition:transform .2s}
+.changelog[open] summary .i{transform:rotate(90deg)}
+.cl{margin:0;padding:0 18px 18px 52px;display:grid;gap:11px}
+.cl li{font-size:12.5px;color:#43566c}
+.cl li b{color:var(--ink)}
+.foot{margin:18px 2px 30px}
+
+/* ---------- toast ---------- */
+.toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,14px);background:var(--navy);color:#eaf2fa;font-size:12.5px;font-weight:650;border-radius:var(--r-md);padding:10px 16px;box-shadow:var(--sh-2);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;max-width:min(92vw,480px);text-align:center;z-index:80}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+/* ---------- responsive ---------- */
+@media(max-width:1020px){
+  .quote-grid,.pay-grid{grid-template-columns:1fr}
+  .case-grid{grid-template-columns:1fr}
+  .nq-grid{grid-template-columns:1fr}
+  .nq-aside{position:static;max-height:none;overflow:visible;padding:0;margin:0}
+}
+@media(max-width:900px){
+  .today-grid{grid-template-columns:1fr}
+  .today-grid .panel.wide{grid-column:auto}
+  .ready-head{grid-template-columns:auto minmax(0,1fr)}
+  .ready-head .ready-state{grid-column:1/-1}
+}
+@media(max-width:860px){
+  .staff-meta{display:none}
+  .t-side{display:none}
+  .t-item .t-open{margin-left:auto}
+}
+@media(max-width:720px){
+  .metrics-safe{grid-template-columns:repeat(2,1fr)}
+  /* tables reflow to labelled cards */
+  .cards thead{display:none}
+  .cards,.cards tbody{display:block}
+  .cards tr{display:block;border:1px solid var(--rule);border-radius:10px;background:#fff;box-shadow:var(--sh-1);padding:6px 12px;margin-bottom:10px}
+  .cards tr:hover{background:#fff}
+  .cards td{display:flex;justify-content:space-between;gap:14px;border:0;border-bottom:1px dashed var(--rule-hair);padding:7px 0;text-align:right;align-items:baseline}
+  .cards td:last-child{border-bottom:0}
+  .cards td::before{content:attr(data-label);flex:1;font-size:10.5px;font-weight:750;text-transform:uppercase;letter-spacing:.06em;color:var(--label);text-align:left}
+  .cards-wrap{border:0;overflow:visible}
+  .sheet{padding:16px}
+  .q-totals{margin-left:0}
+}
+@media(max-width:640px){
+  .gsearch-wrap{order:5;flex-basis:100%;max-width:none}
+  .topbar-inner{padding:8px 14px 6px;gap:10px}
+  main{padding:14px}
+  .fin-cells{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+  .fin-cell .fv{font-size:13.5px}
+  .btn-label-sm{display:none}
+}
+@media(prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+}
+</style>
+</head>
+<body>
+
+<!-- ======================= proposal banner ======================= -->
+<div class="proposal-banner" role="note" id="proposalBanner">
+  <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.3 3.8 1.8 18.5a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0z"/><path d="M12 9v4.5"/><path d="M12 17.5v.01"/></svg>
+  <div class="pb-body"><b>UI overhaul proposal — mockup only, not wired to the server.</b>
+  Every client, case, amount and document below is synthetic demo data. Click around: tabs switch and a few demo interactions respond, but nothing is saved anywhere.</div>
+  <button class="banner-dismiss" id="bannerDismiss" type="button">
+    Dismiss
+    <svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width:12px;height:12px"><path d="M5 5l14 14"/><path d="M19 5 5 19"/></svg>
+  </button>
+</div>
+
+<!-- ======================= top bar ======================= -->
+<header class="topbar" id="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="#today" onclick="return false">
+      <span class="mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" style="stroke:#d7ecfb;stroke-width:1.7;fill:none;stroke-linecap:round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.7 2.6 3.9 5.7 3.9 9s-1.2 6.4-3.9 9c-2.7-2.6-3.9-5.7-3.9-9s1.2-6.4 3.9-9z"/></svg>
+      </span>
+      <span><span class="brand-name">WMIT</span><span class="brand-sub">Operations</span></span>
+    </a>
+
+    <div class="gsearch-wrap">
+      <div class="gsearch">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="gsearchInput" type="search" placeholder="Search clients, cases, bookings, suppliers, documents…" autocomplete="off"
+               aria-label="Global search" role="combobox" aria-expanded="false" aria-controls="gsearchDrop">
+        <kbd aria-hidden="true">/</kbd>
+      </div>
+      <div class="gsearch-drop" id="gsearchDrop" role="listbox" aria-label="Search results"></div>
+    </div>
+
+    <div class="staff">
+      <div class="avatar" aria-hidden="true">MG</div>
+      <div class="staff-meta"><b>Mila Garcia</b><span>Owner · operations</span></div>
+      <button class="chip-btn" type="button" data-demo="Demo: sign out — not wired.">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>
+        <span class="btn-label-sm">Sign out</span></button>
+    </div>
+  </div>
+
+  <div class="tabs-row">
+    <div class="tabs-scroll">
+      <nav class="tabs" role="tablist" aria-label="Operations workspace sections">
+    <button class="tab active" role="tab" aria-selected="true" data-tab="today" type="button">Today <span class="tab-dot" title="prototyped in this mockup"></span></button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="stub" data-name="Dashboard" type="button">Dashboard</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="case" type="button">Case <span class="tab-dot" title="prototyped in this mockup"></span></button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="stub" data-name="Inquiries" type="button">Inquiries</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="quotations" type="button">Quotations <span class="tab-dot" title="prototyped in this mockup"></span></button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="newquote" type="button">New quotation <span class="tab-dot" title="prototyped in this mockup"></span></button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="stub" data-name="Clients" type="button">Clients</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="bookings" type="button">Bookings <span class="tab-dot" title="prototyped in this mockup"></span></button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="departures" type="button">Departures <span class="tab-dot" title="prototyped in this mockup"></span></button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="documents" type="button">Documents <span class="tab-badge" title="4 awaiting review">4</span></button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="stub" data-name="Finance" type="button">Finance</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="stub" data-name="Packages" type="button">Packages</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="stub" data-name="Suppliers" type="button">Suppliers</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="stub" data-name="Follow-ups" type="button">Follow-ups <span class="tab-badge" title="4 overdue follow-ups">4</span></button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="stub" data-name="Tasks" type="button">Tasks</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="stub" data-name="Attendance" type="button">Attendance</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="stub" data-name="Interns" type="button">Interns</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="stub" data-name="Privacy" type="button">Privacy</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="stub" data-name="Audit" type="button">Audit</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="stub" data-name="Settings" type="button">Settings</button>
+      </nav>
+    </div>
+    <a class="tab tab-ext" href="expo-console-overhaul.html" target="_blank" rel="noopener" title="Events console — opens the separate console in a new tab">
+      Events
+      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7"/><path d="M8 7h9v9"/></svg>
+    </a>
+  </div>
+</header>
+
+<main>
+
+<!-- ======================= TODAY ======================= -->
+<section class="view active" id="tab-today" role="tabpanel" aria-label="Today">
+  <div class="view-head">
+    <div>
+      <div class="eyebrow">Monday, Sep 7 2026 · Asia/Manila</div>
+      <h2>Today</h2>
+      <p class="muted">The owner's cockpit — five queues that decide the day. Clear the red first.</p>
+    </div>
+    <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: would reload the overview — not wired.">
+      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>
+      Refresh</button>
+  </div>
+
+  <div class="today-meta">
+    <span>As of <b>Sep 7, 08:15 PHT</b></span>
+    <span>Payments window: next <b>7 days</b></span>
+    <span>Departures window: next <b>30 days</b></span>
+  </div>
+
+  <div class="today-grid">
+    <div class="panel">
+      <div class="t-head"><h3>Payments due</h3><span class="t-count" id="payCount">3</span></div>
+      <div class="t-item">
+        <div class="t-main"><b>Angela Reyes — installment 2</b>
+          <div class="t-sub"><span class="mono">BOOKING-2026-000203</span> · Tokyo · Nov 20–25</div></div>
+        <div class="t-side"><div class="t-amt">PHP 25,000</div><span class="pill pill-bad" style="margin-top:3px">Overdue 6d</span></div>
+        <button class="btn btn-ghost btn-sm t-open" type="button" data-goto="case">Open</button>
+      </div>
+      <div class="t-item">
+        <div class="t-main"><b>Liza Bautista — final balance</b>
+          <div class="t-sub"><span class="mono">BOOKING-2026-000191</span> · Seoul · Nov 14–18</div></div>
+        <div class="t-side"><div class="t-amt">PHP 42,000</div><span class="pill pill-warn" style="margin-top:3px">Due Sep 10</span></div>
+        <button class="btn btn-ghost btn-sm t-open" type="button" data-demo="Demo: would open BOOKING-2026-000191 — not wired.">Open</button>
+      </div>
+      <div class="t-item">
+        <div class="t-main"><b>Miguel Torres — down payment</b>
+          <div class="t-sub"><span class="mono">BOOKING-2026-000175</span> · Bangkok · Dec 4–7</div></div>
+        <div class="t-side"><div class="t-amt">PHP 18,500</div><span class="pill pill-warn" style="margin-top:3px">Due Sep 9</span></div>
+        <button class="btn btn-ghost btn-sm t-open" type="button" data-demo="Demo: would open BOOKING-2026-000175 — not wired.">Open</button>
+      </div>
+      <p class="t-more muted">3 of 3 shown · window +7 days</p>
+    </div>
+
+    <div class="panel">
+      <div class="t-head"><h3>Departures · next 30 days</h3><span class="t-count">2</span></div>
+      <div class="t-item">
+        <div class="t-main"><b>Bangkok — DEPARTURE-2026-000038</b>
+          <div class="t-sub">Oct 30 – Nov 2 · 23 pax · readiness 61%</div></div>
+        <div class="t-side"><div class="win-cell"><div class="win-track" style="min-width:64px"><div class="win-fill" style="width:61%"></div></div></div>
+          <span class="pill pill-warn" style="margin-top:3px">In progress</span></div>
+        <button class="btn btn-ghost btn-sm t-open" type="button" data-goto="departures">Open</button>
+      </div>
+      <div class="t-item">
+        <div class="t-main"><b>Seoul — DEPARTURE-2026-000042</b>
+          <div class="t-sub">Nov 14–18 · 18 pax · readiness 72%</div></div>
+        <div class="t-side"><div class="win-cell"><div class="win-track" style="min-width:64px"><div class="win-fill" style="width:72%"></div></div></div>
+          <span class="pill pill-warn" style="margin-top:3px">In progress</span></div>
+        <button class="btn btn-ghost btn-sm t-open" type="button" data-goto="departures">Open</button>
+      </div>
+      <p class="t-more muted">Ho Chi Minh Nov 6 follows outside the window edge (+61 days).</p>
+    </div>
+
+    <div class="panel">
+      <div class="t-head"><h3>Unconfirmed supplier bookings</h3><span class="t-count">3</span></div>
+      <div class="t-item">
+        <div class="t-main"><b>Sakura Stay Hotels — hotel, Shinjuku ×6 nights</b>
+          <div class="t-sub">for Angela Reyes · <span class="mono">SUPPLIER_BOOKING-2026-000291</span></div></div>
+        <div class="t-side"><span class="pill pill-warn">Requested Aug 20</span></div>
+        <button class="btn btn-sm t-open" type="button" data-demo="Demo: would open the supplier chase — not wired.">Chase</button>
+      </div>
+      <div class="t-item">
+        <div class="t-main"><b>Bangkok Old Town Tours — city &amp; temple tour ×6 pax</b>
+          <div class="t-sub">for Carlo Mendoza group · <span class="mono">SUPPLIER_BOOKING-2026-000296</span></div></div>
+        <div class="t-side"><span class="pill pill-warn">Requested Sep 2</span></div>
+        <button class="btn btn-sm t-open" type="button" data-demo="Demo: would open the supplier chase — not wired.">Chase</button>
+      </div>
+      <div class="t-item">
+        <div class="t-main"><b>DMZ Korea Tours — DMZ half-day ×3 pax</b>
+          <div class="t-sub">for Grace Lim · <span class="mono">SUPPLIER_BOOKING-2026-000299</span></div></div>
+        <div class="t-side"><span class="pill pill-warn">Requested Sep 6</span></div>
+        <button class="btn btn-sm t-open" type="button" data-demo="Demo: would open the supplier chase — not wired.">Chase</button>
+      </div>
+      <p class="t-more muted">Bookings older than 5 working days without a reply float to the top.</p>
+    </div>
+
+    <div class="panel">
+      <div class="t-head"><h3>Overdue follow-ups</h3><span class="t-count" id="fuCount">4</span></div>
+      <div class="t-item">
+        <div class="t-main"><b>Carlo Mendoza</b>
+          <div class="t-sub">Day-1 touch · Bangkok group quote · overdue since Sep 5 · +63 906 234 7781</div></div>
+        <button class="btn btn-ghost btn-sm t-open" type="button" data-demo="Demo: would open the message composer — not wired.">Open</button>
+        <button class="btn btn-sm t-open" type="button" data-done data-count="fuCount">Done</button>
+      </div>
+      <div class="t-item">
+        <div class="t-main"><b>Roberto Aguilar</b>
+          <div class="t-sub">Day-1 touch · HCMC visa rundown · overdue since Sep 5 · +63 919 446 8823</div></div>
+        <button class="btn btn-ghost btn-sm t-open" type="button" data-demo="Demo: would open the message composer — not wired.">Open</button>
+        <button class="btn btn-sm t-open" type="button" data-done data-count="fuCount">Done</button>
+      </div>
+      <div class="t-item">
+        <div class="t-main"><b>Cherry Uy</b>
+          <div class="t-sub">Quote nudge · Japan Golden Route · overdue since Sep 6 · +63 916 772 5518</div></div>
+        <button class="btn btn-ghost btn-sm t-open" type="button" data-demo="Demo: would open the message composer — not wired.">Open</button>
+        <button class="btn btn-sm t-open" type="button" data-done data-count="fuCount">Done</button>
+      </div>
+      <div class="t-item">
+        <div class="t-main"><b>Nesta Dizon</b>
+          <div class="t-sub">Collect mobile · Seoul, kiosk lead · overdue since Sep 6 · no mobile yet</div></div>
+        <button class="btn btn-ghost btn-sm t-open" type="button" data-demo="Demo: would prompt for a +63 mobile — not wired.">Open</button>
+        <button class="btn btn-sm t-open" type="button" data-done data-count="fuCount">Done</button>
+      </div>
+      <p class="t-more muted">17 more follow-ups due today or later.</p>
+    </div>
+
+    <div class="panel wide">
+      <div class="t-head"><h3>Documents pending review</h3><span class="t-count">4</span></div>
+      <div class="t-item">
+        <div class="t-main"><b>Passport — Mika Reyes</b>
+          <div class="t-sub"><span class="mono">DOCUMENT-2026-000211</span> · for the Tokyo case · extraction confidence 92%</div></div>
+        <div class="t-side"><span class="pill pill-warn">Needs review</span> <span class="sens"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Sensitive</span></div>
+        <button class="btn btn-ghost btn-sm t-open" type="button" data-goto="documents">Open</button>
+      </div>
+      <div class="t-item">
+        <div class="t-main"><b>Passport — Marco Reyes</b>
+          <div class="t-sub"><span class="mono">DOCUMENT-2026-000205</span> · for the Tokyo case · extraction confidence 74%</div></div>
+        <div class="t-side"><span class="pill pill-warn">Needs review</span> <span class="lowconf">Low confidence</span></div>
+        <button class="btn btn-ghost btn-sm t-open" type="button" data-goto="documents">Open</button>
+      </div>
+      <div class="t-item">
+        <div class="t-main"><b>Proof of payment — Angela Reyes</b>
+          <div class="t-sub"><span class="mono">DOCUMENT-2026-000212</span> · evidence for CLIENT_PAYMENT-2026-000111 · PHP 45,000</div></div>
+        <div class="t-side"><span class="pill pill-info">Received</span></div>
+        <button class="btn btn-ghost btn-sm t-open" type="button" data-goto="documents">Open</button>
+      </div>
+      <div class="t-item">
+        <div class="t-main"><b>Government ID — Carlo Mendoza</b>
+          <div class="t-sub"><span class="mono">DOCUMENT-2026-000190</span> · for the Bangkok group inquiry</div></div>
+        <div class="t-side"><span class="pill pill-info">Received</span></div>
+        <button class="btn btn-ghost btn-sm t-open" type="button" data-goto="documents">Open</button>
+      </div>
+      <p class="t-more muted">Low-confidence extractions are flagged, never silently accepted.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= CASE COMMAND CENTER ======================= -->
+<section class="view" id="tab-case" role="tabpanel" aria-label="Case command center">
+  <div class="view-head">
+    <div>
+      <div class="eyebrow">Case command center</div>
+      <h2>One trip, one screen</h2>
+      <p class="muted">The whole case lifecycle — inquiry → quotation → booking → payments → departure → documents — with the next action always on top.</p>
+    </div>
+    <label class="muted" for="caseSelect" style="display:flex;align-items:center;gap:8px">Open case
+      <select id="caseSelect" style="font:inherit;font-size:12.5px;color:var(--ink);background:#fff;border:1px solid var(--rule-input);border-radius:6px;padding:7px 10px">
+        <option value="reyes">Angela Reyes — Tokyo (booking)</option>
+        <option value="santos">Maria Santos — Bangkok (quotation)</option>
+        <option value="aguilar">Roberto Aguilar — Ho Chi Minh (inquiry)</option>
+      </select>
+    </label>
+  </div>
+
+  <div class="panel case-band">
+    <div class="booking-band">
+      <div>
+        <h3 id="caseName" style="font-size:16px">Angela Reyes</h3>
+        <p class="muted" id="caseMeta">Tokyo Golden Route 6D5N · Nov 20–25, 2026 · 2 adults + 2 children</p>
+        <div class="state-line" id="caseState">QUOTATION ACCEPTED → BOOKING IN PROGRESS → FINANCE OVERDUE</div>
+        <div class="chain" id="caseChain" aria-label="Record chain"></div>
+      </div>
+      <div id="caseCta"></div>
+    </div>
+
+    <div class="case-grid">
+      <div>
+        <div class="next-hero">
+          <span class="eyebrow">Next action</span>
+          <h3 id="nextLabel">Chase overdue installment — PHP 25,000</h3>
+          <p id="nextReason">Installment 2 fell due Sep 1; PHP 20,000 was verified on Sep 2, the rest is 6 days overdue.</p>
+          <button class="btn btn-primary" id="nextOpen" type="button">Open
+            <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></button>
+        </div>
+
+        <div class="panel" style="margin-top:14px">
+          <div class="panel-head"><h3>Financial summary</h3><span class="muted" id="finNote"></span></div>
+          <div class="fin-cells">
+            <div class="fin-cell"><span class="fl" id="finLabelA">Billed</span><span class="fv" id="finA">PHP 228,500</span></div>
+            <div class="fin-cell hero"><span class="fl" id="finLabelB">Paid &amp; verified</span><span class="fv" id="finB">PHP 88,550</span></div>
+            <div class="fin-cell bad"><span class="fl" id="finLabelC">Outstanding</span><span class="fv" id="finC">PHP 139,950</span></div>
+          </div>
+          <div class="win-cell"><div class="win-track" style="height:7px;flex:1"><div class="win-fill green" id="finBar" style="width:39%"></div></div><span id="finPct">39% collected</span></div>
+          <p class="muted" id="finHint" style="margin-top:8px"></p>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h3>Supplier bookings</h3><span class="muted">Fulfillment state per service</span></div>
+          <div id="supBox"></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="deadline" id="deadlineBox">
+          <span class="fl">Next deadline</span>
+          <span class="dl-label" id="dlLabel">Installment 2 — CLIENT_OBLIGATION-2026-000527</span>
+          <span class="dl-at" id="dlAt">Due Sep 1, 2026</span>
+        </div>
+
+        <div class="panel" style="margin-bottom:14px">
+          <div class="panel-head"><h3>Blockers</h3></div>
+          <ul class="blockers" id="blockerBox"></ul>
+        </div>
+
+        <div class="panel" style="margin-bottom:14px">
+          <div class="panel-head"><h3>Travelers</h3><span class="muted" id="travCount"></span></div>
+          <div class="trav-list" id="travBox"></div>
+        </div>
+
+        <div class="panel" style="margin-bottom:0">
+          <div class="panel-head"><h3>Related tasks</h3><span class="muted" id="taskCount"></span></div>
+          <div id="taskBox"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= QUOTATION ======================= -->
+<section class="view" id="tab-quotations" role="tabpanel" aria-label="Quotation">
+  <div class="view-head">
+    <div>
+      <div class="eyebrow">Maria Santos · INQUIRY-2026-000121</div>
+      <h2>Quotation QUOTATION-2026-000101</h2>
+      <p class="muted">Working copy on the left, the exact sheet the client receives on the right. Valid to <b>Sep 13, 2026 · 6 days left</b>.</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-primary" type="button" data-goto="newquote">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+        New quotation</button>
+      <button class="btn btn-ghost" type="button" data-demo="Demo: opens the review-before-send preview — not wired.">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+        Send preview</button>
+      <button class="btn btn-ghost" type="button" id="qEditBtn">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+        Edit quotation</button>
+      <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: would open the print view — not wired.">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v7H6z"/></svg>
+        Print</button>
+    </div>
+  </div>
+
+  <div class="quote-grid">
+    <div>
+      <div class="eyebrow" style="margin-bottom:8px">Options — 2 adults, tap to switch</div>
+
+      <div class="optcard is-selected" data-opt="a" role="button" tabindex="0" aria-pressed="true">
+        <span class="opt-check"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg></span>
+        <div class="opt-top"><span class="eyebrow">Option A · Bangkok · Thailand</span><span class="pill pill-good">Selected</span></div>
+        <h3>Bangkok City Break 4D3N</h3>
+        <div class="opt-price">PHP 18,500 <span>per pax · PHP 37,000 total</span></div>
+        <ul class="opt-inc">
+          <li><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg>Round-trip airfare from Manila</li>
+          <li><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg>3-star hotel with breakfast, 3 nights</li>
+          <li><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg>Half-day city &amp; temple tour</li>
+        </ul>
+      </div>
+
+      <div class="optcard" data-opt="b" role="button" tabindex="0" aria-pressed="false">
+        <span class="opt-check"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg></span>
+        <div class="opt-top"><span class="eyebrow">Option B · Pattaya + Bangkok</span><span class="pill">Available</span></div>
+        <h3>Beach &amp; City Combo 5D4N</h3>
+        <div class="opt-price">PHP 27,900 <span>per pax · PHP 55,800 total</span></div>
+        <ul class="opt-inc">
+          <li><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg>2 nights Pattaya + 2 nights Bangkok</li>
+          <li><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg>Coral island day tour with lunch</li>
+          <li><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg>All transfers and breakfast</li>
+        </ul>
+      </div>
+
+      <div class="optcard" data-opt="c" role="button" tabindex="0" aria-pressed="false">
+        <span class="opt-check"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg></span>
+        <div class="opt-top"><span class="eyebrow">Option C · Ho Chi Minh City · Vietnam</span><span class="pill">Available</span></div>
+        <h3>HCMC &amp; Mekong 3D2N</h3>
+        <div class="opt-price">PHP 24,500 <span>per pax · PHP 49,000 total</span></div>
+        <ul class="opt-inc">
+          <li><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg>City-center hotel with breakfast</li>
+          <li><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 7"/></svg>Mekong Delta day cruise</li>
+        </ul>
+      </div>
+
+      <div class="panel" style="margin-top:14px">
+        <div class="panel-head"><h3>Items — <span id="qItemsTitle">Option A · Bangkok City Break 4D3N</span></h3><span class="muted">2 adults · currency PHP</span></div>
+        <div class="table-wrap cards-wrap">
+          <table class="cards">
+            <thead><tr><th>Service</th><th>Description</th><th class="num">Qty</th><th class="num">Unit amount</th><th class="num">Amount</th></tr></thead>
+            <tbody id="qItemsBody"></tbody>
+          </table>
+        </div>
+        <div class="q-totals">
+          <div><span>Subtotal</span><b class="num" id="qSub">PHP 34,000</b></div>
+          <div><span>Documentation &amp; service fee</span><b class="num" id="qFee">PHP 3,000</b></div>
+          <div class="grand"><span>Grand total · 2 pax</span><span class="num" id="qGrand">PHP 37,000</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sheet-wrap">
+      <span class="sheet-flag">Client preview</span>
+      <div class="sheet">
+        <div class="sheet-head">
+          <div class="sheet-brand">WORLDMASTER INTERNATIONAL TRAVEL<span>Travel &amp; Tours · Manila, Philippines</span></div>
+          <div class="sheet-qno">QUOTATION-2026-000101<span>Prepared Sep 6, 2026</span></div>
+        </div>
+        <div class="sheet-meta">
+          <div><b>Prepared for</b>Maria Santos<br>+63 917 812 4455 · maria.santos@mail.com</div>
+          <div><b>Valid to</b>Sep 13, 2026 · 6 days left<br>2 adults · Bangkok</div>
+        </div>
+        <table>
+          <thead><tr><th>Selected option</th><th class="num">Amount</th></tr></thead>
+          <tbody>
+            <tr><td id="sheetOpt">Option A — Bangkok City Break 4D3N<br><span style="color:var(--fog)">Airfare · hotel · tour · transfers · insurance</span></td><td class="num" style="font-weight:750" id="sheetAmount">PHP 37,000</td></tr>
+          </tbody>
+        </table>
+        <div class="sheet-terms">
+          <b>Payment terms.</b> 50% deposit upon confirmation; balance due 30 business days before departure. Payment due in quotation currency (PHP).<br>
+          <b>Validity.</b> This quotation is guaranteed until Sep 13, 2026; after that, pricing is subject to re-confirmation.
+        </div>
+        <div class="sheet-foot">This quotation is not a confirmed booking. Availability and fares are verified at acceptance — Worldmaster never claims confirmed arrangements until the supplier confirms in writing.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= NEW QUOTATION (MANUAL BUILDER) ======================= -->
+<section class="view" id="tab-newquote" role="tabpanel" aria-label="New quotation">
+  <div class="view-head">
+    <div>
+      <div class="eyebrow" id="nqHeadEyebrow">Manual quotation builder · from <span class="mono">INQUIRY-2026-000128</span></div>
+      <h2 id="nqHeadTitle">New quotation — Roberto Aguilar</h2>
+      <p class="muted" id="nqHeadSub">Ho Chi Minh City · 2 adults · December 2026. Build the quote line by line — items, flights, itinerary — and watch the exact client sheet redraw on the right. Supplier costs and margin stay internal.</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="btn btn-ghost btn-sm" type="button" data-goto="quotations">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5"/><path d="m11 18-6-6 6-6"/></svg>
+        Back to Quotations</button>
+      <label class="muted" for="nqCurrency" style="display:flex;align-items:center;gap:8px">Currency
+        <select id="nqCurrency" style="font:inherit;font-size:12.5px;color:var(--ink);background:#fff;border:1px solid var(--rule-input);border-radius:6px;padding:7px 10px">
+          <option value="PHP" selected>PHP</option>
+          <option value="USD">USD</option>
+        </select>
+      </label>
+      <button class="btn btn-ghost" type="button" id="nqPreviewBtn">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+        Preview</button>
+      <button class="btn btn-primary" type="button" id="nqSaveBtn">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg>
+        <span id="nqSaveLabel">Save draft</span></button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="booking-band">
+      <div>
+        <span class="booking-id" id="nqBandId">INQUIRY-2026-000128</span>
+        <h3 style="margin-top:4px" id="nqBandName">Roberto Aguilar — Ho Chi Minh City</h3>
+        <div class="kv">
+          <span>Stage <b id="nqBandStage">Inquiry → first quotation</b></span>
+          <span>Pax <b>2 adults</b></span>
+          <span>Window <b id="nqBandWindow">December 2026 · approximate</b></span>
+          <span>Mobile <b id="nqBandMobile">+63 919 446 8823</b></span>
+        </div>
+      </div>
+      <span class="pill pill-warn" id="nqBandPill" style="align-self:flex-start">Draft · not yet numbered</span>
+    </div>
+  </div>
+
+  <div class="nq-grid">
+    <div>
+      <div class="panel">
+        <div class="panel-head"><h3>Items</h3><span class="muted" id="nqItemHeadNote">unit cost is internal — never shown to the client</span></div>
+        <form class="nq-form" id="nqItemForm">
+          <div class="field"><label for="nqSvc">Service</label>
+            <select id="nqSvc">
+              <option value="Airfare" selected>Airfare</option>
+              <option value="Hotel">Hotel</option>
+              <option value="Tour">Tour</option>
+              <option value="Transfer">Transfer</option>
+              <option value="Travel insurance">Travel insurance</option>
+              <option value="Other">Other</option>
+            </select></div>
+          <div class="field field-grow"><label for="nqDesc">Description</label>
+            <input id="nqDesc" type="text" placeholder="e.g. Round trip MNL–SGN, 20kg baggage" autocomplete="off"></div>
+          <div class="field"><label for="nqSup">Supplier <span>(optional)</span></label>
+            <select id="nqSup">
+              <option value="">— none —</option>
+              <option>Vietnam Airlines · SUPPLIER-000031</option>
+              <option>Saigon Riverside Hotel · SUPPLIER-000044</option>
+              <option>Mekong Delta Tours · SUPPLIER-000052</option>
+              <option>Saigon Ground Transfers · SUPPLIER-000058</option>
+              <option>Pacifica Travel Insurance · SUPPLIER-000063</option>
+            </select></div>
+          <div class="field field-qty"><label for="nqQty">Qty</label>
+            <input id="nqQty" type="number" min="1" step="1" value="1"></div>
+          <div class="field field-price internal"><label for="nqCost">Unit cost <span>PHP</span></label>
+            <input id="nqCost" type="number" min="0" step="any" inputmode="decimal" placeholder="0" aria-describedby="nqCostNote"></div>
+          <div class="field field-price"><label for="nqSell">Unit price <span>PHP</span></label>
+            <input id="nqSell" type="number" min="0" step="any" inputmode="decimal" placeholder="0"></div>
+          <button class="btn btn-primary btn-sm" type="submit">
+            <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+            <span id="nqItemSubmitLabel">Add item</span></button>
+          <button class="btn btn-ghost btn-sm" type="button" id="nqItemCancel" hidden>Cancel</button>
+        </form>
+        <p class="muted" id="nqCostNote" style="margin:8px 0 10px;font-size:11px">Unit cost is internal — muted on purpose. It feeds the margin line only and never reaches the client sheet.</p>
+        <div class="table-wrap cards-wrap">
+          <table class="cards">
+            <thead><tr><th>Service</th><th>Description</th><th class="num">Qty</th><th class="num">Unit selling</th><th class="num">Amount</th><th><span class="muted">Actions</span></th></tr></thead>
+            <tbody id="nqItemsBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h3>Flights</h3><span class="muted" id="nqFlightHeadNote" hidden></span>
+          <button class="btn btn-ghost btn-sm" type="button" id="nqFlightToggle" aria-expanded="false" aria-controls="nqFlightForm">
+            <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+            Add flight</button>
+        </div>
+        <form class="nq-form nq-collapse" id="nqFlightForm">
+          <div class="field"><label for="nfAirline">Airline</label>
+            <select id="nfAirline">
+              <option>Vietnam Airlines</option>
+              <option>Philippine Airlines</option>
+              <option>Cebu Pacific</option>
+              <option>EVA Air</option>
+              <option>Other</option>
+            </select></div>
+          <div class="field"><label for="nfNo">Flight no.</label><input id="nfNo" type="text" placeholder="VN 855" autocomplete="off"></div>
+          <div class="field"><label for="nfRoute">Route</label><input id="nfRoute" type="text" placeholder="MNL–SGN" autocomplete="off"></div>
+          <div class="field"><label for="nfDate">Date</label><input id="nfDate" type="date" value="2026-12-04"></div>
+          <div class="field"><label for="nfDep">Dep</label><input id="nfDep" type="time" value="21:15"></div>
+          <div class="field"><label for="nfArr">Arr</label><input id="nfArr" type="time" value="23:45"></div>
+          <button class="btn btn-primary btn-sm" type="submit"><span id="nqFlightSubmitLabel">Add flight</span></button>
+          <button class="btn btn-ghost btn-sm" type="button" id="nqFlightCancel" hidden>Cancel</button>
+        </form>
+        <div id="nqFlights"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h3>Itinerary days</h3><span class="muted" id="nqDayHeadNote" hidden></span>
+          <button class="btn btn-ghost btn-sm" type="button" id="nqDayToggle" aria-expanded="false" aria-controls="nqDayForm">
+            <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+            Add day</button>
+        </div>
+        <form class="nq-form nq-collapse" id="nqDayForm">
+          <div class="field field-qty"><label for="ndNo">Day</label><input id="ndNo" type="number" min="1" step="1" value="3"></div>
+          <div class="field field-grow"><label for="ndTitle">Title</label><input id="ndTitle" type="text" placeholder="e.g. Cu Chi tunnels half-day" autocomplete="off"></div>
+          <div class="field"><label for="ndCity">City</label><input id="ndCity" type="text" placeholder="Ho Chi Minh City" autocomplete="off"></div>
+          <div class="field field-grow"><label for="ndAct">Activities</label><input id="ndAct" type="text" placeholder="Tunnels tour · lunch · war museum" autocomplete="off"></div>
+          <div class="field"><label for="ndMeals">Meals</label><input id="ndMeals" type="text" placeholder="Breakfast, lunch" autocomplete="off"></div>
+          <div class="field"><label for="ndOver">Overnight</label><input id="ndOver" type="text" placeholder="Ho Chi Minh City" autocomplete="off"></div>
+          <button class="btn btn-primary btn-sm" type="submit"><span id="nqDaySubmitLabel">Add day</span></button>
+          <button class="btn btn-ghost btn-sm" type="button" id="nqDayCancel" hidden>Cancel</button>
+        </form>
+        <div id="nqDays"></div>
+      </div>
+    </div>
+
+    <div class="nq-aside">
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h3>Totals</h3><span class="muted">recomputed live</span></div>
+        <div class="soa-row"><span>Subtotal · <span id="nqCount">3 items</span></span><b class="num" id="nqSub">PHP 42,000</b></div>
+        <div class="soa-row"><span>Service fee <span class="muted">(PHP)</span></span>
+          <input id="nqFee" class="nq-fee" type="number" min="0" step="50" value="1500" aria-label="Service fee in PHP"></div>
+        <div class="soa-row total"><span>Grand total · 2 adults</span><b class="num" id="nqGrand">PHP 43,500</b></div>
+        <div class="nq-margin"><span>Margin — selling − cost <span class="src">Internal</span></span><b class="num" id="nqMargin">PHP 13,580 · 31.2%</b></div>
+        <p class="muted" style="font-size:11px;margin:4px 0 0">Supplier cost and margin never appear on the client sheet.</p>
+        <div class="nq-valid"><label for="nqValid">Valid to</label>
+          <input id="nqValid" type="date" value="2026-09-14"></div>
+        <p class="muted" style="font-size:11px;margin:4px 0 0">Default +7 days from today (Sep 7, 2026).</p>
+      </div>
+
+      <div class="sheet-wrap" id="nqSheetWrap">
+        <span class="sheet-flag">Live client preview</span>
+        <div class="sheet">
+          <div class="sheet-head">
+            <div class="sheet-brand">WORLDMASTER INTERNATIONAL TRAVEL<span>Travel &amp; Tours · Manila, Philippines</span></div>
+            <div class="sheet-qno" id="nqSheetQno">QUOTATION-2026-000133<span id="nqSheetQnoSub">Draft · prepared Sep 7, 2026</span></div>
+          </div>
+          <div class="sheet-meta">
+            <div><b>Prepared for</b><span id="nqSheetFor">Roberto Aguilar</span><br><span id="nqSheetContact">+63 919 446 8823</span></div>
+            <div><b>Valid to</b><span id="nqSheetValid">Sep 14, 2026 · 7 days left</span><br><span id="nqSheetCtx">2 adults · Ho Chi Minh City · December 2026</span></div>
+          </div>
+          <table>
+            <thead><tr><th>Inclusions</th><th class="num">Amount</th></tr></thead>
+            <tbody id="nqSheetItems"></tbody>
+          </table>
+          <div id="nqSheetFlights" class="sheet-terms" style="margin-top:10px"></div>
+          <div id="nqSheetItin" class="sheet-terms" style="margin-top:8px"></div>
+          <div class="q-totals" style="max-width:none;margin:12px 0 0">
+            <div><span>Subtotal</span><b class="num" id="nqSheetSub">PHP 42,000</b></div>
+            <div><span>Documentation &amp; service fee</span><b class="num" id="nqSheetFee">PHP 1,500</b></div>
+            <div><span>Per pax · 2 adults</span><b class="num" id="nqSheetPax">PHP 21,750</b></div>
+            <div class="grand"><span>Total · 2 adults</span><span class="num" id="nqSheetGrand">PHP 43,500</span></div>
+          </div>
+          <div class="sheet-terms">
+            <b>Payment terms.</b> 50% deposit upon confirmation; balance due 30 business days before departure. Payment due in quotation currency (<span id="nqSheetCur">PHP</span>).<br>
+            <b>Validity.</b> This quotation is guaranteed until <span id="nqSheetValid2">Sep 14, 2026</span>; after that, pricing is subject to re-confirmation.
+          </div>
+          <div class="sheet-foot">This quotation is not a confirmed booking. Availability and fares are verified at acceptance — Worldmaster never claims confirmed arrangements until the supplier confirms in writing.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= BOOKING & PAYMENTS ======================= -->
+<section class="view" id="tab-bookings" role="tabpanel" aria-label="Booking and payments">
+  <div class="view-head">
+    <div>
+      <div class="eyebrow">Money controls · statement of account</div>
+      <h2>Booking &amp; payments</h2>
+      <p class="muted">Every peso is accounted for: obligations, allocations, verification states — and the math in between.</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: would export the statement as PDF — not wired.">Export SOA</button>
+      <button class="btn btn-sm" type="button" data-goto="case">Open case</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="booking-band">
+      <div>
+        <span class="booking-id">BOOKING-2026-000203</span>
+        <h3 style="margin-top:4px">Angela Reyes — Tokyo Golden Route 6D5N</h3>
+        <div class="kv">
+          <span>Client <b>Angela Reyes · CLIENT-000058</b></span>
+          <span>Dates <b>Nov 20–25, 2026</b></span>
+          <span>Pax <b>4 (2 adults · 2 children)</b></span>
+          <span>Departure <b class="mono">DEPARTURE-2026-000046</b></span>
+        </div>
+      </div>
+      <span class="pill pill-good" style="align-self:flex-start">Confirmed</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head"><h3>Client payment obligations</h3><span class="muted">Schedule generated from settings: 30% down, installment, balance 30 business days pre-departure</span></div>
+    <div class="table-wrap cards-wrap">
+      <table class="cards">
+        <thead><tr><th>Obligation</th><th>Purpose</th><th class="num">Amount</th><th class="num">Allocated</th><th class="num">Outstanding</th><th>Due</th><th>State</th></tr></thead>
+        <tbody>
+          <tr>
+            <td data-label="Obligation" class="mono">CLIENT_OBLIGATION-2026-000526</td>
+            <td data-label="Purpose">Down payment 30%</td>
+            <td data-label="Amount" class="num">PHP 68,550</td>
+            <td data-label="Allocated" class="num">PHP 68,550</td>
+            <td data-label="Outstanding" class="num">PHP 0</td>
+            <td data-label="Due" class="num">Aug 15, 2026</td>
+            <td data-label="State"><span class="pill pill-good">Settled</span></td>
+          </tr>
+          <tr>
+            <td data-label="Obligation" class="mono">CLIENT_OBLIGATION-2026-000527</td>
+            <td data-label="Purpose">Installment 2</td>
+            <td data-label="Amount" class="num">PHP 45,000</td>
+            <td data-label="Allocated" class="num">PHP 20,000</td>
+            <td data-label="Outstanding" class="num" style="color:var(--bad-text);font-weight:750">PHP 25,000</td>
+            <td data-label="Due" class="num">Sep 1, 2026</td>
+            <td data-label="State"><span class="pill pill-bad">Overdue</span></td>
+          </tr>
+          <tr>
+            <td data-label="Obligation" class="mono">CLIENT_OBLIGATION-2026-000528</td>
+            <td data-label="Purpose">Final balance</td>
+            <td data-label="Amount" class="num">PHP 114,950</td>
+            <td data-label="Allocated" class="num">PHP 0</td>
+            <td data-label="Outstanding" class="num">PHP 114,950</td>
+            <td data-label="Due" class="num">Oct 8, 2026</td>
+            <td data-label="State"><span class="pill pill-info">Open</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="pay-grid">
+    <div class="panel">
+      <div class="panel-head"><h3>Payment history</h3><span class="muted">Only verified money can be allocated</span></div>
+      <div class="table-wrap cards-wrap">
+        <table class="cards">
+          <thead><tr><th>Sent at</th><th>Method</th><th class="num">Amount</th><th>Verification</th><th>Allocation</th></tr></thead>
+          <tbody>
+            <tr>
+              <td data-label="Sent at" class="num">Aug 14, 2026</td>
+              <td data-label="Method">Bank transfer · BPI</td>
+              <td data-label="Amount" class="num">PHP 68,550</td>
+              <td data-label="Verification"><span class="pill pill-good">Verified</span></td>
+              <td data-label="Allocation">Down payment, in full · <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: would open the receipt — not wired." style="margin-left:4px">Receipt</button></td>
+            </tr>
+            <tr>
+              <td data-label="Sent at" class="num">Sep 2, 2026</td>
+              <td data-label="Method">GCash · 0917•••4455</td>
+              <td data-label="Amount" class="num">PHP 20,000</td>
+              <td data-label="Verification"><span class="pill pill-good">Verified</span></td>
+              <td data-label="Allocation">Installment 2, partial</td>
+            </tr>
+            <tr>
+              <td data-label="Sent at" class="num">Sep 5, 2026</td>
+              <td data-label="Method">Bank transfer · BDO</td>
+              <td data-label="Amount" class="num">PHP 45,000</td>
+              <td data-label="Verification"><span class="pill pill-warn" id="payVerifyPill">Pending verification</span></td>
+              <td data-label="Allocation"><span id="payAllocNote">Unallocated · evidence DOCUMENT-2026-000212</span>
+                <button class="btn btn-sm" type="button" data-verify id="payVerifyBtn" style="margin-left:4px">Verify…</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="muted" style="margin-top:10px">CLIENT_PAYMENT-2026-000093 · -000104 · -000111. Verification states are never silent: pending money sits outside the statement until a human verifies it.</p>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h3>Statement of account</h3><span class="muted">CLIENT_INVOICE-2026-000147</span></div>
+      <div class="soa-row"><span>Total billed — 3 obligations</span><b>PHP 228,500</b></div>
+      <div class="soa-row"><span>Verified payments received</span><b>PHP 88,550</b></div>
+      <div class="soa-row"><span>Allocated to obligations</span><b>PHP 88,550</b></div>
+      <div class="soa-row"><span>Awaiting verification <span class="muted">(not counted)</span></span><b id="soaPending">PHP 45,000</b></div>
+      <div class="soa-row total"><span>Outstanding</span><b id="soaOutstanding">PHP 139,950</b></div>
+      <div class="win-cell" style="margin-top:12px"><div class="win-track" style="height:7px;flex:1"><div class="win-fill green" id="soaBar" style="width:39%"></div></div><span id="soaPct">39% collected</span></div>
+      <div class="soa-hint" id="soaHint">If the Sep 5 payment of PHP 45,000 verifies and allocates to installment 2, outstanding drops to PHP 94,950 — verify the evidence first.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= DEPARTURES READINESS ======================= -->
+<section class="view" id="tab-departures" role="tabpanel" aria-label="Departures readiness">
+  <div class="view-head">
+    <div>
+      <div class="eyebrow">Shared groups · readiness checks</div>
+      <h2>Departures</h2>
+      <p class="muted">Per member and per check: BOOKING_PAID · TICKETING · VOUCHERS · DOCUMENTS. UNKNOWN means the system has no requirement record to verify against — it is never silently treated as PASS.</p>
+    </div>
+    <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: would re-run the readiness check — not wired.">
+      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>
+      Run check</button>
+  </div>
+
+  <div class="dep-chips">
+    <button class="chip active" type="button" aria-pressed="true">DEPARTURE-2026-000042 · Seoul · Nov 14–18 · 18 pax</button>
+    <button class="chip" type="button" data-demo="Demo: would load DEPARTURE-2026-000038 — Bangkok, Oct 30–Nov 2 · 23 pax · 61% ready.">Bangkok · Oct 30 · 23 pax · 61%</button>
+    <button class="chip" type="button" data-demo="Demo: would load DEPARTURE-2026-000040 — Ho Chi Minh, Nov 6 · 11 pax · 82% ready.">Ho Chi Minh · Nov 6 · 11 pax · 82%</button>
+  </div>
+
+  <div class="panel">
+    <div class="ready-head">
+      <div><span class="ready-score">72%</span><span class="muted" style="display:block">readiness</span></div>
+      <div>
+        <div class="ready-track"><div class="ready-fill" style="width:72%"></div></div>
+        <p class="muted" style="margin-top:7px">13 of 18 members fully ready · checked nightly by the <span class="mono">departure-readiness</span> job · last run Sep 7, 06:15 PHT</p>
+      </div>
+      <span class="pill pill-warn ready-state">In progress</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head"><h3>Member checks</h3><span class="muted">Showing 5 of 18 members</span></div>
+    <div class="table-wrap cards-wrap">
+      <table class="cards">
+        <thead><tr><th>Member</th><th>Booking</th><th>Booking paid</th><th>Ticketing</th><th>Vouchers</th><th>Documents</th><th class="num">Score</th></tr></thead>
+        <tbody>
+          <tr>
+            <td data-label="Member"><b>Grace Lim</b><br><span class="muted">3 pax · lead</span></td>
+            <td data-label="Booking" class="mono">BOOKING-2026-000187</td>
+            <td data-label="Booking paid"><span class="pill pill-good check-pill">Pass</span></td>
+            <td data-label="Ticketing"><span class="pill pill-good check-pill">Pass</span></td>
+            <td data-label="Vouchers"><span class="pill pill-good check-pill">Pass</span></td>
+            <td data-label="Documents"><span class="pill pill-bad check-pill">Fail</span><br><span class="muted" style="font-size:11px">Sofia's passport expires Apr 2027 — inside the 6-month rule</span></td>
+            <td data-label="Score" class="num" style="font-weight:800">75%</td>
+          </tr>
+          <tr>
+            <td data-label="Member"><b>Juan Dela Cruz</b><br><span class="muted">4 pax · lead</span></td>
+            <td data-label="Booking" class="mono">BOOKING-2026-000194</td>
+            <td data-label="Booking paid"><span class="pill pill-good check-pill">Pass</span></td>
+            <td data-label="Ticketing"><span class="pill pill-good check-pill">Pass</span></td>
+            <td data-label="Vouchers"><span class="pill pill-bad check-pill">Fail</span><br><span class="muted" style="font-size:11px">DMZ tour voucher not issued</span></td>
+            <td data-label="Documents"><span class="pill pill-unknown check-pill">Unknown</span></td>
+            <td data-label="Score" class="num" style="font-weight:800">50%</td>
+          </tr>
+          <tr>
+            <td data-label="Member"><b>Katrina Villanueva</b><br><span class="muted">3 pax · lead</span></td>
+            <td data-label="Booking" class="mono">BOOKING-2026-000182</td>
+            <td data-label="Booking paid"><span class="pill pill-good check-pill">Pass</span></td>
+            <td data-label="Ticketing"><span class="pill pill-unknown check-pill">Unknown</span></td>
+            <td data-label="Vouchers"><span class="pill pill-good check-pill">Pass</span></td>
+            <td data-label="Documents"><span class="pill pill-good check-pill">Pass</span></td>
+            <td data-label="Score" class="num" style="font-weight:800">75%</td>
+          </tr>
+          <tr>
+            <td data-label="Member"><b>Cherry Uy</b><br><span class="muted">3 pax · lead</span></td>
+            <td data-label="Booking" class="mono">BOOKING-2026-000201</td>
+            <td data-label="Booking paid"><span class="pill pill-bad check-pill">Fail</span><br><span class="muted" style="font-size:11px">Down payment outstanding</span></td>
+            <td data-label="Ticketing"><span class="pill pill-unknown check-pill">Unknown</span></td>
+            <td data-label="Vouchers"><span class="pill pill-unknown check-pill">Unknown</span></td>
+            <td data-label="Documents"><span class="pill pill-bad check-pill">Fail</span></td>
+            <td data-label="Score" class="num" style="font-weight:800">25%</td>
+          </tr>
+          <tr>
+            <td data-label="Member"><b>Liza Bautista</b><br><span class="muted">2 pax · lead</span></td>
+            <td data-label="Booking" class="mono">BOOKING-2026-000191</td>
+            <td data-label="Booking paid"><span class="pill pill-bad check-pill">Fail</span><br><span class="muted" style="font-size:11px">Final balance PHP 42,000 due Sep 10</span></td>
+            <td data-label="Ticketing"><span class="pill pill-good check-pill">Pass</span></td>
+            <td data-label="Vouchers"><span class="pill pill-good check-pill">Pass</span></td>
+            <td data-label="Documents"><span class="pill pill-good check-pill">Pass</span></td>
+            <td data-label="Score" class="num" style="font-weight:800">75%</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head"><h3>Tasks raised by readiness</h3><span class="muted">Every FAIL raises a task with an owner and a due date</span></div>
+    <div class="task">
+      <span class="mono t-id">TASK-2026-000331</span>
+      <span class="t-text">Renew Sofia Lim's passport — expires Apr 2027, inside the 6-month rule</span>
+      <span class="pill pill-warn t-due">Due Sep 20</span>
+      <span class="pill t-due">Open</span>
+      <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: would open TASK-2026-000331 — not wired.">Open</button>
+    </div>
+    <div class="task">
+      <span class="mono t-id">TASK-2026-000334</span>
+      <span class="t-text">Issue DMZ tour voucher — Juan Dela Cruz party</span>
+      <span class="pill pill-warn t-due">Due Sep 30</span>
+      <span class="pill t-due">Open</span>
+      <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: would open TASK-2026-000334 — not wired.">Open</button>
+    </div>
+    <div class="task">
+      <span class="mono t-id">TASK-2026-000339</span>
+      <span class="t-text">Collect final balance PHP 42,000 — Liza Bautista</span>
+      <span class="pill pill-warn t-due">Due Sep 10</span>
+      <span class="pill t-due">Open</span>
+      <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: would open TASK-2026-000339 — not wired.">Open</button>
+    </div>
+    <div class="task">
+      <span class="mono t-id">TASK-2026-000344</span>
+      <span class="t-text">Record ticketing requirements — Katrina Villanueva flights (clears the UNKNOWN)</span>
+      <span class="pill pill-warn t-due">Due Sep 14</span>
+      <span class="pill t-due">Open</span>
+      <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: would open TASK-2026-000344 — not wired.">Open</button>
+    </div>
+    <div class="task">
+      <span class="mono t-id">TASK-2026-000347</span>
+      <span class="t-text">Chase Cherry Uy down payment — PHP 20,700 outstanding</span>
+      <span class="pill pill-warn t-due">Due Sep 9</span>
+      <span class="pill t-due">Open</span>
+      <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: would open TASK-2026-000347 — not wired.">Open</button>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= DOCUMENTS ======================= -->
+<section class="view" id="tab-documents" role="tabpanel" aria-label="Documents">
+  <div class="view-head">
+    <div>
+      <div class="eyebrow">Paper flow · human review</div>
+      <h2>Documents</h2>
+      <p class="muted">Register, classify, extract, review. Passports, visas and identity documents are sensitive — restricted access, manager-gated erasure.</p>
+    </div>
+    <button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: would open the register-document form — not wired.">
+      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+      Register document</button>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head"><h3>Review queue</h3><span class="muted">4 awaiting review · newest first</span></div>
+    <div class="table-wrap cards-wrap">
+      <table class="cards">
+        <thead><tr><th>Document</th><th>Client</th><th>Type</th><th>Status</th><th>Confidence</th><th>Actions</th></tr></thead>
+        <tbody>
+          <tr>
+            <td data-label="Document" class="mono">DOCUMENT-2026-000211</td>
+            <td data-label="Client"><b>Mika Reyes</b><br><span class="muted">Tokyo case</span></td>
+            <td data-label="Type">Passport <span class="sens"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Sensitive</span></td>
+            <td data-label="Status"><span class="pill pill-warn">Needs review</span></td>
+            <td data-label="Confidence" class="num">92%</td>
+            <td data-label="Actions"><button class="btn btn-sm" type="button" data-goto="case">Open</button></td>
+          </tr>
+          <tr>
+            <td data-label="Document" class="mono">DOCUMENT-2026-000205</td>
+            <td data-label="Client"><b>Marco Reyes</b><br><span class="muted">Tokyo case</span></td>
+            <td data-label="Type">Passport <span class="sens"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Sensitive</span></td>
+            <td data-label="Status"><span class="pill pill-warn">Needs review</span> <span class="lowconf">Low confidence</span></td>
+            <td data-label="Confidence" class="num">74%</td>
+            <td data-label="Actions"><button class="btn btn-sm" type="button" data-goto="case">Open</button></td>
+          </tr>
+          <tr>
+            <td data-label="Document" class="mono">DOCUMENT-2026-000212</td>
+            <td data-label="Client"><b>Angela Reyes</b><br><span class="muted">Tokyo case · payment evidence</span></td>
+            <td data-label="Type">Proof of payment</td>
+            <td data-label="Status"><span class="pill pill-info">Received</span></td>
+            <td data-label="Confidence" class="num">—</td>
+            <td data-label="Actions"><button class="btn btn-sm" type="button" data-demo="Demo: would classify + extract the payment evidence — not wired.">Classify</button></td>
+          </tr>
+          <tr>
+            <td data-label="Document" class="mono">DOCUMENT-2026-000190</td>
+            <td data-label="Client"><b>Carlo Mendoza</b><br><span class="muted">Bangkok group inquiry</span></td>
+            <td data-label="Type">Government ID <span class="sens"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Sensitive</span></td>
+            <td data-label="Status"><span class="pill pill-info">Received</span></td>
+            <td data-label="Confidence" class="num">—</td>
+            <td data-label="Actions"><button class="btn btn-sm" type="button" data-demo="Demo: would classify + extract the ID — not wired.">Classify</button></td>
+          </tr>
+          <tr>
+            <td data-label="Document" class="mono">DOCUMENT-2026-000208</td>
+            <td data-label="Client"><b>Juan Dela Cruz</b><br><span class="muted">Seoul departure</span></td>
+            <td data-label="Type">Visa <span class="sens"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Sensitive</span></td>
+            <td data-label="Status"><span class="pill pill-good">Accepted</span></td>
+            <td data-label="Confidence" class="num">88%</td>
+            <td data-label="Actions"><span class="muted">Reviewed Aug 31</span></td>
+          </tr>
+          <tr>
+            <td data-label="Document" class="mono">DOCUMENT-2026-000198</td>
+            <td data-label="Client"><b>Grace Lim</b><br><span class="muted">Seoul departure</span></td>
+            <td data-label="Type">Passport <span class="sens"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Sensitive</span></td>
+            <td data-label="Status"><span class="pill pill-good">Accepted</span></td>
+            <td data-label="Confidence" class="num">96%</td>
+            <td data-label="Actions"><span class="muted">Reviewed Aug 30</span></td>
+          </tr>
+          <tr>
+            <td data-label="Document" class="mono">DOCUMENT-2026-000196</td>
+            <td data-label="Client"><b>Sofia Lim</b><br><span class="muted">Seoul departure · child</span></td>
+            <td data-label="Type">Passport <span class="sens"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Sensitive</span></td>
+            <td data-label="Status"><span class="pill pill-good">Accepted</span></td>
+            <td data-label="Confidence" class="num">91%</td>
+            <td data-label="Actions"><span class="muted">Reviewed Aug 30</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head"><h3>Privacy overview</h3><span class="muted">All clients · nightly <span class="mono">privacy-retention</span> job</span></div>
+    <div class="priv-strip">
+      <span class="chip" style="cursor:default"><span class="cnt">214</span> Consent recorded</span>
+      <span class="chip" style="cursor:default"><span class="cnt">58</span> Legacy (pre-consent)</span>
+      <span class="chip" style="cursor:default"><span class="cnt">402</span> Retained — future travel</span>
+      <span class="chip" style="border-color:var(--bad-rule);color:var(--bad-text);cursor:default"><span class="cnt">6</span> Eligible for erasure</span>
+      <span class="chip" style="border-color:var(--good-rule);color:var(--good-text);cursor:default"><span class="cnt">12</span> Erased</span>
+    </div>
+    <p class="priv-note">Erasure is manager-gated and requires typed confirmation; bookings and financial records carry a 10-year retention duty and are never erased by the privacy actions. Policy draft under counsel review — docs/data-privacy.md.</p>
+  </div>
+</section>
+
+<!-- ======================= STUB (tabs represented as nav items only) ======================= -->
+<section class="view" id="tab-stub" role="tabpanel" aria-label="Not prototyped">
+  <div class="view-head">
+    <div>
+      <div class="eyebrow">Not part of this mockup</div>
+      <h2><span id="stubName">Dashboard</span> keeps its current design</h2>
+      <p class="muted">This proposal prototypes seven views — the ones that carry the daily case lifecycle. The other tabs are not redesigned in this mockup; if the proposal is approved, every tab gets the same design system and its own redesign pass in the real build.</p>
+    </div>
+  </div>
+  <div class="panel">
+    <p class="muted">Jump into the prototyped views:</p>
+    <div class="stub-links">
+      <button class="btn" type="button" data-goto="today">Today</button>
+      <button class="btn" type="button" data-goto="case">Case command center</button>
+      <button class="btn" type="button" data-goto="quotations">Quotation</button>
+      <button class="btn" type="button" data-goto="newquote">New quotation builder</button>
+      <button class="btn" type="button" data-goto="bookings">Booking &amp; payments</button>
+      <button class="btn" type="button" data-goto="departures">Departures readiness</button>
+      <button class="btn" type="button" data-goto="documents">Documents</button>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= WHAT CHANGED & WHY ======================= -->
+<details class="changelog" open>
+  <summary>
+    <svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width:18px;height:18px"><path d="m9 6 6 6-6 6"/></svg>
+    <span class="cl-head">
+      <span class="eyebrow">For the owner — react to specifics</span>
+      <h3>What changed &amp; why — 9 decisions in this proposal</h3>
+    </span>
+  </summary>
+  <ol class="cl">
+    <li><b>Global search becomes the header's centerpiece.</b> The workspace spans 18 tabs, yet search today is a small corner box. The proposal gives it a wide, always-ready field with a <b>/</b> keyboard shortcut and grouped results — clients, cases, bookings, suppliers, documents — that jump straight to the record. On phones it becomes a full-width row directly under the brand.</li>
+    <li><b>Today is now a cockpit, not a report.</b> The five queues that decide the day — payments due (+7d), departures (+30d), unconfirmed supplier bookings, overdue follow-ups, documents pending review — each get a card with a live count, and every row carries its own <b>Open</b> action. Completing a follow-up happens inside the card; the count drops without leaving the screen.</li>
+    <li><b>The case command center leads with the next action.</b> A labelled amber hero (action + reason + Open) sits top-left; blockers and the next deadline ride the right rail, and an overdue deadline gets a red state visible from across the desk. The current page states these as prose fields scattered across cards — here they are the first screenful, and the record chain INQUIRY → QUOTATION → BOOKING → DEPARTURE is stamped across the header.</li>
+    <li><b>Switching cases is a selector, not a navigation.</b> The current workspace makes you tab out to Inquiries to pick a case. The proposal keeps the case open in one place and swaps its contents — next action, blockers, finance, travelers, suppliers, tasks — so comparing two cases is two clicks in the same chair.</li>
+    <li><b>Money is displayed as math, never just as numbers.</b> Booking &amp; payments shows an explicit statement of account: billed → verified → allocated → outstanding, with pending-verification funds kept visibly outside the total until a human verifies them — the same rule the server enforces. The collection bar fills only with verified money.</li>
+    <li><b>Readiness is honest pills.</b> Every member × check (BOOKING_PAID, TICKETING, VOUCHERS, DOCUMENTS) reads PASS / FAIL / UNKNOWN, with UNKNOWN drawn as a dashed pill because "no requirement record" is a different fact than "failed" — and each FAIL points to the task it raised.</li>
+    <li><b>The quotation view shows the client's eyes.</b> The working copy — selectable option cards with one clear SELECTED state, an items table, validity — sits beside a print-styled preview of the exact sheet the client receives, so staff never guess how a quote reads on the other end. Switching options updates both sides instantly.</li>
+    <li><b>One product family with the Expo Console.</b> Identical tokens — navy authority band, manifest-green primaries, passage-blue data accents, chart-paper ground, stamped pills, 20–27px tabular figures — so the two consoles read as one system. Even the demo data overlaps: Grace Lim's BOOKING-2026-000187, captured at the September expo, appears here in Today and in the Seoul departure. The Events tab in the navigation opens that console in a new browser tab — the same separation production uses, so each console keeps its own URL and history.</li>
+    <li><b>Quotations are built, not just displayed.</b> Staff spend most of their day assembling quotes by hand, yet the old view only showed the finished product. The new builder starts from the inquiry itself (here: Roberto Aguilar · Ho Chi Minh City · 2 adults), adds items line by line with the supplier cost kept muted and internal, attaches flights and itinerary days, and recomputes subtotal, service fee, grand total and margin on every add, remove and fee change — while the client sheet on the right redraws live, so what the client receives is never a guess. Cost, supplier notes and margin never reach the client side. Every added line, flight and day is editable in place — pencil, revise, save — and the Quotations view's <b>Edit quotation</b> button reopens the builder loaded with the selected option, so fixing a sent draft starts where the work left off.</li>
+  </ol>
+</details>
+
+<p class="foot muted">Mockup for evaluation only — tab switching and the marked demo interactions (global search, case switching, option switching, building a quotation item by item, verifying a payment, completing follow-ups) run locally in the browser; there are no server calls and nothing is saved. Feature set mirrors the live Operations Workspace (Today overview, case command center with next-action projection, quotations with option cards and client preview, a manual quotation builder whose client sheet updates live as items, flights and days are added, obligations/payments with verification states, departure readiness checks, document review queue, privacy overview); the other tabs would keep their current design in this proposal. The Events tab opens the sibling Expo Console proposal (expo-console-overhaul.html) in a new tab — a local file, still no network.</p>
+
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- tabs ---------- */
+  var VIEW_IDS = ['today', 'case', 'quotations', 'newquote', 'bookings', 'departures', 'documents', 'stub'];
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
+  function activate(id, stubName) {
+    tabs.forEach(function (t) {
+      if (!t.getAttribute('data-tab')) return; /* Events links out to the expo console instead of switching views */
+      var on = t.getAttribute('data-tab') === id && (!stubName || t.getAttribute('data-name') === stubName);
+      t.classList.toggle('active', on);
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    Array.prototype.slice.call(document.querySelectorAll('.view')).forEach(function (v) {
+      v.classList.toggle('active', v.id === 'tab-' + id);
+    });
+    if (id === 'stub' && stubName) document.getElementById('stubName').textContent = stubName;
+    if (id === 'newquote') {
+      if (NQ_EDIT_ARMED) NQ_EDIT_ARMED = false; /* armed by Edit quotation; every other path starts a fresh create */
+      else nqResetCreate();
+    }
+    closeSearch();
+    window.scrollTo(0, 0);
+  }
+  tabs.forEach(function (t) {
+    if (!t.getAttribute('data-tab')) return;
+    t.addEventListener('click', function () {
+      activate(t.getAttribute('data-tab'), t.getAttribute('data-name'));
+    });
+  });
+  var initial = (location.hash || '').replace('#', '');
+  if (VIEW_IDS.indexOf(initial) !== -1 && initial !== 'stub') activate(initial);
+
+  /* ---------- toast ---------- */
+  var toastEl = document.getElementById('toast');
+  var toastTimer = null;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove('show'); }, 2800);
+  }
+
+  /* ---------- banner dismiss ---------- */
+  document.getElementById('bannerDismiss').addEventListener('click', function () {
+    var b = document.getElementById('proposalBanner');
+    if (b && b.parentNode) b.parentNode.removeChild(b);
+  });
+
+  /* ---------- header shadow on scroll ---------- */
+  var topbar = document.getElementById('topbar');
+  window.addEventListener('scroll', function () {
+    topbar.classList.toggle('scrolled', window.scrollY > 4);
+  }, { passive: true });
+
+  /* ---------- tab strip: show edge fade only when it overflows ---------- */
+  var tabsEl = document.querySelector('.tabs');
+  var tabsScrollEl = document.querySelector('.tabs-scroll');
+  function syncTabsFade() {
+    tabsScrollEl.classList.toggle('has-more', tabsEl.scrollWidth > tabsEl.clientWidth + 4);
+  }
+  window.addEventListener('resize', syncTabsFade);
+  tabsEl.addEventListener('scroll', syncTabsFade);
+  syncTabsFade();
+
+  /* ---------- generic demo + goto actions ---------- */
+  document.addEventListener('click', function (e) {
+    var demo = e.target.closest('[data-demo]');
+    if (demo) { toast(demo.getAttribute('data-demo')); return; }
+    var go = e.target.closest('[data-goto]');
+    if (go) {
+      var id = go.getAttribute('data-goto');
+      if (VIEW_IDS.indexOf(id) !== -1) {
+        activate(id);
+        toast('Demo: switched to the ' + (document.querySelector('.tab[data-tab="' + id + '"]').textContent.replace(/\u00a0/g, ' ').trim()) + ' view.');
+      }
+    }
+  });
+
+  /* ---------- today: mark done (visual only) ---------- */
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-done]');
+    if (!btn || btn.disabled) return;
+    var row = btn.closest('.t-item, .task');
+    if (!row) return;
+    row.classList.add('is-done');
+    var countId = btn.getAttribute('data-count');
+    if (countId) {
+      var c = document.getElementById(countId);
+      if (c) c.textContent = String(Math.max(0, Number(c.textContent) - 1));
+    }
+    btn.disabled = true;
+    toast('Demo: item marked done — nothing was saved.');
+  });
+
+  /* ---------- global search (demo) ---------- */
+  var CORPUS = [
+    { t: 'Grace Lim', k: 'Client', s: 'CLIENT-000041 · Seoul, Nov 14 · 3 pax', tab: 'case' },
+    { t: 'Angela Reyes', k: 'Client', s: 'CLIENT-000058 · Tokyo, Nov 20 · 4 pax', tab: 'case' },
+    { t: 'Maria Santos', k: 'Client', s: 'CLIENT-000034 · Bangkok quotation, 2 adults', tab: 'quotations' },
+    { t: 'Roberto Aguilar', k: 'Client', s: 'CLIENT-000067 · Ho Chi Minh inquiry, December', tab: 'case' },
+    { t: 'BOOKING-2026-000203', k: 'Booking', s: 'Angela Reyes · Tokyo · billed PHP 228,500', tab: 'bookings' },
+    { t: 'BOOKING-2026-000187', k: 'Booking', s: 'Grace Lim · Seoul · from the Sep expo', tab: 'bookings' },
+    { t: 'QUOTATION-2026-000101', k: 'Quotation', s: 'Maria Santos · PHP 37,000 · valid to Sep 13', tab: 'quotations' },
+    { t: 'INQUIRY-2026-000128', k: 'Inquiry', s: 'Roberto Aguilar · HCMC · new', tab: 'case' },
+    { t: 'DEPARTURE-2026-000042', k: 'Departure', s: 'Seoul · Nov 14–18 · 18 pax · 72% ready', tab: 'departures' },
+    { t: 'CLIENT_PAYMENT-2026-000111', k: 'Payment', s: 'PHP 45,000 · pending verification', tab: 'bookings' },
+    { t: 'DOCUMENT-2026-000212', k: 'Document', s: 'Proof of payment · Angela Reyes', tab: 'documents' },
+    { t: 'TASK-2026-000331', k: 'Task', s: 'Renew Sofia Lim passport · due Sep 20', tab: 'stub', name: 'Tasks' },
+    { t: 'Sakura Stay Hotels', k: 'Supplier', s: 'SUPPLIER-000007 · Tokyo · hotel confirmation pending', tab: 'stub', name: 'Suppliers' }
+  ];
+  var gsInput = document.getElementById('gsearchInput');
+  var gsDrop = document.getElementById('gsearchDrop');
+  var gsResults = [];
+  function closeSearch() {
+    if (!gsDrop) return; /* activate() can run from the initial hash before these are assigned */
+    gsDrop.classList.remove('open');
+    gsDrop.innerHTML = '';
+    gsInput.setAttribute('aria-expanded', 'false');
+  }
+  function runResult(r) {
+    closeSearch();
+    gsInput.value = '';
+    activate(r.tab, r.name);
+    toast('Demo: opened ' + r.t + ' — not wired.');
+  }
+  function renderSearch(q) {
+    var query = q.trim().toLowerCase();
+    gsResults = CORPUS.filter(function (r) {
+      return (r.t + ' ' + r.s + ' ' + r.k).toLowerCase().indexOf(query) !== -1;
+    }).slice(0, 8);
+    var html = '';
+    if (!query) {
+      closeSearch();
+      return;
+    }
+    if (!gsResults.length) {
+      html = '<div class="gs-row" style="cursor:default"><b>No matches</b><span>Try a client name or an ID like BOOKING-2026-000203</span></div>';
+    } else {
+      html = gsResults.map(function (r, i) {
+        return '<div class="gs-row' + (i === 0 ? ' gs-active' : '') + '" role="option" aria-selected="' + (i === 0 ? 'true' : 'false') + '" data-i="' + i + '"><b>' + r.t + '</b><span><span class="gs-kind">' + r.k + '</span> · ' + r.s + '</span></div>';
+      }).join('');
+    }
+    html += '<div class="gs-foot">Enter opens the top result · synthetic demo corpus</div>';
+    gsDrop.innerHTML = html;
+    gsDrop.classList.add('open');
+    gsInput.setAttribute('aria-expanded', 'true');
+  }
+  gsInput.addEventListener('input', function () { renderSearch(gsInput.value); });
+  gsInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') { closeSearch(); gsInput.blur(); return; }
+    if (e.key === 'Enter' && gsResults.length) { runResult(gsResults[0]); }
+  });
+  gsDrop.addEventListener('click', function (e) {
+    var row = e.target.closest('.gs-row[data-i]');
+    if (row) runResult(gsResults[Number(row.getAttribute('data-i'))]);
+  });
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest('.gsearch-wrap')) closeSearch();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === '/' && !/^(INPUT|TEXTAREA|SELECT)$/.test((e.target.tagName || ''))) {
+      e.preventDefault();
+      gsInput.focus();
+      gsInput.select();
+    }
+  });
+
+  /* ---------- case command center (demo datasets) ---------- */
+  var CASES = {
+    reyes: {
+      name: 'Angela Reyes',
+      meta: 'Tokyo Golden Route 6D5N · Nov 20–25, 2026 · 2 adults + 2 children',
+      state: 'QUOTATION ACCEPTED → BOOKING IN PROGRESS → FINANCE OVERDUE',
+      chain: ['INQUIRY-2026-000109', 'QUOTATION-2026-000082', 'BOOKING-2026-000203', 'DEPARTURE-2026-000046'],
+      ctaLabel: 'Open booking & payments', ctaTab: 'bookings',
+      nextLabel: 'Chase overdue installment — PHP 25,000',
+      nextReason: 'Installment 2 fell due Sep 1; PHP 20,000 was verified on Sep 2, the rest is 6 days overdue.',
+      nextTab: 'bookings',
+      blockers: ['Installment 2 overdue by 6 days — PHP 25,000 outstanding.', 'Tokyo hotel (6 nights) requested Aug 20, still unconfirmed by supplier.'],
+      dlLabel: 'Installment 2 — CLIENT_OBLIGATION-2026-000527', dlAt: 'Due Sep 1, 2026', dlOverdue: true,
+      finLabels: ['Billed', 'Paid &amp; verified', 'Outstanding'],
+      fin: ['PHP 228,500', 'PHP 88,550', 'PHP 139,950'], pct: 39,
+      finNote: 'CLIENT_INVOICE-2026-000147',
+      finHint: 'PHP 45,000 received Sep 5 is pending verification — it cannot count until the evidence is checked.',
+      travelers: [['Angela Reyes', 'Adult · lead pax'], ['Ramon Reyes', 'Adult'], ['Mika Reyes', 'Child · 12'], ['Marco Reyes', 'Child · 8']],
+      suppliers: [
+        ['Flights MNL–NRT–MNL', 'Philippine Airlines · SUPPLIER-000014', 'CONFIRMED', 'Ticketed · PR 418 / PR 419 · PNR KQZ4TP'],
+        ['Hotel — Shinjuku, 6 nights', 'Sakura Stay Hotels · SUPPLIER-000007', 'REQUESTED', 'Requested Aug 20 · chase — reply due Sep 9'],
+        ['Ground tours — Tokyo &amp; Mt. Fuji', 'Nihon Tours Co. · SUPPLIER-000021', 'CONFIRMED', 'Vouchers to issue 14 days before departure']
+      ],
+      tasks: [
+        ['TASK-2026-000318', 'Chase Tokyo hotel confirmation with Sakura Stay', 'Sep 9', 'OPEN'],
+        ['TASK-2026-000322', 'Collect installment 2 balance — PHP 25,000', 'Overdue', 'OPEN'],
+        ['TASK-2026-000287', 'Check Marco\u2019s passport validity (expires Mar 2027)', 'Done Aug 30', 'DONE']
+      ]
+    },
+    santos: {
+      name: 'Maria Santos',
+      meta: 'Bangkok, approximate dates Dec 4–7, 2026 · 2 adults',
+      state: 'NEW → QUOTED',
+      chain: ['INQUIRY-2026-000121', 'QUOTATION-2026-000101'],
+      ctaLabel: 'Open quotation', ctaTab: 'quotations',
+      nextLabel: 'Send the revised quotation',
+      nextReason: 'Option A was re-priced after the hotel re-quote; draft QUOTATION-2026-000101 has been ready since Sep 6.',
+      nextTab: 'quotations',
+      blockers: [],
+      dlLabel: 'Quote validity — QUOTATION-2026-000101', dlAt: 'Valid to Sep 13, 2026 · 6 days left', dlOverdue: false,
+      finLabels: ['Quoted', 'Collected', 'Due now'],
+      fin: ['PHP 37,000', 'PHP 0', '—'], pct: 0,
+      finNote: 'quotation stage',
+      finHint: 'Nothing is billable yet — the 50% deposit (PHP 18,500) becomes due only after the client accepts.',
+      travelers: [['Maria Santos', 'Adult · lead pax'], ['Elena Santos', 'Adult']],
+      suppliers: [],
+      tasks: [
+        ['TASK-2026-000341', 'Follow up on the quote (day-3 touch)', 'Sep 10', 'OPEN']
+      ]
+    },
+    aguilar: {
+      name: 'Roberto Aguilar',
+      meta: 'Ho Chi Minh City, approximate December 2026 · 2 adults',
+      state: 'NEW',
+      chain: ['INQUIRY-2026-000128'],
+      ctaLabel: 'Create quotation', ctaTab: 'newquote',
+      nextLabel: 'Prepare the first quotation',
+      nextReason: 'December dates and a visa rundown were requested at the expo; requirements were captured Sep 6.',
+      nextTab: 'newquote',
+      blockers: ['Travel dates still approximate (December 2026) — confirm the exact window before quoting.'],
+      dlLabel: 'Day-3 follow-up touch', dlAt: 'Due today · Sep 7, 2026', dlOverdue: false,
+      finLabels: ['Quoted', 'Collected', 'Due now'],
+      fin: ['—', '—', '—'], pct: 0,
+      finNote: 'inquiry stage',
+      finHint: 'Nothing billable at inquiry stage — capture requirements, then quote.',
+      travelers: [['Roberto Aguilar', 'Adult · lead pax'], '+63 919 446 8823'],
+      suppliers: [],
+      tasks: [
+        ['TASK-2026-000329', 'Send the Vietnam visa requirements rundown', 'Today', 'OPEN']
+      ]
+    }
+  };
+  function pillFor(state) {
+    if (state === 'CONFIRMED') return '<span class="pill pill-good">Confirmed</span>';
+    if (state === 'REQUESTED') return '<span class="pill pill-warn">Requested</span>';
+    return '<span class="pill">' + state + '</span>';
+  }
+  function renderCase(key) {
+    var c = CASES[key];
+    document.getElementById('caseName').textContent = c.name;
+    document.getElementById('caseMeta').textContent = c.meta;
+    document.getElementById('caseState').textContent = c.state;
+    document.getElementById('caseChain').innerHTML = c.chain.map(function (id) {
+      return '<span class="mono">' + id + '</span>';
+    }).join('<span class="arrow" aria-hidden="true">→</span>');
+    var cta = document.getElementById('caseCta');
+    if (c.ctaTab) {
+      cta.innerHTML = '<button class="btn btn-ghost btn-sm" type="button" data-goto="' + c.ctaTab + '">' + c.ctaLabel + '</button>';
+    } else {
+      cta.innerHTML = '<button class="btn btn-ghost btn-sm" type="button" data-demo="Demo: would open the quotation builder — not wired.">Create quotation</button>';
+    }
+    document.getElementById('nextLabel').textContent = c.nextLabel;
+    document.getElementById('nextReason').textContent = c.nextReason;
+    var nextOpen = document.getElementById('nextOpen');
+    if (c.nextTab) {
+      nextOpen.setAttribute('data-goto', c.nextTab);
+      nextOpen.removeAttribute('data-demo');
+    } else {
+      nextOpen.removeAttribute('data-goto');
+      nextOpen.setAttribute('data-demo', 'Demo: would open the quotation builder — not wired.');
+    }
+    var box = document.getElementById('blockerBox');
+    box.className = c.blockers.length ? 'blockers' : 'blockers none';
+    box.innerHTML = c.blockers.length
+      ? c.blockers.map(function (b) { return '<li>' + b + '</li>'; }).join('')
+      : '<li>No blockers — clear to proceed.</li>';
+    var dl = document.getElementById('deadlineBox');
+    dl.className = 'deadline' + (c.dlOverdue ? ' overdue' : '');
+    document.getElementById('dlLabel').textContent = c.dlLabel;
+    var dlAt = document.getElementById('dlAt');
+    dlAt.textContent = c.dlAt + (c.dlOverdue ? ' · OVERDUE' : '');
+    document.getElementById('finLabelA').innerHTML = c.finLabels[0];
+    document.getElementById('finLabelB').innerHTML = c.finLabels[1];
+    document.getElementById('finLabelC').innerHTML = c.finLabels[2];
+    document.getElementById('finA').textContent = c.fin[0];
+    document.getElementById('finB').textContent = c.fin[1];
+    document.getElementById('finC').textContent = c.fin[2];
+    document.getElementById('finBar').style.width = c.pct + '%';
+    document.getElementById('finPct').textContent = c.pct + '% collected';
+    document.getElementById('finNote').textContent = c.finNote;
+    document.getElementById('finHint').textContent = c.finHint;
+    var travBox = document.getElementById('travBox');
+    var travs = c.travelers.filter(function (t) { return t.length === 2; });
+    document.getElementById('travCount').textContent = travs.length + ' traveler' + (travs.length === 1 ? '' : 's');
+    travBox.innerHTML = travs.map(function (t) {
+      return '<span class="trav"><b>' + t[0] + '</b><span>' + t[1] + '</span></span>';
+    }).join('');
+    var supBox = document.getElementById('supBox');
+    supBox.innerHTML = c.suppliers.length
+      ? '<div class="table-wrap cards-wrap"><table class="cards"><thead><tr><th>Service</th><th>Supplier</th><th>State</th><th>Detail</th></tr></thead><tbody>'
+        + c.suppliers.map(function (s) {
+          return '<tr><td data-label="Service"><b>' + s[0] + '</b></td><td data-label="Supplier" class="muted">' + s[1] + '</td><td data-label="State">' + pillFor(s[2]) + '</td><td data-label="Detail" class="muted">' + s[3] + '</td></tr>';
+        }).join('') + '</tbody></table></div>'
+      : '<p class="muted">No supplier bookings yet — they are created when a quotation is accepted.</p>';
+    var taskBox = document.getElementById('taskBox');
+    document.getElementById('taskCount').textContent = c.tasks.filter(function (t) { return t[3] === 'OPEN'; }).length + ' open';
+    taskBox.innerHTML = c.tasks.map(function (t) {
+      var done = t[3] === 'DONE';
+      return '<div class="task' + (done ? ' is-done' : '') + '"><span class="mono t-id">' + t[0] + '</span><span class="t-text">' + t[1] + '</span><span class="pill ' + (done ? 'pill-good' : 'pill-warn') + ' t-due">' + t[2] + '</span></div>';
+    }).join('');
+  }
+  document.getElementById('caseSelect').addEventListener('change', function () {
+    renderCase(this.value);
+    toast('Demo: switched case — not wired.');
+  });
+  renderCase('reyes');
+
+  /* ---------- quotation option switching (demo) ---------- */
+  var OPTIONS = {
+    a: { title: 'Option A · Bangkok City Break 4D3N', total: 'PHP 37,000',
+      items: [
+        ['Airfare', 'Round trip MNL–BKK, 20kg', '2', '8,600', '17,200', 7400],
+        ['Hotel', '3-star with breakfast · 3 nights · 1 room', '1', '9,900', '9,900', 8300],
+        ['Tour', 'Half-day city &amp; temple tour', '2', '1,950', '3,900', 1400],
+        ['Transfers', 'Airport arrival + departure', '2', '1,050', '2,100', 700],
+        ['Insurance', 'Travel insurance, 4 days', '2', '450', '900', 280]
+      ], sub: 'PHP 34,000', fee: 'PHP 3,000',
+      sheet: 'Option A — Bangkok City Break 4D3N', sheetSub: 'Airfare · hotel · tour · transfers · insurance' },
+    b: { title: 'Option B · Beach &amp; City Combo 5D4N', total: 'PHP 55,800',
+      items: [
+        ['Airfare', 'Round trip MNL–BKK, 20kg', '2', '10,300', '20,600', 8900],
+        ['Hotel', '2N Pattaya + 2N Bangkok with breakfast', '1', '19,200', '19,200', 16400],
+        ['Tour', 'Coral island day tour with lunch', '2', '3,900', '7,800', 2900],
+        ['Transfers', 'Airport + inter-city transfers', '2', '1,400', '2,800', 950],
+        ['Insurance', 'Travel insurance, 5 days', '2', '450', '900', 280]
+      ], sub: 'PHP 51,300', fee: 'PHP 4,500',
+      sheet: 'Option B — Beach &amp; City Combo 5D4N', sheetSub: 'Pattaya + Bangkok · airfare · hotel · tours · transfers' },
+    c: { title: 'Option C · HCMC &amp; Mekong 3D2N', total: 'PHP 49,000',
+      items: [
+        ['Airfare', 'Round trip MNL–SGN, 20kg', '2', '9,700', '19,400', 8300],
+        ['Hotel', 'City-center with breakfast · 2 nights', '1', '12,600', '12,600', 10600],
+        ['Tour', 'Mekong Delta day cruise', '2', '3,200', '6,400', 2400],
+        ['Transfers', 'Airport arrival + departure', '2', '1,300', '2,600', 850],
+        ['Insurance', 'Travel insurance, 3 days', '2', '450', '900', 280]
+      ], sub: 'PHP 41,900', fee: 'PHP 7,100', sheetSub: 'Airfare · hotel · Mekong cruise · transfers · insurance',
+      sheet: 'Option C — HCMC &amp; Mekong 3D2N' }
+  };
+  var currentOpt = 'a';
+  var optcards = Array.prototype.slice.call(document.querySelectorAll('.optcard'));
+  function selectOption(key) {
+    currentOpt = key;
+    var o = OPTIONS[key];
+    optcards.forEach(function (card) {
+      var on = card.getAttribute('data-opt') === key;
+      card.classList.toggle('is-selected', on);
+      card.setAttribute('aria-pressed', on ? 'true' : 'false');
+      var p = card.querySelector('.opt-top .pill');
+      if (p) {
+        p.className = 'pill' + (on ? ' pill-good' : '');
+        p.textContent = on ? 'Selected' : 'Available';
+      }
+    });
+    document.getElementById('qItemsTitle').innerHTML = o.title;
+    document.getElementById('qItemsBody').innerHTML = o.items.map(function (it) {
+      return '<tr><td data-label="Service"><b>' + it[0] + '</b></td><td data-label="Description">' + it[1] + '</td><td data-label="Qty" class="num">' + it[2] + '</td><td data-label="Unit amount" class="num">PHP ' + it[3] + '</td><td data-label="Amount" class="num" style="font-weight:750">PHP ' + it[4] + '</td></tr>';
+    }).join('');
+    document.getElementById('qSub').textContent = o.sub;
+    document.getElementById('qFee').textContent = o.fee;
+    document.getElementById('qGrand').textContent = o.total;
+    document.getElementById('sheetOpt').innerHTML = o.sheet + '<br><span style="color:var(--fog)">' + o.sheetSub + '</span>';
+    document.getElementById('sheetAmount').textContent = o.total;
+  }
+  optcards.forEach(function (card) {
+    card.addEventListener('click', function () { selectOption(card.getAttribute('data-opt')); });
+    card.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectOption(card.getAttribute('data-opt')); }
+    });
+  });
+  selectOption('a');
+
+  /* ---------- manual quotation builder (demo) ---------- */
+  var NQ_SEED = {
+    items: [
+      { svc: 'Airfare', desc: 'Round trip MNL–SGN, 20kg baggage', sup: 'Vietnam Airlines · SUPPLIER-000031', qty: 2, cost: 8900, sell: 12400 },
+      { svc: 'Hotel', desc: 'City-center 3-star with breakfast · 1 room × 3 nights', sup: 'Saigon Riverside Hotel · SUPPLIER-000044', qty: 1, cost: 11400, sell: 15900 },
+      { svc: 'Travel insurance', desc: 'Travel insurance, 4 days', sup: 'Pacifica Travel Insurance · SUPPLIER-000063', qty: 2, cost: 360, sell: 650 }
+    ],
+    flights: [
+      { airline: 'Vietnam Airlines', no: 'VN 856', route: 'MNL–SGN', date: '2026-12-04', dep: '21:15', arr: '23:45' }
+    ],
+    days: [
+      { no: 1, title: 'Arrival & District 1 orientation', city: 'Ho Chi Minh City', act: 'Airport transfer · walking tour of Dong Khoi · Notre-Dame Cathedral & Central Post Office · welcome dinner', meals: 'Dinner', over: 'Ho Chi Minh City' },
+      { no: 2, title: 'Mekong Delta day cruise', city: 'My Tho & Ben Tre', act: 'River boat cruise · coconut candy workshop · riverside lunch', meals: 'Breakfast, lunch', over: 'Ho Chi Minh City' }
+    ]
+  };
+  var NQ = { mode: 'create', currency: 'PHP', editOpt: null, items: null, flights: null, days: null };
+  var NQ_EDIT_IDX = { item: -1, flight: -1, day: -1 };
+  var NQ_EDIT_ARMED = false;
+  var NQ_PENCIL = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>';
+  var NQ_FORM_IDS = {
+    item:   { form: 'nqItemForm',   label: 'nqItemSubmitLabel',   cancel: 'nqItemCancel',   note: 'nqItemHeadNote',   addLabel: 'Add item'   },
+    flight: { form: 'nqFlightForm', label: 'nqFlightSubmitLabel', cancel: 'nqFlightCancel', note: 'nqFlightHeadNote', addLabel: 'Add flight' },
+    day:    { form: 'nqDayForm',    label: 'nqDaySubmitLabel',    cancel: 'nqDayCancel',    note: 'nqDayHeadNote',    addLabel: 'Add day'    }
+  };
+  var NQ_SVC_MAP = { 'Transfers': 'Transfer', 'Insurance': 'Travel insurance' };
+  function nqColl(kind) { return kind === 'item' ? NQ.items : kind === 'flight' ? NQ.flights : NQ.days; }
+  function nqClone(o) { return JSON.parse(JSON.stringify(o)); }
+  function nqSeedCreate() {
+    NQ.mode = 'create'; NQ.currency = 'PHP'; NQ.editOpt = null;
+    NQ.items = nqClone(NQ_SEED.items);
+    NQ.flights = nqClone(NQ_SEED.flights);
+    NQ.days = nqClone(NQ_SEED.days);
+  }
+  function nqResetCreate() {
+    if (!NQ || !NQ.items) return; /* called from activate() before this section initialises on first load */
+    nqSeedCreate();
+    nqEndEditAll();
+    document.getElementById('nqFee').value = '1500';
+    document.getElementById('nqValid').value = '2026-09-14';
+    document.getElementById('nqCurrency').value = 'PHP';
+    nqApplyMode();
+    nqRender();
+  }
+  function nqDecode(s) {
+    return String(s).replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+  }
+  function nqLoadEdit(optKey) {
+    var o = OPTIONS[optKey];
+    if (!o) return;
+    NQ.mode = 'edit'; NQ.editOpt = optKey; NQ.currency = 'PHP';
+    NQ.items = o.items.map(function (it) {
+      return { svc: NQ_SVC_MAP[it[0]] || it[0], desc: nqDecode(it[1]), sup: '',
+        qty: nqInt(it[2]), cost: nqInt(it[5]), sell: nqInt(String(it[3]).replace(/,/g, '')) };
+    });
+    NQ.flights = nqClone(NQ_SEED.flights);
+    NQ.days = nqClone(NQ_SEED.days);
+    nqEndEditAll();
+    document.getElementById('nqFee').value = String(nqInt(o.fee.replace(/[^\d]/g, '')));
+    document.getElementById('nqValid').value = '2026-09-13';
+    document.getElementById('nqCurrency').value = 'PHP';
+    nqApplyMode();
+    nqRender();
+  }
+  function nqApplyMode() {
+    var edit = NQ.mode === 'edit';
+    var optKey = NQ.editOpt;
+    var shortTitle = edit ? nqDecode(OPTIONS[optKey].title.replace(/^Option [A-Z] · /, '')) : '';
+    document.getElementById('nqHeadEyebrow').innerHTML = edit
+      ? 'Manual quotation builder · editing <span class="mono">QUOTATION-2026-000101</span>'
+      : 'Manual quotation builder · from <span class="mono">INQUIRY-2026-000128</span>';
+    document.getElementById('nqHeadTitle').textContent = edit ? 'Edit quotation — Maria Santos' : 'New quotation — Roberto Aguilar';
+    document.getElementById('nqHeadSub').textContent = edit
+      ? 'Bangkok · 2 adults · Dec 4–7, 2026. Option ' + optKey.toUpperCase() + ' is loaded from the sent draft — edit lines, flights and days, and the client sheet redraws live.'
+      : 'Ho Chi Minh City · 2 adults · December 2026. Build the quote line by line — items, flights, itinerary — and watch the exact client sheet redraw on the right. Supplier costs and margin stay internal.';
+    document.getElementById('nqBandId').textContent = edit ? 'QUOTATION-2026-000101' : 'INQUIRY-2026-000128';
+    document.getElementById('nqBandName').textContent = edit ? 'Maria Santos — ' + shortTitle : 'Roberto Aguilar — Ho Chi Minh City';
+    document.getElementById('nqBandStage').textContent = edit ? 'Quotation · sent Sep 6' : 'Inquiry → first quotation';
+    document.getElementById('nqBandWindow').textContent = edit ? 'Dec 4–7, 2026 · approximate' : 'December 2026 · approximate';
+    document.getElementById('nqBandMobile').textContent = edit ? '+63 917 812 4455' : '+63 919 446 8823';
+    var pill = document.getElementById('nqBandPill');
+    pill.className = 'pill ' + (edit ? 'pill-good' : 'pill-warn');
+    pill.textContent = edit ? 'Editing · Option ' + optKey.toUpperCase() : 'Draft · not yet numbered';
+    document.getElementById('nqSheetQno').firstChild.nodeValue = edit ? 'QUOTATION-2026-000101' : 'QUOTATION-2026-000133';
+    document.getElementById('nqSheetQnoSub').textContent = edit ? 'Option ' + optKey.toUpperCase() + ' · prepared Sep 6, 2026' : 'Draft · prepared Sep 7, 2026';
+    document.getElementById('nqSheetFor').textContent = edit ? 'Maria Santos' : 'Roberto Aguilar';
+    document.getElementById('nqSheetContact').textContent = edit ? '+63 917 812 4455 · maria.santos@mail.com' : '+63 919 446 8823';
+    document.getElementById('nqSheetCtx').textContent = edit ? '2 adults · Bangkok · Dec 4–7, 2026' : '2 adults · Ho Chi Minh City · December 2026';
+    document.getElementById('nqSaveLabel').textContent = edit ? 'Save changes' : 'Save draft';
+  }
+  function nqSetEditUi(kind, on) {
+    var ids = NQ_FORM_IDS[kind];
+    document.getElementById(ids.form).classList.toggle('is-editing', on);
+    document.getElementById(ids.cancel).hidden = !on;
+    document.getElementById(ids.label).textContent = on ? 'Save changes' : ids.addLabel;
+    var note = document.getElementById(ids.note);
+    if (on) {
+      note.hidden = false;
+      note.textContent = 'Editing ' + kind + ' ' + (NQ_EDIT_IDX[kind] + 1) + ' of ' + nqColl(kind).length;
+      note.style.color = 'var(--info-text)';
+      note.style.fontWeight = '700';
+    } else if (kind === 'item') {
+      note.hidden = false;
+      note.removeAttribute('style');
+      note.textContent = 'unit cost is internal — never shown to the client';
+    } else {
+      note.hidden = true;
+    }
+  }
+  function nqFillFields(kind, e) {
+    if (kind === 'item') {
+      document.getElementById('nqSvc').value = e.svc;
+      document.getElementById('nqDesc').value = e.desc;
+      document.getElementById('nqSup').value = e.sup || '';
+      document.getElementById('nqQty').value = e.qty;
+      document.getElementById('nqCost').value = e.cost;
+      document.getElementById('nqSell').value = e.sell;
+    } else if (kind === 'flight') {
+      document.getElementById('nfAirline').value = e.airline;
+      document.getElementById('nfNo').value = e.no;
+      document.getElementById('nfRoute').value = e.route;
+      document.getElementById('nfDate').value = e.date;
+      document.getElementById('nfDep').value = e.dep;
+      document.getElementById('nfArr').value = e.arr;
+    } else {
+      document.getElementById('ndNo').value = e.no;
+      document.getElementById('ndTitle').value = e.title;
+      document.getElementById('ndCity').value = e.city;
+      document.getElementById('ndAct').value = e.act;
+      document.getElementById('ndMeals').value = e.meals;
+      document.getElementById('ndOver').value = e.over;
+    }
+  }
+  function nqClearFields(kind) {
+    if (kind === 'item') {
+      ['nqDesc', 'nqCost', 'nqSell'].forEach(function (id) { document.getElementById(id).value = ''; });
+      document.getElementById('nqQty').value = '1';
+    } else if (kind === 'flight') {
+      document.getElementById('nfNo').value = '';
+      document.getElementById('nfRoute').value = '';
+    } else {
+      document.getElementById('ndNo').value = String(NQ.days.length + 1);
+      document.getElementById('ndTitle').value = '';
+      document.getElementById('ndAct').value = '';
+    }
+  }
+  function nqBeginEdit(kind, i) {
+    var e = nqColl(kind)[i];
+    if (!e) return;
+    NQ_EDIT_IDX[kind] = i;
+    nqFillFields(kind, e);
+    nqSetEditUi(kind, true);
+    if (kind !== 'item') {
+      document.getElementById(NQ_FORM_IDS[kind].form).classList.add('open');
+      document.getElementById(kind === 'flight' ? 'nqFlightToggle' : 'nqDayToggle').setAttribute('aria-expanded', 'true');
+    }
+    nqRender();
+    (kind === 'item' ? document.getElementById('nqDesc') : kind === 'flight' ? document.getElementById('nfNo') : document.getElementById('ndTitle')).focus();
+  }
+  function nqEndEdit(kind) {
+    NQ_EDIT_IDX[kind] = -1;
+    nqSetEditUi(kind, false);
+    nqClearFields(kind);
+  }
+  function nqEndEditAll() { ['item', 'flight', 'day'].forEach(nqEndEdit); }
+  function nqRemove(kind, i) {
+    if (NQ_EDIT_IDX[kind] === i) nqEndEdit(kind);
+    else if (NQ_EDIT_IDX[kind] > i) NQ_EDIT_IDX[kind] -= 1;
+    nqColl(kind).splice(i, 1);
+    if (NQ_EDIT_IDX[kind] > -1) nqSetEditUi(kind, true); /* after the splice so the count is current */
+    nqRender();
+  }
+  var NQ_RATE = 56;
+  var NQ_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function nqEsc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function nqNum(v) { var n = parseFloat(v); return isNaN(n) ? 0 : n; }
+  function nqInt(v) { var n = parseInt(v, 10); return isNaN(n) ? 0 : n; }
+  function nqPhp(v) { return 'PHP ' + Math.round(v).toLocaleString('en-US'); }
+  function nqCli(v) { return NQ.currency === 'USD' ? 'USD ' + Math.round(v / NQ_RATE).toLocaleString('en-US') : nqPhp(v); }
+  function nqDate(iso) {
+    if (!iso) return '—';
+    var p = iso.split('-');
+    return (NQ_MONTHS[nqInt(p[1]) - 1] || '—') + ' ' + nqInt(p[2]) + ', ' + p[0];
+  }
+  function nqValidText() {
+    var v = document.getElementById('nqValid').value;
+    var days = Math.round((Date.parse(v) - Date.parse('2026-09-07')) / 86400000);
+    return nqDate(v) + (days > 0 ? ' · ' + days + ' day' + (days === 1 ? '' : 's') + ' left' : '');
+  }
+  function nqRender() {
+    var sell = 0, cost = 0;
+    document.getElementById('nqItemsBody').innerHTML = NQ.items.length ? NQ.items.map(function (it, i) {
+      var amt = it.qty * it.sell; sell += amt; cost += it.qty * it.cost;
+      return '<tr' + (NQ_EDIT_IDX.item === i ? ' class="nq-editing"' : '') + '><td data-label="Service"><b>' + nqEsc(it.svc) + '</b></td><td data-label="Description">' + nqEsc(it.desc) +
+        (it.sup ? '<br><span class="muted" style="font-size:11px">' + nqEsc(it.sup) + '</span>' : '') +
+        '</td><td data-label="Qty" class="num">' + it.qty + '</td><td data-label="Unit selling" class="num">' + nqCli(it.sell) +
+        '</td><td data-label="Amount" class="num" style="font-weight:750">' + nqCli(amt) +
+        '</td><td data-label="Actions"><span style="display:inline-flex;gap:4px">' +
+        '<button class="btn btn-ghost btn-sm" type="button" data-ed="' + i + '" aria-label="Edit item ' + (i + 1) + '">' + NQ_PENCIL + '</button>' +
+        '<button class="btn btn-ghost btn-sm" type="button" data-rm="' + i + '" aria-label="Remove item ' + (i + 1) + '">×</button></span></td></tr>';
+    }).join('') : '<tr><td colspan="6" class="muted" style="text-align:center;padding:14px">No items yet — add the first line above.</td></tr>';
+    var fee = Math.max(0, nqNum(document.getElementById('nqFee').value));
+    var grand = sell + fee;
+    var margin = grand - cost;
+    document.getElementById('nqCount').textContent = NQ.items.length + ' item' + (NQ.items.length === 1 ? '' : 's');
+    document.getElementById('nqSub').textContent = nqCli(sell);
+    document.getElementById('nqGrand').textContent = nqCli(grand);
+    document.getElementById('nqMargin').textContent = nqPhp(margin) + ' · ' + (grand > 0 ? Math.round(margin / grand * 1000) / 10 : 0) + '%';
+
+    document.getElementById('nqFlights').innerHTML = NQ.flights.length ? NQ.flights.map(function (f, i) {
+      return '<div class="flight-card' + (NQ_EDIT_IDX.flight === i ? ' nq-editing' : '') + '"><div class="fc-main"><span class="fc-no">' + nqEsc(f.no) + '</span> · ' + nqEsc(f.airline) +
+        ' <span class="mono" style="margin-left:6px">' + nqEsc(f.route) + '</span><div class="fc-meta">' + nqDate(f.date) + ' · ' + nqEsc(f.dep) + ' → ' + nqEsc(f.arr) + '</div></div>' +
+        '<span style="display:inline-flex;gap:4px;flex:none">' +
+        '<button class="btn btn-ghost btn-sm" type="button" data-edf="' + i + '" aria-label="Edit flight ' + (i + 1) + '">' + NQ_PENCIL + '</button>' +
+        '<button class="btn btn-ghost btn-sm" type="button" data-rmf="' + i + '" aria-label="Remove flight ' + (i + 1) + '">×</button></span></div>';
+    }).join('') : '<p class="muted">No flights attached — the airfare line can stand alone until schedules are fixed.</p>';
+
+    document.getElementById('nqDays').innerHTML = NQ.days.length ? NQ.days.map(function (d, i) {
+      return '<div class="day-card' + (NQ_EDIT_IDX.day === i ? ' nq-editing' : '') + '"><div class="dc-head"><b>Day ' + d.no + ' — ' + nqEsc(d.title) + '</b><span style="display:flex;gap:8px;align-items:center;flex:none"><span class="pill">' + nqEsc(d.city) + '</span>' +
+        '<button class="btn btn-ghost btn-sm" type="button" data-edd="' + i + '" aria-label="Edit day ' + (i + 1) + '">' + NQ_PENCIL + '</button>' +
+        '<button class="btn btn-ghost btn-sm" type="button" data-rmd="' + i + '" aria-label="Remove day ' + (i + 1) + '">×</button></span></div>' +
+        '<p class="dc-act">' + nqEsc(d.act) + '</p><p class="dc-meta">Meals · ' + nqEsc(d.meals || 'none') + ' · Overnight · ' + nqEsc(d.over || d.city) + '</p></div>';
+    }).join('') : '<p class="muted">No itinerary days yet.</p>';
+
+    document.getElementById('nqSheetItems').innerHTML = NQ.items.length ? NQ.items.map(function (it) {
+      return '<tr><td><b>' + nqEsc(it.svc) + '</b> — ' + nqEsc(it.desc) + (it.qty > 1 ? ' <span style="color:var(--fog)">× ' + it.qty + '</span>' : '') +
+        '</td><td class="num" style="font-weight:750;white-space:nowrap">' + nqCli(it.qty * it.sell) + '</td></tr>';
+    }).join('') : '<tr><td class="muted">No items yet</td><td class="num">—</td></tr>';
+
+    var fEl = document.getElementById('nqSheetFlights');
+    fEl.innerHTML = NQ.flights.length ? '<b>Flights.</b> ' + NQ.flights.map(function (f) {
+      return nqEsc(f.no) + ' · ' + nqEsc(f.route) + ' · ' + nqDate(f.date) + ' · ' + nqEsc(f.dep) + '–' + nqEsc(f.arr) + ' (' + nqEsc(f.airline) + ')';
+    }).join('<br>') : '';
+    fEl.style.display = NQ.flights.length ? '' : 'none';
+
+    var dEl = document.getElementById('nqSheetItin');
+    dEl.innerHTML = NQ.days.length ? '<b>Itinerary.</b> ' + NQ.days.map(function (d) {
+      return 'Day ' + d.no + ' — ' + nqEsc(d.title) + ' (' + nqEsc(d.city) + ')';
+    }).join('<br>') : '';
+    dEl.style.display = NQ.days.length ? '' : 'none';
+
+    document.getElementById('nqSheetSub').textContent = nqCli(sell);
+    document.getElementById('nqSheetFee').textContent = nqCli(fee);
+    document.getElementById('nqSheetGrand').textContent = nqCli(grand);
+    document.getElementById('nqSheetPax').textContent = nqCli(grand / 2);
+    document.getElementById('nqSheetValid').textContent = nqValidText();
+    document.getElementById('nqSheetValid2').textContent = nqDate(document.getElementById('nqValid').value);
+    document.getElementById('nqSheetCur').textContent = NQ.currency;
+  }
+
+  document.getElementById('nqItemForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var desc = document.getElementById('nqDesc').value.trim();
+    var sell = nqNum(document.getElementById('nqSell').value);
+    if (!desc || !(sell > 0)) { toast('Add a description and a unit selling price first.'); return; }
+    var entry = {
+      svc: document.getElementById('nqSvc').value,
+      desc: desc,
+      sup: document.getElementById('nqSup').value,
+      qty: Math.max(1, nqInt(document.getElementById('nqQty').value) || 1),
+      cost: Math.max(0, nqNum(document.getElementById('nqCost').value)),
+      sell: sell
+    };
+    var editing = NQ_EDIT_IDX.item;
+    if (editing > -1) {
+      NQ.items[editing] = entry;
+      toast('Demo: item updated — totals and the client sheet updated.');
+    } else {
+      NQ.items.push(entry);
+      toast('Demo: item added — totals and the client sheet updated.');
+    }
+    nqEndEdit('item');
+    document.getElementById('nqDesc').focus();
+    nqRender();
+  });
+  document.getElementById('nqFlightForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var no = document.getElementById('nfNo').value.trim();
+    var route = document.getElementById('nfRoute').value.trim();
+    if (!no || !route) { toast('Add at least a flight number and a route.'); return; }
+    var entry = {
+      airline: document.getElementById('nfAirline').value,
+      no: no,
+      route: route,
+      date: document.getElementById('nfDate').value,
+      dep: document.getElementById('nfDep').value,
+      arr: document.getElementById('nfArr').value
+    };
+    var editing = NQ_EDIT_IDX.flight;
+    if (editing > -1) {
+      NQ.flights[editing] = entry;
+      toast('Demo: flight updated — the client preview updated.');
+    } else {
+      NQ.flights.push(entry);
+      toast('Demo: flight added — the client preview updated.');
+    }
+    nqEndEdit('flight');
+    nqRender();
+  });
+  document.getElementById('nqDayForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var title = document.getElementById('ndTitle').value.trim();
+    if (!title) { toast('Give the day a title.'); return; }
+    var no = nqInt(document.getElementById('ndNo').value) || NQ.days.length + 1;
+    var entry = {
+      no: no,
+      title: title,
+      city: document.getElementById('ndCity').value.trim() || '—',
+      act: document.getElementById('ndAct').value.trim(),
+      meals: document.getElementById('ndMeals').value.trim(),
+      over: document.getElementById('ndOver').value.trim()
+    };
+    var editing = NQ_EDIT_IDX.day;
+    if (editing > -1) {
+      NQ.days[editing] = entry;
+      toast('Demo: day updated — the itinerary and preview updated.');
+    } else {
+      NQ.days.push(entry);
+      toast('Demo: day added — the itinerary and preview updated.');
+    }
+    nqEndEdit('day');
+    nqRender();
+  });
+  ['item', 'flight', 'day'].forEach(function (kind) {
+    document.getElementById(NQ_FORM_IDS[kind].cancel).addEventListener('click', function () {
+      nqEndEdit(kind);
+      nqRender();
+      toast('Demo: edit cancelled — the entry is unchanged.');
+    });
+  });
+  document.getElementById('nqItemsBody').addEventListener('click', function (e) {
+    var ed = e.target.closest('[data-ed]');
+    if (ed) { nqBeginEdit('item', Number(ed.getAttribute('data-ed'))); return; }
+    var b = e.target.closest('[data-rm]');
+    if (b) nqRemove('item', Number(b.getAttribute('data-rm')));
+  });
+  document.getElementById('nqFlights').addEventListener('click', function (e) {
+    var ed = e.target.closest('[data-edf]');
+    if (ed) { nqBeginEdit('flight', Number(ed.getAttribute('data-edf'))); return; }
+    var b = e.target.closest('[data-rmf]');
+    if (b) nqRemove('flight', Number(b.getAttribute('data-rmf')));
+  });
+  document.getElementById('nqDays').addEventListener('click', function (e) {
+    var ed = e.target.closest('[data-edd]');
+    if (ed) { nqBeginEdit('day', Number(ed.getAttribute('data-edd'))); return; }
+    var b = e.target.closest('[data-rmd]');
+    if (b) nqRemove('day', Number(b.getAttribute('data-rmd')));
+  });
+  document.getElementById('nqFee').addEventListener('input', nqRender);
+  document.getElementById('nqValid').addEventListener('change', nqRender);
+  document.getElementById('nqCurrency').addEventListener('change', function () {
+    NQ.currency = this.value;
+    nqRender();
+    toast(this.value === 'USD' ? 'Demo: USD shown at a demo rate of PHP 56 — production re-prices from the day\u2019s FX rate.' : 'Demo: back to PHP pricing.');
+  });
+  document.getElementById('nqFlightToggle').addEventListener('click', function () {
+    var f = document.getElementById('nqFlightForm');
+    f.classList.toggle('open');
+    this.setAttribute('aria-expanded', f.classList.contains('open') ? 'true' : 'false');
+  });
+  document.getElementById('nqDayToggle').addEventListener('click', function () {
+    var f = document.getElementById('nqDayForm');
+    f.classList.toggle('open');
+    this.setAttribute('aria-expanded', f.classList.contains('open') ? 'true' : 'false');
+    if (f.classList.contains('open')) {
+      document.getElementById('ndNo').value = String(NQ.days.length + 1);
+      document.getElementById('ndTitle').focus();
+    }
+  });
+  document.getElementById('nqSaveBtn').addEventListener('click', function () {
+    toast(NQ.mode === 'edit'
+      ? 'Demo: changes saved to QUOTATION-2026-000101 — nothing was saved.'
+      : 'Demo: draft saved as QUOTATION-2026-000133 — nothing was saved.');
+  });
+  document.getElementById('qEditBtn').addEventListener('click', function () {
+    NQ_EDIT_ARMED = true;
+    activate('newquote');
+    nqLoadEdit(currentOpt);
+    toast('Demo: editing QUOTATION-2026-000101 · Option ' + currentOpt.toUpperCase() + ' loaded — not wired.');
+  });
+  document.getElementById('nqPreviewBtn').addEventListener('click', function () {
+    var w = document.getElementById('nqSheetWrap');
+    w.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    w.classList.remove('nq-flash');
+    void w.offsetWidth;
+    w.classList.add('nq-flash');
+    toast('Demo: this is the exact sheet the client would receive.');
+  });
+  nqSeedCreate();
+  nqApplyMode();
+  nqRender();
+
+  /* ---------- payment verification (visual only) ---------- */
+  document.getElementById('payVerifyBtn').addEventListener('click', function () {
+    var pill = document.getElementById('payVerifyPill');
+    pill.className = 'pill pill-good';
+    pill.textContent = 'Verified';
+    document.getElementById('payAllocNote').textContent = 'Allocated to installment 2, in full (demo)';
+    this.disabled = true;
+    document.getElementById('soaPending').textContent = 'PHP 0';
+    document.getElementById('soaOutstanding').textContent = 'PHP 94,950';
+    document.getElementById('soaBar').style.width = '59%';
+    document.getElementById('soaPct').textContent = '59% collected';
+    document.getElementById('soaHint').textContent = 'Demo: with the Sep 5 payment verified and allocated, outstanding dropped from PHP 139,950 to PHP 94,950.';
+    toast('Demo: payment verified and allocated — nothing was saved.');
+  });
+})();
+</script>
+</body>
+</html>

@@ -5,3 +5,19 @@
 :root{font-family:'IBM Plex Sans',Inter,system-ui,sans-serif;color-scheme:light;--surface:#fff;--seal-ink:#14334f;--harbor-navy:#14334f;--chart-paper:#f5f7fb;--ledger-ink:#172334;--manifest-green:#177245;--manifest-green-hover:#14603c;--ledger-slate:#34526f;--stamp-amber:#966308;--ensign-red:#9b3434;--passage-blue:#3679b6;--registry-blue:#245c89;--sea-fog:#607085;--mist:#dbe8f4;--navy-hover:#315877;--label-ink:#56677a;--paper:#fff;--paper-tint:#fbfcfe;--paper-well:#f7fafc;--passage-tint:#f5f9fd;--rule:#d9e2ec;--rule-soft:#e0e7ee;--rule-hair:#e6ebf0;--rule-input:#c8d2df;--rule-dashed:#cbd6e2;--rule-tint:#f1f5f9;--status-good-bg:#dcf3e3;--status-good-text:#176237;--status-warn-bg:#fff1c6;--status-warn-text:#70530b;--status-bad-bg:#f9dddd;--status-bad-text:#8d2c2c;--status-info-bg:#dcecfb;--status-neutral-bg:#edf2f7;--status-neutral-text:#4e6175;--msg-ok-bg:#e8f7ed;--msg-ok-rule:#a9d8b4;--msg-err-bg:#fff0f0;--msg-err-text:#922c2c;--msg-err-rule:#e4a7a7;--msg-warn-bg:#fff8df;--msg-warn-text:#6c5010;--msg-warn-rule:#e3c777;--amber-rule:#e5c875;--amber-wash:#fffaf0;--amber-ink:#8a5b0b;--good-rule:#add9b7;--good-wash:#eef9f1;--bad-rule:#e3aaaa;--bad-wash:#fff3f3;--required-rule:#c62828;--required-text:#a61b1b;--required-wash:#fff5f5;--blocked-wash:#fffafa;--step-done-bg:#ebf8ef;--step-done-rule:#abd9b5;--why-ink:#43566c;--timeline-rail:#dce4ec;--booking-rule:#cfdbe7;--summary-rule:#e1e8ef;--ready-wash:#f5fbf6;--command-bar-bg:#eef5fb;--command-bar-rule:#c8dceb;--client-preview-rule:#cfd9e4;--monitoring-wash:#f7fcf8;--required-ring:rgba(198,40,40,0.15)}
 :focus-visible{outline:2px solid var(--passage-blue);outline-offset:2px}
 ::selection{background:var(--status-info-bg);color:var(--ledger-ink)}
+
+/* Operations-overhaul evolution (approved design: docs/mockups/operations-overhaul.html).
+   Additive only — existing token names keep their values so every page that
+   links this file renders unchanged; new tokens below extend the ledger set. */
+:root{
+  --navy-deep:#102a40;--navy-line:#2a4d6d;--navy-grad-top:#17395a;
+  --slate-deep:#2b455d;
+  --blue-deep:#245c89;--blue-fill:#4d87bf;--blue-mid:#6f9fd0;--blue-soft:#93b9dc;
+  --green-deep:#14603c;--amber-deep:#7a5006;--red-deep:#802a2a;--amber-flag:#d9a93c;
+  --warn-wash:#fff8df;--warn-rule:#e3c777;--info-text:#245c89;
+  --well:#f1f5f9;--tint:#fbfcfe;--chart:#f5f7fb;
+  --sh-1:0 1px 2px rgba(23,35,52,.05),0 1px 6px rgba(23,35,52,.05);
+  --sh-2:0 6px 18px rgba(23,35,52,.12);
+  --sh-head:0 2px 10px rgba(23,35,52,.16);
+  --r-sm:6px;--r-md:8px;--r-lg:12px;
+}
