@@ -160,6 +160,101 @@ test('the digest renders empty sections as none and the mailer degrades to .eml 
   db.close();
 });
 
+test('the digest leads the action section with reminder drafts, then documents, departure alerts, and the privacy queue', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wmit-digest-queues-'));
+  const db = buildDb(dir);
+  const now = '2026-08-19T00:00:00.000Z';
+  const tasks = new SqliteRepository(db, 'Task', 'task_id');
+  tasks.insert({ task_id: 'TASK-2026-000001', task_type: 'REMINDER_DRAFT', state: 'OPEN', send_state: 'DRAFT', category: 'PAYMENT_FOLLOW_UP', subject: 'Balance reminder — Del Cruz Juan', created_at: '2026-08-18T09:00:00.000Z' });
+  tasks.insert({ task_id: 'TASK-2026-000002', task_type: 'REMINDER_DRAFT', state: 'CANCELLED', send_state: 'DRAFT', category: 'PAYMENT_FOLLOW_UP', subject: 'Discarded draft', created_at: '2026-08-18T09:05:00.000Z' });
+  tasks.insert({ task_id: 'TASK-2026-000003', task_type: 'DEPARTURE_READINESS', state: 'OPEN', title: 'Departure readiness: Passport copy — Bangkok October', created_at: '2026-08-18T06:00:00.000Z' });
+  tasks.insert({ task_id: 'TASK-2026-000004', task_type: 'PRIVACY_RETENTION', state: 'OPEN', title: 'Privacy retention: 12 document(s) eligible for erasure', created_at: '2026-08-18T05:00:00.000Z' });
+  const documents = new SqliteRepository(db, 'Document', 'document_id');
+  documents.insert({ document_id: 'DOC-2026-000001', status: 'NEEDS_REVIEW', classification: { document_type: 'passport' }, created_at: '2026-08-18T08:00:00.000Z' });
+  documents.insert({ document_id: 'DOC-2026-000002', status: 'MATCHED', created_at: '2026-08-18T08:30:00.000Z' });
+  new SqliteRepository(db, 'ClientPayment', 'client_payment_id').insert({ client_payment_id: 'CLIENT_PAYMENT-2026-000001', payment_state: 'PENDING_VERIFICATION', amount: '6000.00', currency: 'PHP' });
+
+  const summary = buildDigestSummary(db, { now });
+  assert.equal(summary.reminder_drafts_pending, 1);
+  assert.equal(summary.reminder_drafts_pending_detail[0].subject, 'Balance reminder — Del Cruz Juan');
+  assert.equal(summary.documents_pending_review, 1);
+  assert.equal(summary.documents_pending_review_detail[0].document_id, 'DOC-2026-000001');
+  assert.equal(summary.documents_pending_review_detail[0].type_hint, 'passport');
+  assert.equal(summary.departure_readiness_alerts, 1);
+  assert.equal(summary.departure_readiness_alerts_detail[0].title, 'Departure readiness: Passport copy — Bangkok October');
+  assert.equal(summary.privacy_retention_queue, 1);
+  assert.equal(summary.privacy_retention_detail[0].title, 'Privacy retention: 12 document(s) eligible for erasure');
+
+  const email = require('../../src/server/jobs').renderDigestEmail(summary, null);
+  assert.match(email, /Reminder drafts awaiting review: 1/);
+  assert.match(email, /  - Balance reminder — Del Cruz Juan \(PAYMENT_FOLLOW_UP\)/);
+  assert.match(email, /Documents pending review: 1/);
+  assert.match(email, /  - DOC-2026-000001 \(passport\)/);
+  assert.match(email, /Departure readiness alerts: 1/);
+  assert.match(email, /  - Departure readiness: Passport copy — Bangkok October/);
+  assert.match(email, /Privacy retention queue: 1/);
+  assert.match(email, /  - Privacy retention: 12 document\(s\) eligible for erasure/);
+  assert.ok(!email.includes('Discarded draft'), 'cancelled drafts must not appear');
+  assert.ok(!email.includes('DOC-2026-000002'), 'reviewed/matched documents must not appear');
+
+  const reminderAt = email.indexOf('Reminder drafts awaiting review');
+  const documentsAt = email.indexOf('Documents pending review');
+  const departureAt = email.indexOf('Departure readiness alerts');
+  const privacyAt = email.indexOf('Privacy retention queue');
+  const paymentsAt = email.indexOf('Payments awaiting verification');
+  assert.ok(reminderAt > -1 && documentsAt > reminderAt && departureAt > documentsAt && privacyAt > departureAt && paymentsAt > privacyAt, 'reminder drafts must lead the action section');
+  db.close();
+});
+
+test('the digest omits the new queue sections entirely on an empty workspace', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wmit-digest-queues-empty-'));
+  const db = buildDb(dir);
+  const summary = buildDigestSummary(db);
+  assert.equal(summary.reminder_drafts_pending, 0);
+  assert.deepEqual(summary.reminder_drafts_pending_detail, []);
+  assert.equal(summary.documents_pending_review, 0);
+  assert.deepEqual(summary.documents_pending_review_detail, []);
+  assert.equal(summary.departure_readiness_alerts, 0);
+  assert.equal(summary.privacy_retention_queue, 0);
+  const email = require('../../src/server/jobs').renderDigestEmail(summary, null);
+  assert.match(email, /== Needs your action ==/);
+  assert.ok(!email.includes('Reminder drafts awaiting review'));
+  assert.ok(!email.includes('Documents pending review'));
+  assert.ok(!email.includes('Departure readiness alerts'));
+  assert.ok(!email.includes('Privacy retention queue'));
+  db.close();
+});
+
+test('digest queues cap their detail lists, exclude cleared items, and rank documents worst-first', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wmit-digest-queues-caps-'));
+  const db = buildDb(dir);
+  const tasks = new SqliteRepository(db, 'Task', 'task_id');
+  for (let index = 1; index <= 6; index += 1) {
+    tasks.insert({ task_id: 'TASK-2026-00000' + index, task_type: 'REMINDER_DRAFT', state: 'OPEN', send_state: 'DRAFT', category: 'PAYMENT_FOLLOW_UP', subject: 'Draft ' + index, created_at: '2026-08-18T09:0' + index + ':00.000Z' });
+  }
+  tasks.insert({ task_id: 'TASK-2026-000010', task_type: 'REMINDER_DRAFT', state: 'OPEN', send_state: 'SENT', category: 'PAYMENT_FOLLOW_UP', subject: 'Already sent', created_at: '2026-08-18T10:00:00.000Z' });
+  tasks.insert({ task_id: 'TASK-2026-000011', task_type: 'REMINDER_DRAFT', state: 'COMPLETED', send_state: 'DRAFT', category: 'PAYMENT_FOLLOW_UP', subject: 'Completed draft', created_at: '2026-08-18T10:00:00.000Z' });
+  const documents = new SqliteRepository(db, 'Document', 'document_id');
+  documents.insert({ document_id: 'DOC-2026-000003', status: 'RECEIVED', filename: 'voucher.pdf', created_at: '2026-08-18T09:00:00.000Z' });
+  documents.insert({ document_id: 'DOC-2026-000004', status: 'NEEDS_REVIEW', filename: 'passport-scan.pdf', created_at: '2026-08-18T08:00:00.000Z' });
+  documents.insert({ document_id: 'DOC-2026-000005', status: 'ARCHIVED', created_at: '2026-08-18T08:00:00.000Z' });
+
+  const summary = buildDigestSummary(db);
+  assert.equal(summary.reminder_drafts_pending, 6);
+  assert.equal(summary.reminder_drafts_pending_detail.length, 5);
+  assert.equal(summary.reminder_drafts_pending_detail[0].subject, 'Draft 1');
+  assert.ok(!summary.reminder_drafts_pending_detail.some((draft) => draft.subject === 'Already sent' || draft.subject === 'Completed draft'));
+  assert.equal(summary.documents_pending_review, 2);
+  assert.equal(summary.documents_pending_review_detail[0].document_id, 'DOC-2026-000004', 'NEEDS_REVIEW must rank above RECEIVED');
+  assert.ok(!summary.documents_pending_review_detail.some((document) => document.document_id === 'DOC-2026-000005'));
+
+  const email = require('../../src/server/jobs').renderDigestEmail(summary, null);
+  assert.match(email, /Reminder drafts awaiting review: 6/);
+  assert.ok(email.includes('Draft 5'));
+  assert.ok(!email.includes('Draft 6'), 'only the top five drafts are listed');
+  db.close();
+});
+
 test('job run history supports checkpointing via last successful run', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wmit-jobhist-'));
   const db = buildDb(dir);

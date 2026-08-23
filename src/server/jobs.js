@@ -224,6 +224,48 @@ function expoFunnelSnapshot(db, nowIso) {
   };
 }
 
+// Reminder drafts are the review-before-send queue: OPEN tasks of type
+// REMINDER_DRAFT still in DRAFT send state. Nothing sends itself — a human
+// clears this queue, so it leads the digest action section.
+function reminderDraftsSnapshot(db) {
+  const drafts = readRecords(db, 'e_Task')
+    .filter((task) => task.task_type === 'REMINDER_DRAFT'
+      && String(task.state || 'OPEN') === 'OPEN'
+      && String(task.send_state || 'DRAFT') === 'DRAFT');
+  drafts.sort((a, b) => String(a.due_date || a.created_at || '').localeCompare(String(b.due_date || b.created_at || '')) || String(a.task_id).localeCompare(String(b.task_id)));
+  return {
+    count: drafts.length,
+    top: drafts.slice(0, 5).map((task) => ({ task_id: task.task_id, category: task.category || null, subject: task.subject || task.title || null }))
+  };
+}
+
+// Mirrors the Documents review queue (ingestion-service queue()): every
+// document still awaiting human review — RECEIVED, CLASSIFIED, or
+// NEEDS_REVIEW — worst-first, newest first.
+function documentsReviewSnapshot(db) {
+  const rank = { NEEDS_REVIEW: 0, RECEIVED: 1, CLASSIFIED: 2 };
+  const queue = readRecords(db, 'e_Document')
+    .filter((document) => document.status === 'NEEDS_REVIEW' || document.status === 'RECEIVED' || document.status === 'CLASSIFIED');
+  queue.sort((a, b) => (rank[a.status] - rank[b.status]) || String(b.created_at || '').localeCompare(String(a.created_at || '')));
+  return {
+    count: queue.length,
+    top: queue.slice(0, 5).map((document) => ({
+      document_id: document.document_id,
+      type_hint: (document.classification && document.classification.document_type) || document.filename || null
+    }))
+  };
+}
+
+function openTasksByTypeSnapshot(db, taskType, limit) {
+  const tasks = readRecords(db, 'e_Task')
+    .filter((task) => task.task_type === taskType && String(task.state || 'OPEN') === 'OPEN');
+  tasks.sort((a, b) => String(a.due_date || a.created_at || '').localeCompare(String(b.due_date || b.created_at || '')) || String(a.task_id).localeCompare(String(b.task_id)));
+  return {
+    count: tasks.length,
+    top: tasks.slice(0, limit).map((task) => ({ task_id: task.task_id, title: task.title || null }))
+  };
+}
+
 function buildDigestSummary(db, options) {
   const opts = options || {};
   const nowIso = opts.now || new Date().toISOString();
@@ -239,6 +281,10 @@ function buildDigestSummary(db, options) {
   const draftQuotations = (() => {
     try { return db.prepare("SELECT COUNT(*) AS c FROM e_Quotation WHERE json LIKE '%DRAFT%'").get().c; } catch (_) { return 0; }
   })();
+  const reminderDrafts = reminderDraftsSnapshot(db);
+  const documentsReview = documentsReviewSnapshot(db);
+  const departureReadiness = openTasksByTypeSnapshot(db, 'DEPARTURE_READINESS', 5);
+  const privacyRetention = openTasksByTypeSnapshot(db, 'PRIVACY_RETENTION', 3);
   return {
     entity_counts: counts,
     open_tasks: openTasks,
@@ -248,7 +294,15 @@ function buildDigestSummary(db, options) {
     receivables: receivablesSnapshot(db, nowIso),
     upcoming_trips_14d: upcomingTripsSnapshot(db, nowIso, 14),
     expo_funnel: expoFunnelSnapshot(db, nowIso),
-    heartbeat: latestHeartbeat(db)
+    heartbeat: latestHeartbeat(db),
+    reminder_drafts_pending: reminderDrafts.count,
+    reminder_drafts_pending_detail: reminderDrafts.top,
+    documents_pending_review: documentsReview.count,
+    documents_pending_review_detail: documentsReview.top,
+    departure_readiness_alerts: departureReadiness.count,
+    departure_readiness_alerts_detail: departureReadiness.top,
+    privacy_retention_queue: privacyRetention.count,
+    privacy_retention_detail: privacyRetention.top
   };
 }
 
@@ -257,6 +311,22 @@ function renderDigestEmail(summary, baseUrl) {
   lines.push('WMIT daily digest — ' + new Date().toISOString().slice(0, 10));
   lines.push('');
   lines.push('== Needs your action ==');
+  if (summary.reminder_drafts_pending) {
+    lines.push('Reminder drafts awaiting review: ' + summary.reminder_drafts_pending);
+    (summary.reminder_drafts_pending_detail || []).forEach((draft) => lines.push('  - ' + (draft.subject || draft.task_id) + (draft.category ? ' (' + draft.category + ')' : '')));
+  }
+  if (summary.documents_pending_review) {
+    lines.push('Documents pending review: ' + summary.documents_pending_review);
+    (summary.documents_pending_review_detail || []).forEach((document) => lines.push('  - ' + document.document_id + (document.type_hint ? ' (' + document.type_hint + ')' : '')));
+  }
+  if (summary.departure_readiness_alerts) {
+    lines.push('Departure readiness alerts: ' + summary.departure_readiness_alerts);
+    (summary.departure_readiness_alerts_detail || []).forEach((alert) => lines.push('  - ' + (alert.title || alert.task_id)));
+  }
+  if (summary.privacy_retention_queue) {
+    lines.push('Privacy retention queue: ' + summary.privacy_retention_queue);
+    (summary.privacy_retention_detail || []).forEach((item) => lines.push('  - ' + (item.title || item.task_id)));
+  }
   const pending = summary.payments_pending_verification_detail || [];
   if (summary.payments_pending_verification) {
     lines.push('Payments awaiting verification: ' + summary.payments_pending_verification);
